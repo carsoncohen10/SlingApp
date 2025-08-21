@@ -7420,6 +7420,36 @@ struct JoinCommunityPage: View {
     @State private var errorMessage = ""
     @FocusState private var isTextFieldFocused: Bool
     
+    // Computed property to validate invite code
+    private var isValidInviteCode: Bool {
+        let trimmed = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count == 6 && !trimmed.isEmpty
+    }
+    
+    // Computed property for border color
+    private var borderColor: Color {
+        if inviteCode.count == 6 {
+            return .green
+        } else if isTextFieldFocused {
+            return .blue
+        } else {
+            return .clear
+        }
+    }
+    
+    // Computed property for validation message
+    private var validationMessage: String {
+        if inviteCode.isEmpty {
+            return ""
+        } else if inviteCode.count < 6 {
+            return "Enter \(6 - inviteCode.count) more character\(6 - inviteCode.count == 1 ? "" : "s")"
+        } else if inviteCode.count == 6 {
+            return "Perfect! Code is ready"
+        } else {
+            return "Code is too long"
+        }
+    }
+    
     init(firestoreService: FirestoreService, onSuccess: (() -> Void)? = nil) {
         self.firestoreService = firestoreService
         self.onSuccess = onSuccess
@@ -7469,7 +7499,7 @@ struct JoinCommunityPage: View {
                             .foregroundColor(.black)
                             .multilineTextAlignment(.center)
                         
-                        Text("Enter the invite code to join a betting group")
+                        Text("Enter the 6-character invite code to join a betting group")
                             .font(.subheadline)
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
@@ -7483,30 +7513,56 @@ struct JoinCommunityPage: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.black)
                         
-                        TextField("Enter invite code", text: $inviteCode)
-                            .font(.title3)
-                            .fontWeight(.medium)
-                            .foregroundColor(.black)
-                            .textCase(.uppercase)
-                            .autocapitalization(.allCharacters)
-                            .disableAutocorrection(true)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.gray.opacity(0.1))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(isTextFieldFocused ? Color.blue : Color.clear, lineWidth: 2)
-                            )
-                            .focused($isTextFieldFocused)
-                            .onAppear {
-                                isTextFieldFocused = true
-                            }
-                            .onChange(of: inviteCode) { _, newValue in
-                                errorMessage = ""
-                            }
+                        HStack {
+                            TextField("Enter 6-digit code", text: $inviteCode)
+                                .font(.title3)
+                                .fontWeight(.medium)
+                                .foregroundColor(.black)
+                                .textCase(.uppercase)
+                                .autocapitalization(.allCharacters)
+                                .disableAutocorrection(true)
+                                .onChange(of: inviteCode) { _, newValue in
+                                    // Limit to 6 characters
+                                    if newValue.count > 6 {
+                                        inviteCode = String(newValue.prefix(6))
+                                        // Show brief feedback that input was truncated
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                            errorMessage = "Code limited to 6 characters"
+                                            // Clear this message after 2 seconds
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                                if errorMessage == "Code limited to 6 characters" {
+                                                    errorMessage = ""
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // Only clear error message if it's not a validation error
+                                        if errorMessage != "Code limited to 6 characters" {
+                                            errorMessage = ""
+                                        }
+                                    }
+                                }
+                            
+                            // Character counter
+                            Text("\(inviteCode.count)/6")
+                                .font(.caption)
+                                .foregroundColor(inviteCode.count == 6 ? .green : .gray)
+                                .fontWeight(.medium)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.gray.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(borderColor, lineWidth: 2)
+                        )
+                        .focused($isTextFieldFocused)
+                        .onAppear {
+                            isTextFieldFocused = true
+                        }
                     }
                     .padding(.horizontal, 20)
                     
@@ -7543,10 +7599,10 @@ struct JoinCommunityPage: View {
                         .frame(height: 56)
                         .background(
                             RoundedRectangle(cornerRadius: 28)
-                                .fill(!inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isLoading ? Color.blue : Color.gray.opacity(0.3))
+                                .fill(isValidInviteCode && !isLoading ? Color.blue : Color.gray.opacity(0.3))
                         )
                     }
-                    .disabled(inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                    .disabled(!isValidInviteCode || isLoading)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 32)
                 }
@@ -7560,10 +7616,6 @@ struct JoinCommunityPage: View {
     
     private func joinCommunity() {
         let trimmedCode = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedCode.isEmpty else {
-            errorMessage = "Please enter a valid invite code"
-            return
-        }
         
         isLoading = true
         errorMessage = ""

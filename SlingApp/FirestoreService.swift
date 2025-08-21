@@ -1437,6 +1437,12 @@ class FirestoreService: ObservableObject {
             return
         }
         
+        // Validate invite code length
+        guard inviteCode.count == 6 else {
+            completion(false, "Invite code must be exactly 6 characters")
+            return
+        }
+        
         // Find community by invite code
         db.collection("community")
             .whereField("invite_code", isEqualTo: inviteCode)
@@ -1458,25 +1464,39 @@ class FirestoreService: ObservableObject {
                     return
                 }
                 
-                // Create community member record with custom document ID: [community_id]_[user_email]
-                let memberData: [String: Any] = [
-                    "user_email": userEmail,
-                    "community_id": communityId,  // Now using the correct ID field
-                    "is_admin": false,
-                    "joined_date": Date(),
-                    "is_active": true,
-                    "created_by": userEmail,
-                    "created_by_id": userId,
-                    "created_date": Date(),
-                    "updated_date": Date()
-                ]
-                
+                // Check if user is already a member of this community
                 let documentId = "\(communityId)_\(userEmail)"
-                self?.db.collection("CommunityMember").document(documentId).setData(memberData) { error in
-                    if let error = error {
-                        completion(false, error.localizedDescription)
-                    } else {
-                        completion(true, nil)
+                self?.db.collection("CommunityMember").document(documentId).getDocument { memberSnapshot, memberError in
+                    if let memberError = memberError {
+                        completion(false, memberError.localizedDescription)
+                        return
+                    }
+                    
+                    if let memberSnapshot = memberSnapshot, memberSnapshot.exists {
+                        // User is already a member
+                        completion(false, "You are already a member of this community")
+                        return
+                    }
+                    
+                    // User is not a member, proceed to join
+                    let memberData: [String: Any] = [
+                        "user_email": userEmail,
+                        "community_id": communityId,
+                        "is_admin": false,
+                        "joined_date": Date(),
+                        "is_active": true,
+                        "created_by": userEmail,
+                        "created_by_id": userId,
+                        "created_date": Date(),
+                        "updated_date": Date()
+                    ]
+                    
+                    self?.db.collection("CommunityMember").document(documentId).setData(memberData) { error in
+                        if let error = error {
+                            completion(false, error.localizedDescription)
+                        } else {
+                            completion(true, nil)
+                        }
                     }
                 }
             }
