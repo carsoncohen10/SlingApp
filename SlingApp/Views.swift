@@ -6211,312 +6211,823 @@ struct EditProfileView: View {
 struct CreateBetView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var firestoreService: FirestoreService
+    @State private var currentStep = 1
     @State private var selectedMarketType = "Yes/No"
     @State private var marketQuestion = ""
     @State private var selectedCommunity = ""
-    @State private var spreadLine = ""
-    @State private var overUnderLine = ""
     @State private var outcomes: [String] = ["Yes", "No"]
     @State private var odds: [String] = ["-110", "-110"]
-    @State private var percentages: [String] = ["52%", "52%"]
-    @State private var newOptionText = ""
+    @State private var percentages: [String] = ["52.4%", "52.4%"]
+    @State private var spreadLine = ""
+    @State private var overUnderLine = ""
     @State private var bettingCloseDate = Date().addingTimeInterval(72 * 60 * 60) // 72 hours from now
     @State private var showingDatePicker = false
+    @State private var showingAdjustOdds = false
+    @State private var selectedOutcomeIndex = 0
+    @State private var newOptionText = ""
     
     let marketTypes = [
-        ("Yes/No", "target", "Binary outcome"),
-        ("Multiple Choice", "chart.bar", "Several options"),
-        ("Spread", "grid", "Point handicap"),
-        ("Over/Under", "arrow.up.arrow.down", "Above or below"),
-        ("Prop Bet", "person.2", "Custom wager")
+        ("Yes/No", "target", "Binary outcome", "Perfect for simple predictions"),
+        ("Multiple Choice", "chart.bar", "Several options", "Great for complex scenarios"),
+        ("Spread", "number", "Point handicap", "Ideal for sports betting"),
+        ("Over/Under", "arrow.up.arrow.down", "Above or below", "Perfect for numerical predictions"),
+        ("Prop Bet", "person.2", "Custom wager", "Create unique betting opportunities")
     ]
     
-    var body: some View {
+        var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Market Type Selection
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Market Type")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 20)
-                        
-                        // Market Type Horizontal Pill Scroll
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                            ForEach(marketTypes, id: \.0) { type, icon, subtitle in
-                                Button(action: {
-                                    selectedMarketType = type
-                                    updateOutcomesForMarketType()
-                                }) {
-                                        Text(type)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(selectedMarketType == type ? .white : .black)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 8)
-                                    .background(selectedMarketType == type ? AnyShapeStyle(Color.slingGradient) : AnyShapeStyle(Color.white))
-                                            .cornerRadius(20)
-                                    .overlay(
-                                                RoundedRectangle(cornerRadius: 20)
-                                            .stroke(Color.gray.opacity(0.3), lineWidth: selectedMarketType == type ? 0 : 1)
-                                    )
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                        }
-                    }
-                    
-                    // Input Fields
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Market Question
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Market Question *")
-                                .font(.subheadline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.black)
-                            
-                            TextField("First person to leave the party", text: $marketQuestion)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .font(.subheadline)
-                        }
-                        
-                        // Community Selection
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Community *")
-                                .font(.subheadline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.black)
-                            
-                            Menu {
-                                ForEach(firestoreService.userCommunities) { community in
-                                    Button(community.name) {
-                                        selectedCommunity = community.name
-                                    }
-                                }
-                            } label: {
-                                HStack {
-                                    Text(selectedCommunity.isEmpty ? "Select a community" : selectedCommunity)
-                                        .foregroundColor(selectedCommunity.isEmpty ? .gray : .black)
-                                    Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .foregroundColor(.gray)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    
-                    // Spread Line Section (only for Spread type)
-                    if selectedMarketType == "Spread" {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Spread Line *")
-                                .font(.headline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.black)
-                            
-                            TextField("e.g., -3.5", text: $spreadLine)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .font(.subheadline)
-                            
-                            Text("Enter the handicap (negative favors Team A, positive favors Team B)")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                        .padding(.horizontal, 20)
-                    }
-                    
-                    // Over/Under Line Section (only for Over/Under type)
-                    if selectedMarketType == "Over/Under" {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Over/Under Line *")
-                                .font(.headline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.black)
-                            
-                            TextField("e.g., 27.5", text: $overUnderLine)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .font(.subheadline)
-                            
-                            Text("Set the threshold number")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                        .padding(.horizontal, 20)
-                    }
-                    
-                    // Outcomes & Odds Section
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Outcomes & Odds *")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
-                        
-                        VStack(spacing: 12) {
-                            ForEach(Array(outcomes.enumerated()), id: \.offset) { index, outcome in
-                                HStack(spacing: 12) {
-                                    // Outcome Name
-                                    TextField("Option", text: $outcomes[index])
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .font(.subheadline)
-                                        .disabled(selectedMarketType == "Yes/No")
-                                    
-                                    // Odds
-                                    TextField("Odds", text: $odds[index])
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .font(.subheadline)
-                                        .frame(width: 80)
-                                    
-                                    // Percentage
-                                    Text(percentages[index])
-                                        .font(.subheadline)
-                                        .foregroundColor(.gray)
-                                        .frame(width: 50, alignment: .trailing)
-                                    
-                                    // Remove button (only for Multiple Choice and Prop Bet)
-                                    if (selectedMarketType == "Multiple Choice" || selectedMarketType == "Prop Bet") && outcomes.count > 2 {
-                                        Button(action: {
-                                            outcomes.remove(at: index)
-                                            odds.remove(at: index)
-                                            percentages.remove(at: index)
-                                        }) {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .foregroundColor(.red)
-                                                .font(.title3)
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // Add option section (only for Multiple Choice and Prop Bet)
-                            if selectedMarketType == "Multiple Choice" || selectedMarketType == "Prop Bet" {
-                                HStack(spacing: 12) {
-                                    TextField("Add another option...", text: $newOptionText)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .font(.subheadline)
-                                    
-                                    Button(action: {
-                                        if !newOptionText.isEmpty {
-                                            outcomes.append(newOptionText)
-                                            odds.append("-110")
-                                            percentages.append("52%")
-                                            newOptionText = ""
-                                        }
-                                    }) {
-                                        Image(systemName: "plus")
-                                            .foregroundColor(.white)
-                                            .font(.title3)
-                                            .frame(width: 32, height: 32)
-                                            .background(Color.gray)
-                                            .cornerRadius(8)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    
-                    // Betting Close Date Section
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("When does betting close?")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
-                        
+            VStack(spacing: 0) {
+                // Header with Progress
+                VStack(spacing: 16) {
+                    // Top Navigation
+                    HStack {
                         Button(action: {
-                            showingDatePicker = true
-                        }) {
-                            HStack {
-                                Text(formatDateForDisplay(bettingCloseDate))
-                                    .foregroundColor(.black)
-                                Spacer()
-                                Image(systemName: "calendar")
-                                    .foregroundColor(.gray)
+                            if currentStep > 1 {
+                                currentStep -= 1
+                            } else {
+                                dismiss()
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(8)
+                        }) {
+                            Image(systemName: currentStep > 1 ? "chevron.left" : "xmark")
+                                .font(.title3)
+                                .foregroundColor(.black)
+                                .frame(width: 40, height: 40)
+                                .background(Color(.systemGray5))
+                                .clipShape(Circle())
                         }
                         
-                        Text("After this time, no more bets can be placed. Leave blank for 48 hours from now.")
-                            .font(.caption)
-                            .foregroundColor(.gray)
+                        Spacer()
+                        
+                        // Progress Indicator
+                        HStack(spacing: 8) {
+                            Text("\(min(currentStep, 3)) of 3")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                            
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 4, height: 4)
+                            
+                            Text(getStepTitle())
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                        
+                        // Progress Bar
+                        HStack(spacing: 2) {
+                            ForEach(1...3, id: \.self) { step in
+                                Rectangle()
+                                    .fill(step <= min(currentStep, 3) ? Color.slingBlue : Color.gray.opacity(0.3))
+                                    .frame(width: 20, height: 4)
+                                    .cornerRadius(2)
+                            }
+                        }
                     }
-                    .padding(.horizontal, 20)
-                    
-                    // Action Buttons
-                    HStack(spacing: 12) {
-                        Button("Cancel") {
-                            dismiss()
-                        }
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.white)
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                        
-                        Button("Create Market") {
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                }
+                
+                // Content Area
+                ScrollView {
+                    VStack(spacing: 32) {
+                                        switch currentStep {
+                case 1:
+                    marketTypeStep
+                case 2:
+                    betDetailsStep
+                case 3:
+                    outcomesStep
+                case 4:
+                    reviewStep
+                default:
+                    EmptyView()
+                }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 32)
+                    .padding(.bottom, 100)
+                }
+                
+                // Continue Button
+                VStack(spacing: 0) {
+                    Button(action: {
+                        if currentStep < 4 {
+                            currentStep += 1
+                        } else {
                             createBet()
                         }
+                    }) {
+                        HStack {
+                            if currentStep == 4 {
+                                Image(systemName: "checkmark")
+                                    .font(.subheadline)
+                            }
+                            
+                            Text(getContinueButtonText())
+                                .fontWeight(.semibold)
+                            
+                            if currentStep < 4 {
+                                Image(systemName: "arrow.right")
+                                    .font(.subheadline)
+                            }
+                        }
                         .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
                         .frame(maxWidth: .infinity)
-                        .background(Color.slingGradient)
-                        .cornerRadius(10)
+                        .padding(.vertical, 16)
+                        .background(canContinueToNextStep() ? Color.slingBlue : Color.gray)
+                        .cornerRadius(12)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
+                    .disabled(!canContinueToNextStep())
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 32)
                 }
+                .background(Color.white)
             }
             .background(Color.white)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.black)
-                }
-                
-                ToolbarItem(placement: .principal) {
-                    Text("Create New Bet")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Create Market") {
-                        createBet()
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.slingGradient)
-                    .cornerRadius(8)
-                }
-            }
-            .onAppear {
-                firestoreService.fetchCommunities()
-                updateOutcomesForMarketType()
-            }
+            .navigationBarHidden(true)
             .sheet(isPresented: $showingDatePicker) {
                 DatePickerView(selectedDate: $bettingCloseDate, isPresented: $showingDatePicker)
             }
+            .sheet(isPresented: $showingAdjustOdds) {
+                AdjustOddsView(
+                    odds: $odds[selectedOutcomeIndex],
+                    percentage: $percentages[selectedOutcomeIndex],
+                    isPresented: $showingAdjustOdds
+                )
+            }
+            .onAppear {
+                firestoreService.fetchCommunities()
+            }
         }
+    }
+    
+    // MARK: - Step 1: Market Type
+    private var marketTypeStep: some View {
+        VStack(spacing: 24) {
+            // Title
+            VStack(spacing: 8) {
+                Text("Market Type")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.black)
+                
+                Text("Choose your bet format")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
+            
+            // Market Type Grid
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 16) {
+                ForEach(marketTypes, id: \.0) { type, icon, subtitle, description in
+                    Button(action: {
+                        selectedMarketType = type
+                        updateOutcomesForMarketType()
+                    }) {
+                        VStack(spacing: 8) {
+                            // Icon
+                            ZStack {
+                                Circle()
+                                    .fill(selectedMarketType == type ? Color.slingBlue : Color.gray.opacity(0.2))
+                                    .frame(width: 40, height: 40)
+                                
+                                Image(systemName: icon)
+                                    .font(.title3)
+                                    .foregroundColor(selectedMarketType == type ? .white : .slingBlue)
+                            }
+                            
+                            // Title
+                            Text(type)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(selectedMarketType == type ? .slingBlue : .black)
+                            
+                            // Description
+                            VStack(spacing: 2) {
+                                Text(subtitle)
+                                    .font(.caption2)
+                                    .foregroundColor(selectedMarketType == type ? .slingBlue : .gray)
+                                
+                                Text(description)
+                                    .font(.caption2)
+                                    .foregroundColor(selectedMarketType == type ? .slingBlue.opacity(0.8) : .gray.opacity(0.8))
+                                    .multilineTextAlignment(.center)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                        .padding(.vertical, 16)
+                        .padding(.horizontal, 12)
+                        .background(selectedMarketType == type ? Color.slingBlue.opacity(0.1) : Color.white)
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(selectedMarketType == type ? Color.slingBlue : Color.gray.opacity(0.3), lineWidth: selectedMarketType == type ? 2 : 1)
+                        )
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Step 2: Bet Details
+    private var betDetailsStep: some View {
+        VStack(spacing: 24) {
+            // Title
+            VStack(spacing: 8) {
+                Text("Your Bet")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.black)
+                
+                Text("Set up your market details")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
+            
+            // Market Question Card
+            VStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Market Question")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                        
+                        Text("Be specific and engaging")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Spacer()
+                }
+                
+                TextField("e.g., Who will win the championship?", text: $marketQuestion)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .font(.subheadline)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 12)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                
+                HStack {
+                    Spacer()
+                    Text("\(marketQuestion.count)/100")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+            }
+            .padding(20)
+            .background(Color.white)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+            
+            // Spread Line Section (only for Spread type)
+            if selectedMarketType == "Spread" {
+                VStack(spacing: 16) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "number")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Spread Line")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.black)
+                            
+                            Text("Enter the point handicap")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                    }
+                    
+                    TextField("e.g., -3.5", text: $spreadLine)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .font(.subheadline)
+                        .keyboardType(.decimalPad)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 12)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                        .onChange(of: spreadLine) { newValue in
+                            // Filter to only allow numbers, decimal points, and minus signs
+                            let filtered = newValue.filter { "0123456789.-".contains($0) }
+                            if filtered != newValue {
+                                spreadLine = filtered
+                            }
+                            updateSpreadOutcomes()
+                        }
+                    
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.slingBlue)
+                        
+                        Text("Negative favors Team A, positive favors Team B")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                .padding(20)
+                .background(Color.white)
+                .cornerRadius(16)
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+            }
+            
+            // Over/Under Line Section (only for Over/Under type)
+            if selectedMarketType == "Over/Under" {
+                VStack(spacing: 16) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "arrow.up.arrow.down")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Over/Under Line")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.black)
+                            
+                            Text("Enter the threshold number")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                    }
+                    
+                    TextField("e.g., 27.5", text: $overUnderLine)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .font(.subheadline)
+                        .keyboardType(.decimalPad)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 12)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                        .onChange(of: overUnderLine) { newValue in
+                            // Filter to only allow numbers, decimal points, and minus signs
+                            let filtered = newValue.filter { "0123456789.-".contains($0) }
+                            if filtered != newValue {
+                                overUnderLine = filtered
+                            }
+                            updateOverUnderOutcomes()
+                        }
+                    
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.slingBlue)
+                        
+                        Text("Bettors predict if the total will be above or below this number")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                .padding(20)
+                .background(Color.white)
+                .cornerRadius(16)
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+            }
+            
+            // Community Card
+            VStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.2.fill")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Community")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                        
+                        Text("Where will people bet on this?")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Spacer()
+                }
+                
+                Menu {
+                    ForEach(firestoreService.userCommunities) { community in
+                        Button(community.name) {
+                            selectedCommunity = community.name
+                        }
+                    }
+                } label: {
+                    HStack {
+                        ZStack {
+                            Circle()
+                                .fill(selectedCommunity.isEmpty ? Color.slingBlue : Color.green)
+                                .frame(width: 20, height: 20)
+                            
+                            Image(systemName: selectedCommunity.isEmpty ? "plus" : "checkmark")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                        }
+                        
+                        Text(selectedCommunity.isEmpty ? "Select a community" : selectedCommunity)
+                            .foregroundColor(selectedCommunity.isEmpty ? .gray : .black)
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 12)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                }
+            }
+                        .padding(20)
+            .background(Color.white)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        }
+    }
+    
+    // MARK: - Step 3: Outcomes & Odds
+    private var outcomesStep: some View {
+        VStack(spacing: 24) {
+            // Title
+            VStack(spacing: 8) {
+                Text("Outcomes & Odds")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.black)
+                
+                Text("Configure betting options and probabilities")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
+            
+                        // Outcomes
+            VStack(spacing: 16) {
+                ForEach(Array(outcomes.enumerated()), id: \.offset) { index, outcome in
+                    Button(action: {
+                        selectedOutcomeIndex = index
+                        showingAdjustOdds = true
+                    }) {
+                        HStack(spacing: 16) {
+                            // Outcome Label
+                            if selectedMarketType == "Yes/No" {
+                                // Yes/No outcomes are not editable
+                                HStack(spacing: 4) {
+                                    Text(outcome)
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.black)
+                                    
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                .frame(width: 80, alignment: .leading)
+                            } else if selectedMarketType == "Spread" || selectedMarketType == "Over/Under" {
+                                // Spread and Over/Under outcomes are not editable
+                                HStack(spacing: 4) {
+                                    Text(outcome)
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.black)
+                                    
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                .frame(width: 120, alignment: .leading)
+                            } else {
+                                // Multiple Choice and Prop Bet outcomes are editable
+                                HStack(spacing: 4) {
+                                    TextField("Outcome", text: $outcomes[index])
+                                        .textFieldStyle(PlainTextFieldStyle())
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.black)
+                                    
+                                    Image(systemName: "pencil.circle.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.slingBlue)
+                                }
+                                .frame(width: 120, alignment: .leading)
+                            }
+                            
+                            // Odds Input
+                            TextField("Odds", text: $odds[index])
+                                .textFieldStyle(PlainTextFieldStyle())
+                                .font(.subheadline)
+                                .multilineTextAlignment(.center)
+                                .frame(width: 70)
+                                .padding(.vertical, 6)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                            
+                            // Percentage Badge
+                            Text(percentages[index])
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 6)
+                                .background(Color.slingBlue)
+                                .cornerRadius(12)
+                            
+                            Spacer(minLength: 20)
+                            
+                            // Chevron or Remove Button
+                            if selectedMarketType == "Multiple Choice" || selectedMarketType == "Prop Bet" {
+                                if outcomes.count > 2 {
+                                    Button(action: {
+                                        outcomes.remove(at: index)
+                                        odds.remove(at: index)
+                                        percentages.remove(at: index)
+                                    }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.caption)
+                                            .foregroundColor(.red)
+                                    }
+                                } else {
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                            } else {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(selectedMarketType == "Multiple Choice" || selectedMarketType == "Prop Bet" ? Color.slingBlue.opacity(0.05) : Color.white)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(
+                                    (selectedMarketType == "Multiple Choice" || selectedMarketType == "Prop Bet") ? Color.slingBlue.opacity(0.3) : Color.clear,
+                                    lineWidth: 1
+                                )
+                        )
+                        .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
+                // Add new option for Multiple Choice and Prop Bet
+                if selectedMarketType == "Multiple Choice" || selectedMarketType == "Prop Bet" {
+                    HStack(spacing: 16) {
+                        TextField("Add another option...", text: $newOptionText)
+                            .textFieldStyle(PlainTextFieldStyle())
+                            .font(.subheadline)
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(12)
+                        
+                        Button(action: {
+                            if !newOptionText.isEmpty {
+                                outcomes.append(newOptionText)
+                                odds.append("-110")
+                                percentages.append("52.4%")
+                                newOptionText = ""
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "plus")
+                                    .font(.subheadline)
+                                Text("Add")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(.white)
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .background(Color.slingBlue)
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Step 4: Review
+    private var reviewStep: some View {
+        VStack(spacing: 24) {
+            // Title
+            VStack(spacing: 8) {
+                Text("Review")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.black)
+                
+                Text("Double-check everything before creating")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
+            
+            // Market Details Card
+            VStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                        .frame(width: 24, height: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Question")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                        
+                        Text(marketQuestion)
+                            .font(.subheadline)
+                            .foregroundColor(.black)
+                    }
+                    
+                    Spacer()
+                }
+                
+                HStack(spacing: 12) {
+                    Image(systemName: "target")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                        .frame(width: 24, height: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Type")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                        
+                        Text(selectedMarketType)
+                            .font(.subheadline)
+                            .foregroundColor(.black)
+                    }
+                    
+                    Spacer()
+                }
+                
+                HStack(spacing: 12) {
+                    Image(systemName: "person.2.fill")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                        .frame(width: 24, height: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Community")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                        
+                        Text(selectedCommunity)
+                            .font(.subheadline)
+                            .foregroundColor(.black)
+                    }
+                    
+                    Spacer()
+                }
+                
+                HStack(spacing: 12) {
+                    Image(systemName: "list.bullet")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                        .frame(width: 24, height: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Outcomes")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(outcomes.enumerated()), id: \.offset) { index, outcome in
+                                HStack {
+                                    Text(outcome)
+                                        .font(.subheadline)
+                                        .foregroundColor(.black)
+                                    
+                                    Spacer()
+                                    
+                                    Text(odds[index])
+                                        .font(.subheadline)
+                                        .foregroundColor(.slingBlue)
+                                        .fontWeight(.medium)
+                                    
+                                    Text("(\(percentages[index]))")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .padding(20)
+            .background(Color.white)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+            
+            // Deadline Card
+            VStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    Image(systemName: "clock.fill")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Deadline")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                        
+                        Text("When betting closes")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Spacer()
+                }
+                
+                Button(action: {
+                    showingDatePicker = true
+                }) {
+                    HStack {
+                        Text("Closes: \(formatDateForDisplay(bettingCloseDate))")
+                            .font(.subheadline)
+                            .foregroundColor(.black)
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.vertical, 16)
+                    .padding(.horizontal, 16)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                }
+            }
+            .padding(20)
+            .background(Color.white)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        }
+    }
+    
+    // MARK: - Helper Functions
+    private func getStepTitle() -> String {
+        switch currentStep {
+        case 1: return "Market Type"
+        case 2: return "Details"
+        case 3: return "Outcomes"
+        case 4: return "Review"
+        default: return ""
+        }
+    }
+    
+    private func getContinueButtonText() -> String {
+        switch currentStep {
+        case 1, 2: return "Continue"
+        case 3: return "Review & Create"
+        case 4: return "Create Market"
+        default: return "Continue"
+        }
+    }
+    
+    private func canContinueToNextStep() -> Bool {
+        switch currentStep {
+        case 1:
+            return !selectedMarketType.isEmpty
+        case 2:
+            return !marketQuestion.isEmpty && !selectedCommunity.isEmpty
+        case 3:
+            return true
+        case 4:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    private func formatDateForDisplay(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
+        return formatter.string(from: date)
     }
     
     private func updateOutcomesForMarketType() {
@@ -6524,46 +7035,70 @@ struct CreateBetView: View {
         case "Yes/No":
             outcomes = ["Yes", "No"]
             odds = ["-110", "-110"]
-            percentages = ["52%", "52%"]
+            percentages = ["52.4%", "52.4%"]
+            spreadLine = ""
+            overUnderLine = ""
         case "Multiple Choice":
             outcomes = ["Option 1", "Option 2", "Option 3"]
             odds = ["-110", "-110", "-110"]
-            percentages = ["33%", "33%", "33%"]
+            percentages = ["33.3%", "33.3%", "33.3%"]
+            spreadLine = ""
+            overUnderLine = ""
         case "Spread":
             outcomes = ["Team A", "Team B"]
             odds = ["-110", "-110"]
-            percentages = ["52%", "52%"]
+            percentages = ["52.4%", "52.4%"]
+            spreadLine = ""
+            overUnderLine = ""
         case "Over/Under":
             outcomes = ["Over", "Under"]
             odds = ["-110", "-110"]
-            percentages = ["52%", "52%"]
+            percentages = ["52.4%", "52.4%"]
+            spreadLine = ""
+            overUnderLine = ""
         case "Prop Bet":
             outcomes = ["Option 1", "Option 2"]
             odds = ["-110", "-110"]
-            percentages = ["52%", "52%"]
+            percentages = ["52.4%", "52.4%"]
+            spreadLine = ""
+            overUnderLine = ""
         default:
             break
         }
+        
+        // Update outcomes based on spread/over-under lines
+        updateSpreadOutcomes()
+        updateOverUnderOutcomes()
     }
     
-    private func formatDateForDisplay(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+    private func updateSpreadOutcomes() {
+        guard selectedMarketType == "Spread" else { return }
+        if !spreadLine.isEmpty, let spreadValue = Double(spreadLine) {
+            outcomes[0] = "Team A \(spreadValue >= 0 ? "+" : "")\(String(format: "%.1f", spreadValue))"
+            outcomes[1] = "Team B \(spreadValue >= 0 ? "-" : "+")\(String(format: "%.1f", abs(spreadValue)))"
+        } else {
+            outcomes[0] = "Team A"
+            outcomes[1] = "Team B"
+        }
     }
+    
+    private func updateOverUnderOutcomes() {
+        guard selectedMarketType == "Over/Under" else { return }
+        if !overUnderLine.isEmpty, let lineValue = Double(overUnderLine) {
+            outcomes[0] = "Over \(String(format: "%.1f", lineValue))"
+            outcomes[1] = "Under \(String(format: "%.1f", lineValue))"
+        } else {
+            outcomes[0] = "Over"
+            outcomes[1] = "Under"
+        }
+    }
+    
+
     
     private func createBet() {
         // Validate required fields
-        guard !marketQuestion.isEmpty else {
-            // Show error for empty question
-            return
-        }
-        
-        guard !selectedCommunity.isEmpty else {
-            // Show error for empty community
-            return
-        }
+        guard !marketQuestion.isEmpty else { return }
+        guard !selectedCommunity.isEmpty else { return }
         
         // Find the selected community
         guard let community = firestoreService.userCommunities.first(where: { $0.name == selectedCommunity }) else {
@@ -6595,10 +7130,6 @@ struct CreateBetView: View {
             betType = "yes_no"
         }
         
-        // Parse spread and over/under lines
-        let spreadLineValue = Double(spreadLine)
-        let overUnderLineValue = Double(overUnderLine)
-        
         let betData: [String: Any] = [
             "title": marketQuestion,
             "community_id": community.id ?? "",
@@ -6606,8 +7137,8 @@ struct CreateBetView: View {
             "odds": oddsDict,
             "deadline": bettingCloseDate,
             "bet_type": betType,
-            "spread_line": spreadLineValue ?? 0.0,
-            "over_under_line": overUnderLineValue ?? 0.0,
+            "spread_line": spreadLine.isEmpty ? nil : Double(spreadLine),
+            "over_under_line": overUnderLine.isEmpty ? nil : Double(overUnderLine),
             "status": "open",
             "created_date": Date(),
             "updated_date": Date()
@@ -6618,10 +7149,218 @@ struct CreateBetView: View {
                 if success {
                     dismiss()
                 } else {
-                    // Handle error - could show an alert
                     print("Error creating bet: \(error ?? "Unknown error")")
                 }
             }
+        }
+    }
+}
+
+// MARK: - Adjust Odds View
+
+struct AdjustOddsView: View {
+    @Binding var odds: String
+    @Binding var percentage: String
+    @Binding var isPresented: Bool
+    @State private var sliderValue: Double = 0.0
+    @State private var zoomLevel: Int = 0 // 0: default, 1: expanded, 2: full range
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 32) {
+                // Header
+                VStack(spacing: 16) {
+                    Text("Adjust Odds")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    // Current Odds Display
+                    VStack(spacing: 8) {
+                        Text(odds)
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundColor(.slingBlue)
+                        
+                        Text(percentage)
+                            .font(.title3)
+                            .foregroundColor(.black)
+                    }
+                    
+                    // Odds Slider
+                    VStack(spacing: 16) {
+                        // Range Labels
+                        HStack {
+                            Text("\(getMinRangeText())")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                            
+                            Spacer()
+                            
+                            Text("\(getMaxRangeText())")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Slider(value: $sliderValue, in: getSliderRange(), step: 5)
+                            .accentColor(.slingBlue)
+                            .onChange(of: sliderValue) { newValue in
+                                updateOddsAndPercentage(from: newValue)
+                                checkAndExpandRange()
+                            }
+                        
+                        // How Odds Work Section
+                        VStack(spacing: 12) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.slingBlue)
+                                
+                                Text("How Betting Odds Work")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                            }
+                            
+                            VStack(spacing: 8) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.caption2)
+                                        .foregroundColor(.green)
+                                    
+                                    Text("Positive odds (+150): Bet $100 to win $150")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                HStack(spacing: 8) {
+                                    Image(systemName: "minus.circle.fill")
+                                        .font(.caption2)
+                                        .foregroundColor(.red)
+                                    
+                                    Text("Negative odds (-150): Bet $150 to win $100")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                HStack(spacing: 8) {
+                                    Image(systemName: "equal.circle.fill")
+                                        .font(.caption2)
+                                        .foregroundColor(.orange)
+                                    
+                                    Text("Even odds (-110): Bet $110 to win $100")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 32)
+                
+                Spacer()
+                
+                // Done Button
+                Button("Done") {
+                    isPresented = false
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Color.slingBlue)
+                .cornerRadius(12)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
+            }
+            .background(Color.white)
+            .navigationBarHidden(true)
+            .onAppear {
+                // Initialize slider value based on current odds
+                if odds.hasPrefix("+") {
+                    sliderValue = Double(odds.dropFirst()) ?? 0.0
+                } else {
+                    sliderValue = Double(odds) ?? 0.0
+                }
+            }
+        }
+    }
+    
+    private func updateOddsAndPercentage(from sliderValue: Double) {
+        // Update odds with proper sign
+        if sliderValue > 0 {
+            odds = "+" + String(format: "%.0f", sliderValue)
+        } else {
+            odds = String(format: "%.0f", sliderValue)
+        }
+        
+        // Calculate percentage based on odds
+        let percentageValue = calculatePercentage(from: sliderValue)
+        percentage = String(format: "%.1f%%", percentageValue)
+    }
+    
+    private func calculatePercentage(from odds: Double) -> Double {
+        if odds > 0 {
+            return 100.0 / (odds + 100.0) * 100.0
+        } else {
+            return abs(odds) / (abs(odds) + 100.0) * 100.0
+        }
+    }
+    
+    // MARK: - Auto-Expanding Range Helper Functions
+    private func getSliderRange() -> ClosedRange<Double> {
+        switch zoomLevel {
+        case 0: return -500...500
+        case 1: return -5000...5000
+        case 2: return -100000...100000
+        default: return -500...500
+        }
+    }
+    
+    private func getMinRangeText() -> String {
+        switch zoomLevel {
+        case 0: return "-500"
+        case 1: return "-5000"
+        case 2: return "-100k"
+        default: return "-500"
+        }
+    }
+    
+    private func getMaxRangeText() -> String {
+        switch zoomLevel {
+        case 0: return "+500"
+        case 1: return "+5000"
+        case 2: return "+100k"
+        default: return "+500"
+        }
+    }
+    
+    private func checkAndExpandRange() {
+        let currentRange = getSliderRange()
+        
+        // If slider is at the edge, expand the range
+        if sliderValue >= currentRange.upperBound - 50 {
+            if zoomLevel == 0 {
+                zoomLevel = 1
+            } else if zoomLevel == 1 {
+                zoomLevel = 2
+            }
+        } else if sliderValue <= currentRange.lowerBound + 50 {
+            if zoomLevel == 0 {
+                zoomLevel = 1
+            } else if zoomLevel == 1 {
+                zoomLevel = 2
+            }
+        }
+        
+        // If slider moves back toward center, contract the range
+        if zoomLevel == 2 && sliderValue >= -5000 && sliderValue <= 5000 {
+            zoomLevel = 1
+        } else if zoomLevel == 1 && sliderValue >= -500 && sliderValue <= 500 {
+            zoomLevel = 0
         }
     }
 }
