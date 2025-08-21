@@ -2400,17 +2400,30 @@ struct MessagesView: View {
             DragGesture()
                 .onChanged { value in
                     let translation = value.translation.width
-                    if translation < 0 { // Only allow left swipe
+                    if translation < 0 { // Left swipe - show timestamps
                         // Activate timestamps when swiping left anywhere on the page
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             isShowingTimestamps = true
                         }
                     }
                 }
-                .onEnded { _ in
-                    // Always hide timestamps when gesture ends
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        isShowingTimestamps = false
+                .onEnded { value in
+                    let translation = value.translation.width
+                    let velocity = value.velocity.width
+                    
+                    // Handle left swipe for timestamps
+                    if translation < 0 {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            isShowingTimestamps = false
+                        }
+                    }
+                    
+                    // Handle right swipe to go back (with velocity threshold for better UX)
+                    if translation > 50 || velocity > 300 { // Right swipe threshold
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            selectedCommunity = nil
+                            firestoreService.stopListeningToMessages()
+                        }
                     }
                 }
         )

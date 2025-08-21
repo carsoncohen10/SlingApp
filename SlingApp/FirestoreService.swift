@@ -477,33 +477,88 @@ class FirestoreService: ObservableObject {
                 for communityId in communityIds {
                     group.enter()
                     
-                    self?.db.collection("community")
-                        .whereField("id", isEqualTo: communityId)
-                        .getDocuments { snapshot, error in
-                            defer { group.leave() }
-                            
-                            if let error = error {
-                                print("❌ Error fetching community \(communityId): \(error.localizedDescription)")
-                                return
-                            }
-                            
-                            guard let document = snapshot?.documents.first else {
-                                print("❌ No community found for ID: \(communityId)")
-                                return
-                            }
-                            
-                            if var community = try? document.data(as: FirestoreCommunity.self) {
-                                community.documentId = document.documentID
-                                fetchedCommunities.append(community)
-                                print("✅ Loaded community: \(community.name)")
-                            }
+                    print("🔍 Attempting to fetch community with ID: \(communityId)")
+                    
+                    // Debug: Let's see what's actually in the community collection
+                    self?.db.collection("community").getDocuments { allSnapshot, allError in
+                        defer {
+                            group.leave()
                         }
+                        
+                        if let allError = allError {
+                            print("❌ Error fetching all communities: \(allError.localizedDescription)")
+                            return
+                        }
+                        
+                        let allCommunities = allSnapshot?.documents ?? []
+                        print("🔍 Total communities in collection: \(allCommunities.count)")
+                        
+                        for commDoc in allCommunities {
+                            let commData = commDoc.data()
+                            print("🔍 Community doc ID: \(commDoc.documentID), data: \(commData)")
+                        }
+                        
+                        // Now try to find the specific community
+                        let targetCommunity = allCommunities.first { doc in
+                            doc.data()["id"] as? String == communityId || doc.documentID == communityId
+                        }
+                        
+                        if let targetCommunity = targetCommunity {
+                            print("✅ Found community: \(targetCommunity.documentID)")
+                            print("🔍 Attempting to decode community data...")
+                            
+                            do {
+                                var community = try targetCommunity.data(as: FirestoreCommunity.self)
+                                community.documentId = targetCommunity.documentID
+                                fetchedCommunities.append(community)
+                                print("✅ Successfully loaded community: \(community.name)")
+                                print("🔍 Current fetchedCommunities count: \(fetchedCommunities.count)")
+                            } catch {
+                                print("❌ Failed to decode community: \(error)")
+                                print("🔍 Raw community data: \(targetCommunity.data())")
+                                
+                                // Fallback: try to create a basic community object
+                                if let data = targetCommunity.data() as? [String: Any],
+                                   let name = data["name"] as? String {
+                                    print("🔄 Creating fallback community object for: \(name)")
+                                    // Create a minimal community object
+                                    let fallbackCommunity = FirestoreCommunity(
+                                        documentId: targetCommunity.documentID,
+                                        id: data["id"] as? String,
+                                        name: name,
+                                        description: nil,
+                                        created_by: data["created_by"] as? String ?? "Unknown",
+                                        created_date: data["created_date"] as? Date ?? Date(),
+                                        invite_code: data["invite_code"] as? String ?? "",
+                                        member_count: data["member_count"] as? Int ?? 0,
+                                        bet_count: nil,
+                                        total_bets: data["total_bets"] as? Int ?? 0,
+                                        members: data["members"] as? [String],
+                                        admin_email: data["admin_email"] as? String,
+                                        created_by_id: data["created_by_id"] as? String,
+                                        is_active: nil,
+                                        is_private: nil,
+                                        updated_date: data["updated_date"] as? Date,
+                                        chat_history: nil
+                                    )
+                                    fetchedCommunities.append(fallbackCommunity)
+                                    print("✅ Added fallback community: \(name)")
+                                    print("🔍 Current fetchedCommunities count: \(fetchedCommunities.count)")
+                                }
+                            }
+                        } else {
+                            print("❌ Community not found: \(communityId)")
+                        }
+                    }
                 }
                 
+                print("🔍 Waiting for \(communityIds.count) communities to be fetched...")
                 group.notify(queue: .main) { [weak self] in
                     DispatchQueue.main.async {
+                        print("🔍 Group notification received, setting userCommunities to \(fetchedCommunities.count) communities")
                         self?.userCommunities = fetchedCommunities
                         print("✅ Total communities loaded: \(fetchedCommunities.count)")
+                        print("🔍 Communities loaded: \(fetchedCommunities.map { $0.name })")
                         self?.updateTotalUnreadCount()
                     }
                 }
@@ -1396,22 +1451,28 @@ class FirestoreService: ObservableObject {
                     return
                 }
                 
-                let communityId = document.documentID
+                // Extract the actual community ID from the document data, not the document ID
+                let communityData = document.data()
+                guard let communityId = communityData["id"] as? String else {
+                    completion(false, "Community document missing ID field")
+                    return
+                }
                 
-                // Create community member record
+                // Create community member record with custom document ID: [community_id]_[user_email]
                 let memberData: [String: Any] = [
                     "user_email": userEmail,
-                    "community_id": communityId,
-                    "is_admin": 0,
+                    "community_id": communityId,  // Now using the correct ID field
+                    "is_admin": false,
                     "joined_date": Date(),
-                    "is_active": 1,
+                    "is_active": true,
                     "created_by": userEmail,
                     "created_by_id": userId,
                     "created_date": Date(),
                     "updated_date": Date()
                 ]
                 
-                self?.db.collection("CommunityMember").addDocument(data: memberData) { error in
+                let documentId = "\(communityId)_\(userEmail)"
+                self?.db.collection("CommunityMember").document(documentId).setData(memberData) { error in
                     if let error = error {
                         completion(false, error.localizedDescription)
                     } else {
@@ -1422,14 +1483,46 @@ class FirestoreService: ObservableObject {
     }
     
     func createCommunity(communityData: [String: Any], completion: @escaping (Bool, String?) -> Void) {
+        guard let userEmail = currentUser?.email,
+              let userId = currentUser?.id else {
+            completion(false, "User not authenticated")
+            return
+        }
+        
+        // Create the community document
         let documentRef = db.collection("community").addDocument(data: communityData)
-        completion(true, documentRef.documentID)
+        let communityId = documentRef.documentID
+        
+        // Automatically add the creator as a member with admin privileges
+        let memberData: [String: Any] = [
+            "user_email": userEmail,
+            "community_id": communityId,
+            "is_admin": true, // Creator is admin
+            "joined_date": Date(),
+            "is_active": true,
+            "created_by": userEmail,
+            "created_by_id": userId,
+            "created_date": Date(),
+            "updated_date": Date()
+        ]
+        
+        let memberDocumentId = "\(communityId)_\(userEmail)"
+        db.collection("CommunityMember").document(memberDocumentId).setData(memberData) { error in
+            if let error = error {
+                print("❌ Error creating community member record: \(error.localizedDescription)")
+                // Still complete with success since community was created
+                completion(true, communityId)
+            } else {
+                print("✅ Successfully created community and added creator as member")
+                completion(true, communityId)
+            }
+        }
     }
     
     func fetchCommunityMembers(communityId: String, completion: @escaping ([CommunityMemberInfo]) -> Void) {
         db.collection("CommunityMember")
             .whereField("community_id", isEqualTo: communityId)
-            .whereField("is_active", isEqualTo: 1)
+            .whereField("is_active", isEqualTo: true)
             .getDocuments { snapshot, error in
                 if let error = error {
                     print("❌ Error fetching community members: \(error.localizedDescription)")
@@ -1441,17 +1534,17 @@ class FirestoreService: ObservableObject {
                     let data = document.data()
                     guard let userEmail = data["user_email"] as? String,
                           let joinDate = data["joined_date"] as? Date,
-                          let isActive = data["is_active"] as? Int else {
+                          let isActive = data["is_active"] as? Bool else {
                         return nil
                     }
                     
-                    let isAdmin = data["is_admin"] as? Int == 1
+                    let isAdmin = data["is_admin"] as? Bool ?? false
                     
                     return CommunityMemberInfo(
                         id: document.documentID,
                         email: userEmail,
                         name: userEmail.components(separatedBy: "@").first ?? userEmail,
-                        isActive: isActive == 1,
+                        isActive: isActive,
                         joinDate: joinDate,
                         isAdmin: isAdmin
                     )
@@ -1465,7 +1558,7 @@ class FirestoreService: ObservableObject {
         db.collection("CommunityMember")
             .whereField("community_id", isEqualTo: communityId)
             .whereField("user_email", isEqualTo: userEmail)
-            .whereField("is_admin", isEqualTo: 1)
+            .whereField("is_admin", isEqualTo: true)
             .getDocuments { snapshot, error in
                 if let error = error {
                     print("❌ Error checking admin status: \(error.localizedDescription)")
@@ -1475,6 +1568,111 @@ class FirestoreService: ObservableObject {
                 
                 completion(!(snapshot?.documents.isEmpty ?? true))
             }
+    }
+    
+    // MARK: - Efficient Member Checking with New Document ID Format
+    
+    func isUserMemberOfCommunity(communityId: String, userEmail: String, completion: @escaping (Bool) -> Void) {
+        // Use the new document ID format for efficient checking
+        let documentId = "\(communityId)_\(userEmail)"
+        
+        db.collection("CommunityMember").document(documentId).getDocument { snapshot, error in
+            if let error = error {
+                print("❌ Error checking membership: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            guard let document = snapshot, document.exists else {
+                completion(false)
+                return
+            }
+            
+            // Check if the member is active
+            let data = document.data()
+            let isActive = data?["is_active"] as? Int == 1 || data?["is_active"] as? Bool == true
+            
+            completion(isActive)
+        }
+    }
+    
+    func getUserMembershipStatus(communityId: String, userEmail: String, completion: @escaping (Bool, Bool) -> Void) {
+        // Returns (isMember, isAdmin) using the new document ID format
+        let documentId = "\(communityId)_\(userEmail)"
+        
+        db.collection("CommunityMember").document(documentId).getDocument { snapshot, error in
+            if let error = error {
+                print("❌ Error checking membership status: \(error.localizedDescription)")
+                completion(false, false)
+                return
+            }
+            
+            guard let document = snapshot, document.exists else {
+                completion(false, false)
+                return
+            }
+            
+            let data = document.data()
+            let isActive = data?["is_active"] as? Int == 1 || data?["is_active"] as? Bool == true
+            let isAdmin = data?["is_admin"] as? Int == 1 || data?["is_admin"] as? Bool == true
+            
+            completion(isActive, isAdmin)
+        }
+    }
+    
+    func removeUserFromCommunity(communityId: String, userEmail: String, completion: @escaping (Bool) -> Void) {
+        // Use the new document ID format for efficient removal
+        let documentId = "\(communityId)_\(userEmail)"
+        
+        db.collection("CommunityMember").document(documentId).delete { error in
+            if let error = error {
+                print("❌ Error removing user from community: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                print("✅ Successfully removed user \(userEmail) from community \(communityId)")
+                completion(true)
+            }
+        }
+    }
+    
+    func deactivateUserMembership(communityId: String, userEmail: String, completion: @escaping (Bool) -> Void) {
+        // Alternative to deletion - just mark as inactive
+        let documentId = "\(communityId)_\(userEmail)"
+        
+        let updateData: [String: Any] = [
+            "is_active": false,
+            "updated_date": Date()
+        ]
+        
+        db.collection("CommunityMember").document(documentId).updateData(updateData) { error in
+            if let error = error {
+                print("❌ Error deactivating user membership: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                print("✅ Successfully deactivated membership for user \(userEmail) in community \(communityId)")
+                completion(true)
+            }
+        }
+    }
+    
+    func updateUserMembershipStatus(communityId: String, userEmail: String, isAdmin: Bool, completion: @escaping (Bool) -> Void) {
+        // Update admin status using the new document ID format
+        let documentId = "\(communityId)_\(userEmail)"
+        
+        let updateData: [String: Any] = [
+            "is_admin": isAdmin,
+            "updated_date": Date()
+        ]
+        
+        db.collection("CommunityMember").document(documentId).updateData(updateData) { error in
+            if let error = error {
+                print("❌ Error updating user membership status: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                print("✅ Successfully updated membership status for user \(userEmail) in community \(communityId) - Admin: \(isAdmin)")
+                completion(true)
+            }
+        }
     }
     
     func updateCommunityName(communityId: String, newName: String, completion: @escaping (Bool) -> Void) {

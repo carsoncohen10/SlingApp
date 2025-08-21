@@ -40,25 +40,84 @@ struct FirestoreCommunity: Identifiable, Codable, Equatable {
     @DocumentID var documentId: String?
     var id: String? // Community ID field (like "687f665c9fd93c3795664442")
     var name: String
-    var description: String
+    var description: String?
     var created_by: String
     var created_date: Date
     var invite_code: String
     var member_count: Int
-    var bet_count: Int
+    var bet_count: Int?
     var total_bets: Int
     var members: [String]? // Array of user emails who are members (optional)
     var admin_email: String?
     var created_by_id: String?
-    var is_active: Bool // Firestore stores this as true/false
+    var is_active: Bool? // Firestore stores this as true/false, but some old docs might have Int
     
     // Computed property for backward compatibility
     var isActive: Bool {
-        return is_active
+        return is_active ?? true // Default to true if not specified
     }
-    var is_private: Bool
+    var is_private: Bool?
     var updated_date: Date?
     var chat_history: [String: FirestoreCommunityMessage]? // Messages stored as a map with message ID as key
+    
+    // Custom initializer to handle both Int and Bool for is_active field
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        documentId = try container.decodeIfPresent(String.self, forKey: .documentId)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        created_by = try container.decode(String.self, forKey: .created_by)
+        created_date = try container.decode(Date.self, forKey: .created_date)
+        invite_code = try container.decode(String.self, forKey: .invite_code)
+        member_count = try container.decode(Int.self, forKey: .member_count)
+        bet_count = try container.decodeIfPresent(Int.self, forKey: .bet_count)
+        total_bets = try container.decode(Int.self, forKey: .total_bets)
+        members = try container.decodeIfPresent([String].self, forKey: .members)
+        admin_email = try container.decodeIfPresent(String.self, forKey: .admin_email)
+        created_by_id = try container.decodeIfPresent(String.self, forKey: .created_by_id)
+        is_private = try container.decodeIfPresent(Bool.self, forKey: .is_private)
+        updated_date = try container.decodeIfPresent(Date.self, forKey: .updated_date)
+        chat_history = try container.decodeIfPresent([String: FirestoreCommunityMessage].self, forKey: .chat_history)
+        
+        // Handle is_active field that might be Int or Bool
+        if let isActiveBool = try? container.decode(Bool.self, forKey: .is_active) {
+            is_active = isActiveBool
+        } else if let isActiveInt = try? container.decode(Int.self, forKey: .is_active) {
+            is_active = isActiveInt == 1
+        } else {
+            is_active = true // Default to true if not specified
+        }
+    }
+    
+    // Custom initializer for fallback community creation
+    init(documentId: String?, id: String?, name: String, description: String?, created_by: String, created_date: Date, invite_code: String, member_count: Int, bet_count: Int?, total_bets: Int, members: [String]?, admin_email: String?, created_by_id: String?, is_active: Bool?, is_private: Bool?, updated_date: Date?, chat_history: [String: FirestoreCommunityMessage]?) {
+        self.documentId = documentId
+        self.id = id
+        self.name = name
+        self.description = description
+        self.created_by = created_by
+        self.created_date = created_date
+        self.invite_code = invite_code
+        self.member_count = member_count
+        self.bet_count = bet_count
+        self.total_bets = total_bets
+        self.members = members
+        self.admin_email = admin_email
+        self.created_by_id = created_by_id
+        self.is_active = is_active
+        self.is_private = is_private
+        self.updated_date = updated_date
+        self.chat_history = chat_history
+    }
+    
+    // Coding keys for custom initializer
+    private enum CodingKeys: String, CodingKey {
+        case documentId, id, name, description, created_by, created_date, invite_code
+        case member_count, bet_count, total_bets, members, admin_email, created_by_id
+        case is_active, is_private, updated_date, chat_history
+    }
 }
 
 struct FirestoreBet: Identifiable, Codable, Equatable {
@@ -137,21 +196,21 @@ struct FirestoreCommunityMember: Identifiable, Codable {
     @DocumentID var id: String?
     var user_email: String
     var community_id: String
-    var is_admin: Int // Firestore stores this as 1/0
+    var is_admin: Bool // Firestore now stores this as true/false
     var joined_date: Date
-    var is_active: Int // Firestore stores this as 1/0
+    var is_active: Bool // Firestore now stores this as true/false
     var created_by: String?
     var created_by_id: String?
     var created_date: Date?
     var updated_date: Date?
     
-    // Computed properties to convert Int to Bool
+    // Computed properties for backward compatibility (now just return the Bool values directly)
     var isAdmin: Bool {
-        return is_admin == 1
+        return is_admin
     }
     
     var isActive: Bool {
-        return is_active == 1
+        return is_active
     }
 }
 
