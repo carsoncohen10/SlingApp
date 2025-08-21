@@ -6173,7 +6173,24 @@ struct EditProfileView: View {
                         .cornerRadius(10)
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 12)
+                    
+                    // Sign Out Button
+                    Button(action: {
+                        firestoreService.signOut()
+                        dismiss()
+                    }) {
+                            Text("Sign Out")
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.red)
+                        .cornerRadius(10)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 20)
                 }
                 .background(Color.white)
                 .cornerRadius(16)
