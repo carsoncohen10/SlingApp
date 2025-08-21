@@ -1,0 +1,642 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		9FF9EBD62E43A6C70011942E /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 9FF9EBD52E43A6C70011942E /* FirebaseAnalytics */; };
+		9FF9EBD82E43A6C70011942E /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 9FF9EBD72E43A6C70011942E /* FirebaseAuth */; };
+		9FF9EBDA2E43A6C70011942E /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9FF9EBD92E43A6C70011942E /* FirebaseDatabase */; };
+		9FF9EBDC2E43A6C70011942E /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 9FF9EBDB2E43A6C70011942E /* FirebaseFirestore */; };
+		9FF9EBE22E43A8BF0011942E /* FirebaseFirestoreSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 9FF9EBE12E43A8BF0011942E /* FirebaseFirestoreSwift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		9FE55B2A2E42998C0016DAB2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9FE55B142E42998A0016DAB2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9FE55B1B2E42998A0016DAB2;
+			remoteInfo = SlingApp;
+		};
+		9FE55B342E42998C0016DAB2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9FE55B142E42998A0016DAB2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9FE55B1B2E42998A0016DAB2;
+			remoteInfo = SlingApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		9FE55B1C2E42998A0016DAB2 /* SlingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SlingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9FE55B292E42998C0016DAB2 /* SlingAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SlingAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9FE55B332E42998C0016DAB2 /* SlingAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SlingAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		9F31843C2E565A04002AE623 /* Exceptions for "SlingApp" folder in "SlingApp" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 9FE55B1B2E42998A0016DAB2 /* SlingApp */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		9FE55B1E2E42998A0016DAB2 /* SlingApp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				9F31843C2E565A04002AE623 /* Exceptions for "SlingApp" folder in "SlingApp" target */,
+			);
+			path = SlingApp;
+			sourceTree = "<group>";
+		};
+		9FE55B2C2E42998C0016DAB2 /* SlingAppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SlingAppTests;
+			sourceTree = "<group>";
+		};
+		9FE55B362E42998C0016DAB2 /* SlingAppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SlingAppUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		9FE55B192E42998A0016DAB2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9FF9EBD62E43A6C70011942E /* FirebaseAnalytics in Frameworks */,
+				9FF9EBD82E43A6C70011942E /* FirebaseAuth in Frameworks */,
+				9FF9EBDA2E43A6C70011942E /* FirebaseDatabase in Frameworks */,
+				9FF9EBE22E43A8BF0011942E /* FirebaseFirestoreSwift in Frameworks */,
+				9FF9EBDC2E43A6C70011942E /* FirebaseFirestore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9FE55B262E42998C0016DAB2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9FE55B302E42998C0016DAB2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		9FE55B132E42998A0016DAB2 = {
+			isa = PBXGroup;
+			children = (
+				9FE55B1E2E42998A0016DAB2 /* SlingApp */,
+				9FE55B2C2E42998C0016DAB2 /* SlingAppTests */,
+				9FE55B362E42998C0016DAB2 /* SlingAppUITests */,
+				9FF9EBD22E43A61C0011942E /* Frameworks */,
+				9FE55B1D2E42998A0016DAB2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9FE55B1D2E42998A0016DAB2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9FE55B1C2E42998A0016DAB2 /* SlingApp.app */,
+				9FE55B292E42998C0016DAB2 /* SlingAppTests.xctest */,
+				9FE55B332E42998C0016DAB2 /* SlingAppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		9FF9EBD22E43A61C0011942E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		9FE55B1B2E42998A0016DAB2 /* SlingApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9FE55B3D2E42998C0016DAB2 /* Build configuration list for PBXNativeTarget "SlingApp" */;
+			buildPhases = (
+				9FE55B182E42998A0016DAB2 /* Sources */,
+				9FE55B192E42998A0016DAB2 /* Frameworks */,
+				9FE55B1A2E42998A0016DAB2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				9FE55B1E2E42998A0016DAB2 /* SlingApp */,
+			);
+			name = SlingApp;
+			packageProductDependencies = (
+				9FF9EBD52E43A6C70011942E /* FirebaseAnalytics */,
+				9FF9EBD72E43A6C70011942E /* FirebaseAuth */,
+				9FF9EBD92E43A6C70011942E /* FirebaseDatabase */,
+				9FF9EBDB2E43A6C70011942E /* FirebaseFirestore */,
+				9FF9EBE12E43A8BF0011942E /* FirebaseFirestoreSwift */,
+			);
+			productName = SlingApp;
+			productReference = 9FE55B1C2E42998A0016DAB2 /* SlingApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		9FE55B282E42998C0016DAB2 /* SlingAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9FE55B402E42998C0016DAB2 /* Build configuration list for PBXNativeTarget "SlingAppTests" */;
+			buildPhases = (
+				9FE55B252E42998C0016DAB2 /* Sources */,
+				9FE55B262E42998C0016DAB2 /* Frameworks */,
+				9FE55B272E42998C0016DAB2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9FE55B2B2E42998C0016DAB2 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				9FE55B2C2E42998C0016DAB2 /* SlingAppTests */,
+			);
+			name = SlingAppTests;
+			packageProductDependencies = (
+			);
+			productName = SlingAppTests;
+			productReference = 9FE55B292E42998C0016DAB2 /* SlingAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		9FE55B322E42998C0016DAB2 /* SlingAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9FE55B432E42998C0016DAB2 /* Build configuration list for PBXNativeTarget "SlingAppUITests" */;
+			buildPhases = (
+				9FE55B2F2E42998C0016DAB2 /* Sources */,
+				9FE55B302E42998C0016DAB2 /* Frameworks */,
+				9FE55B312E42998C0016DAB2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9FE55B352E42998C0016DAB2 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				9FE55B362E42998C0016DAB2 /* SlingAppUITests */,
+			);
+			name = SlingAppUITests;
+			packageProductDependencies = (
+			);
+			productName = SlingAppUITests;
+			productReference = 9FE55B332E42998C0016DAB2 /* SlingAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		9FE55B142E42998A0016DAB2 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					9FE55B1B2E42998A0016DAB2 = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					9FE55B282E42998C0016DAB2 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 9FE55B1B2E42998A0016DAB2;
+					};
+					9FE55B322E42998C0016DAB2 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 9FE55B1B2E42998A0016DAB2;
+					};
+				};
+			};
+			buildConfigurationList = 9FE55B172E42998A0016DAB2 /* Build configuration list for PBXProject "SlingApp" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 9FE55B132E42998A0016DAB2;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				9FE55B682E42F63E0016DAB2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 9FE55B1D2E42998A0016DAB2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				9FE55B1B2E42998A0016DAB2 /* SlingApp */,
+				9FE55B282E42998C0016DAB2 /* SlingAppTests */,
+				9FE55B322E42998C0016DAB2 /* SlingAppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		9FE55B1A2E42998A0016DAB2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9FE55B272E42998C0016DAB2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9FE55B312E42998C0016DAB2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9FE55B182E42998A0016DAB2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9FE55B252E42998C0016DAB2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9FE55B2F2E42998C0016DAB2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9FE55B2B2E42998C0016DAB2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9FE55B1B2E42998A0016DAB2 /* SlingApp */;
+			targetProxy = 9FE55B2A2E42998C0016DAB2 /* PBXContainerItemProxy */;
+		};
+		9FE55B352E42998C0016DAB2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9FE55B1B2E42998A0016DAB2 /* SlingApp */;
+			targetProxy = 9FE55B342E42998C0016DAB2 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		9FE55B3B2E42998C0016DAB2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		9FE55B3C2E42998C0016DAB2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		9FE55B3E2E42998C0016DAB2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = AV5H885C23;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SlingApp/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Sling;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carsoncohen.SlingApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		9FE55B3F2E42998C0016DAB2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = AV5H885C23;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SlingApp/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Sling;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carsoncohen.SlingApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		9FE55B412E42998C0016DAB2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carsoncohen.SlingAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SlingApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SlingApp";
+			};
+			name = Debug;
+		};
+		9FE55B422E42998C0016DAB2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carsoncohen.SlingAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SlingApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SlingApp";
+			};
+			name = Release;
+		};
+		9FE55B442E42998C0016DAB2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carsoncohen.SlingAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = SlingApp;
+			};
+			name = Debug;
+		};
+		9FE55B452E42998C0016DAB2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carsoncohen.SlingAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = SlingApp;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		9FE55B172E42998A0016DAB2 /* Build configuration list for PBXProject "SlingApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9FE55B3B2E42998C0016DAB2 /* Debug */,
+				9FE55B3C2E42998C0016DAB2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9FE55B3D2E42998C0016DAB2 /* Build configuration list for PBXNativeTarget "SlingApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9FE55B3E2E42998C0016DAB2 /* Debug */,
+				9FE55B3F2E42998C0016DAB2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9FE55B402E42998C0016DAB2 /* Build configuration list for PBXNativeTarget "SlingAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9FE55B412E42998C0016DAB2 /* Debug */,
+				9FE55B422E42998C0016DAB2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9FE55B432E42998C0016DAB2 /* Build configuration list for PBXNativeTarget "SlingAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9FE55B442E42998C0016DAB2 /* Debug */,
+				9FE55B452E42998C0016DAB2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		9FE55B682E42F63E0016DAB2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = exactVersion;
+				version = 10.25.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9FF9EBD52E43A6C70011942E /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9FE55B682E42F63E0016DAB2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		9FF9EBD72E43A6C70011942E /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9FE55B682E42F63E0016DAB2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		9FF9EBD92E43A6C70011942E /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9FE55B682E42F63E0016DAB2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
+		};
+		9FF9EBDB2E43A6C70011942E /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9FE55B682E42F63E0016DAB2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		9FF9EBE12E43A8BF0011942E /* FirebaseFirestoreSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9FE55B682E42F63E0016DAB2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestoreSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 9FE55B142E42998A0016DAB2 /* Project object */;
+}
