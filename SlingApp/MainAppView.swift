@@ -75,15 +75,20 @@ struct MainAppView: View {
                         VStack(spacing: 4) {
                             Image(systemName: selectedTab == 0 ? "house.fill" : "house")
                                 .font(.title2)
-                            Text("Home")
-                                .font(.caption)
+                                                    // Text removed
+                            .font(.caption)
                         }
                         .foregroundColor(selectedTab == 0 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
                     }
                     
                     // Chat Tab
-                    Button(action: { selectedTab = 1 }) {
+                    Button(action: { 
+                        selectedTab = 1
+                        // Refresh chat data when switching to chat tab
+                        firestoreService.fetchUserCommunities()
+                        firestoreService.fetchLastMessagesForUserCommunities()
+                    }) {
                         VStack(spacing: 4) {
                             ZStack {
                                 Image(systemName: selectedTab == 1 ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
@@ -108,8 +113,8 @@ struct MainAppView: View {
                                         .offset(x: 10, y: -10)
                                 }
                             }
-                            Text("Chat")
-                                .font(.caption)
+                                                    // Text removed
+                            .font(.caption)
                         }
                         .foregroundColor(selectedTab == 1 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
@@ -120,8 +125,8 @@ struct MainAppView: View {
                         VStack(spacing: 4) {
                             Image(systemName: selectedTab == 2 ? "list.bullet.clipboard.fill" : "list.bullet.clipboard")
                                 .font(.title2)
-                            Text("My Bets")
-                                .font(.caption)
+                                                    // Text removed
+                            .font(.caption)
                         }
                         .foregroundColor(selectedTab == 2 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
@@ -144,8 +149,8 @@ struct MainAppView: View {
                         VStack(spacing: 4) {
                             Image(systemName: selectedTab == 3 ? "person.2.fill" : "person.2")
                                 .font(.title2)
-                            Text("Communities")
-                                .font(.caption)
+                                                    // Text removed
+                            .font(.caption)
                         }
                         .foregroundColor(selectedTab == 3 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
@@ -156,8 +161,8 @@ struct MainAppView: View {
                         VStack(spacing: 4) {
                             Image(systemName: selectedTab == 4 ? "person.circle.fill" : "person.circle")
                                 .font(.title2)
-                            Text("Profile")
-                                .font(.caption)
+                                                    // Text removed
+                            .font(.caption)
                         }
                         .foregroundColor(selectedTab == 4 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
@@ -660,26 +665,17 @@ struct HomeView: View {
         print("-" + String(repeating: "-", count: 80))
         
         // Analyze all bets
-        print("🔍 BET ANALYSIS:")
         for (index, bet) in firestoreService.bets.enumerated() {
             let isOpen = bet.status.lowercased() == "open"
             let notExpired = bet.deadline > currentTime
             let timeDiff = bet.deadline.timeIntervalSince(currentTime)
             let hoursDiff = timeDiff / 3600
-            
-            print("  Bet \(index + 1): '\(bet.title)'")
-            print("    - Status: \(bet.status) (IsOpen: \(isOpen))")
-            print("    - Deadline: \(formatter.string(from: bet.deadline))")
-            print("    - Time Difference: \(hoursDiff) hours (\(timeDiff) seconds)")
-            print("    - NotExpired: \(notExpired)")
-            print("    - Community ID: \(bet.community_id)")
+        
             
             // Check community filter
             if selectedFilter != "All Bets" {
                 if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
                     let nameMatches = community.name == selectedFilter
-                    print("    - Community Name: \(community.name)")
-                    print("    - Name Matches Filter: \(nameMatches)")
                 } else {
                     print("    - Community: NOT FOUND")
                 }
@@ -694,7 +690,6 @@ struct HomeView: View {
         
         // Show why bets are filtered out
         if filtered.isEmpty && !firestoreService.bets.isEmpty {
-            print("❌ ALL BETS FILTERED OUT - REASONS:")
             
             let closedBets = firestoreService.bets.filter { $0.status.lowercased() != "open" }
             let expiredBets = firestoreService.bets.filter { $0.status.lowercased() == "open" && $0.deadline <= currentTime }

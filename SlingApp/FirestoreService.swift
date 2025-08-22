@@ -95,7 +95,7 @@ class FirestoreService: ObservableObject {
                         self?.fetchUserBetParticipations()
                         // Load muted communities
                         self?.loadMutedCommunities()
-                        // Load user communities
+                        // Load user communities (this will also fetch last messages)
                         self?.fetchUserCommunities()
                     } else {
                         print("❌ User document not found by email, trying UID fallback")
@@ -117,7 +117,7 @@ class FirestoreService: ObservableObject {
                                     self?.fetchUserBetParticipations()
                                     // Load muted communities
                                     self?.loadMutedCommunities()
-                                    // Load user communities
+                                    // Load user communities (this will also fetch last messages)
                                     self?.fetchUserCommunities()
                                 } else {
                                     print("❌ User document not found by UID either")
@@ -145,6 +145,10 @@ class FirestoreService: ObservableObject {
                         
                         // Fetch user bet participations when user is loaded
                         self?.fetchUserBetParticipations()
+                        // Load muted communities
+                        self?.loadMutedCommunities()
+                        // Load user communities (this will also fetch last messages)
+                        self?.fetchUserCommunities()
                     } else {
                         print("❌ User document not found by UID")
                     }
@@ -255,7 +259,7 @@ class FirestoreService: ObservableObject {
                             self?.fetchUserBetParticipations()
                             // Load muted communities
                             self?.loadMutedCommunities()
-                            // Load user communities
+                            // Load user communities (this will also fetch last messages)
                             self?.fetchUserCommunities()
                             completion(true, nil)
                         } else {
@@ -532,7 +536,9 @@ class FirestoreService: ObservableObject {
                     DispatchQueue.main.async {
                         self?.userCommunities = fetchedCommunities
                         print("✅ Loaded \(fetchedCommunities.count) communities")
-                        self?.updateTotalUnreadCount()
+                        
+                        // Fetch last messages for all communities immediately after loading
+                        self?.fetchLastMessagesForUserCommunities()
                         
                         // Now that communities are loaded, fetch bets
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -614,18 +620,9 @@ class FirestoreService: ObservableObject {
                             let formatter = DateFormatter()
                             formatter.dateStyle = .full
                             formatter.timeStyle = .full
-                            
-                            print("=" + String(repeating: "=", count: 80))
-                            print("🔍 COMPREHENSIVE BET DEBUGGING REPORT")
-                            print("=" + String(repeating: "=", count: 80))
-                            print("⏰ Current Time: \(formatter.string(from: currentTime))")
-                            print("⏰ Current Time (ISO): \(ISO8601DateFormatter().string(from: currentTime))")
-                            print("🌍 User Communities: \(communityIds)")
-                            print("📊 Total Bet Documents Found: \(betDocuments.count)")
-                            print("-" + String(repeating: "-", count: 80))
+                        
                             
                             // Log all bets with full metadata
-                            print("📋 ALL BETS IN COLLECTION:")
                             for (index, doc) in betDocuments.enumerated() {
                                 let data = doc.data()
                                 let title = data["title"] as? String ?? "unknown"
@@ -638,20 +635,12 @@ class FirestoreService: ObservableObject {
                                 let timeDiff = deadline.timeIntervalSince(currentTime)
                                 let hoursDiff = timeDiff / 3600
                                 
-                                print("  Bet \(index + 1): '\(title)'")
-                                print("    - Community ID: \(communityId)")
-                                print("    - Status: \(status)")
-                                print("    - Deadline: \(formatter.string(from: deadline))")
-                                print("    - Time Difference: \(hoursDiff) hours (\(timeDiff) seconds)")
-                                print("    - Created By: \(createdBy)")
-                                print("    - Created Date: \(formatter.string(from: createdDate))")
-                                print("")
                             }
                             
                             print("-" + String(repeating: "-", count: 80))
                             
                             // Log bets relevant to user's communities
-                            print("🏘️ BETS RELEVANT TO USER'S COMMUNITIES:")
+                        
                             for communityId in communityIds {
                                 let communityBets = betDocuments.filter { doc in
                                     let data = doc.data()
@@ -659,8 +648,6 @@ class FirestoreService: ObservableObject {
                                 }
                                 
                                 if let community = self?.userCommunities.first(where: { $0.id == communityId }) {
-                                    print("  Community: \(community.name) (ID: \(communityId))")
-                                    print("    - Total Bets: \(communityBets.count)")
                                     
                                     for betDoc in communityBets {
                                         let data = betDoc.data()
@@ -670,16 +657,12 @@ class FirestoreService: ObservableObject {
                                         let timeDiff = deadline.timeIntervalSince(currentTime)
                                         let hoursDiff = timeDiff / 3600
                                         
-                                        print("      • '\(title)' - Status: \(status), Deadline: \(hoursDiff) hours")
                                     }
-                                    print("")
                                 }
                             }
                             
-                            print("-" + String(repeating: "-", count: 80))
                             
                             // Log expiration analysis
-                            print("⏰ EXPIRATION ANALYSIS:")
                             let openBets = betDocuments.filter { doc in
                                 let data = doc.data()
                                 return (data["status"] as? String ?? "").lowercased() == "open"
@@ -696,11 +679,7 @@ class FirestoreService: ObservableObject {
                                 let deadline = data["deadline"] as? Date ?? Date()
                                 return deadline > currentTime
                             }
-                            
-                            print("  Open Bets: \(openBets.count)")
-                            print("  Expired Bets: \(expiredBets.count)")
-                            print("  Future Bets: \(futureBets.count)")
-                            
+
                             if !expiredBets.isEmpty {
                                 print("  Expired Bet Details:")
                                 for betDoc in expiredBets {
@@ -708,7 +687,6 @@ class FirestoreService: ObservableObject {
                                     let title = data["title"] as? String ?? "unknown"
                                     let deadline = data["deadline"] as? Date ?? Date()
                                     let timeDiff = deadline.timeIntervalSince(currentTime)
-                                    print("    • '\(title)' - Expired by \(abs(timeDiff)) seconds")
                                 }
                             }
                             
@@ -720,7 +698,6 @@ class FirestoreService: ObservableObject {
                                     let deadline = data["deadline"] as? Date ?? Date()
                                     let timeDiff = deadline.timeIntervalSince(currentTime)
                                     let hoursDiff = timeDiff / 3600
-                                    print("    • '\(title)' - Due in \(hoursDiff) hours")
                                 }
                             }
                             
@@ -919,14 +896,22 @@ class FirestoreService: ObservableObject {
     }
     
     func fetchLastMessagesForUserCommunities() {
+        // Use a DispatchGroup to wait for all communities to be processed
+        let group = DispatchGroup()
+        var tempLastMessages: [String: CommunityMessage] = [:]
+        
         for community in userCommunities {
             guard let communityId = community.id,
                   let documentId = community.documentId else { 
                 continue 
             }
             
+            group.enter()
+            
             // Fetch the community document using the actual document ID
             db.collection("community").document(documentId).getDocument { [weak self] snapshot, error in
+                defer { group.leave() }
+                
                 if let error = error {
                     print("❌ Error fetching last message for community \(communityId): \(error.localizedDescription)")
                     return
@@ -957,15 +942,20 @@ class FirestoreService: ObservableObject {
                                 reactions: [:]
                             )
                             
-                            DispatchQueue.main.async {
-                                self?.communityLastMessages[communityId] = lastMessage
-                            }
+                            tempLastMessages[communityId] = lastMessage
                         }
                     }
                 } catch {
                     print("❌ Error parsing community data for \(communityId): \(error)")
                 }
             }
+        }
+        
+        // Update all last messages at once when all communities are processed
+        group.notify(queue: .main) { [weak self] in
+            self?.communityLastMessages = tempLastMessages
+            // Update unread count after last messages are loaded
+            self?.updateTotalUnreadCount()
         }
     }
     
@@ -1034,6 +1024,11 @@ class FirestoreService: ObservableObject {
                     
                     // Update unread count when new message is sent
                     self?.updateTotalUnreadCount()
+                    
+                    // Also refresh last messages for all communities to ensure consistency
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        self?.fetchLastMessagesForUserCommunities()
+                    }
                     
                     completion(true, nil)
                 }

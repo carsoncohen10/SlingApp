@@ -1204,20 +1204,7 @@ struct MyBetsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("My Bets")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
-                    
-                    Text("Track all your predictions and their outcomes")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
+                // Header removed
                 
                 // Statistics Cards
                 HStack(spacing: 12) {
@@ -1995,6 +1982,7 @@ struct MessagesView: View {
     @State private var selectedBet: FirestoreBet?
     @State private var selectedBetOption = ""
     @State private var isKeyboardActive = false
+    @State private var isLoadingMessages = false
 
     
     // Global timestamp state - activated by swiping anywhere on the page
@@ -2064,15 +2052,37 @@ struct MessagesView: View {
     private func getLastMessage(_ community: FirestoreCommunity) -> String {
         guard let communityId = community.id,
               let lastMessage = firestoreService.communityLastMessages[communityId] else {
+            // Check if there are messages in the community's chat_history as a fallback
+            if let chatHistory = community.chat_history, !chatHistory.isEmpty {
+                // Find the most recent message from chat_history
+                let mostRecentMessage = chatHistory.values.max { $0.time_stamp < $1.time_stamp }
+                if let message = mostRecentMessage {
+                    let formattedMessage = formatMessagePreview(message)
+                    let maxLength = 50
+                    if formattedMessage.count > maxLength {
+                        return String(formattedMessage.prefix(maxLength)) + "..."
+                    }
+                    return formattedMessage
+                }
+            }
             return "No messages yet"
         }
         
-        // Return the actual last message text, truncated if too long
+        // Format the message as [Full Name]: [Message]
+        let formattedMessage = formatMessagePreview(lastMessage)
         let maxLength = 50
-        if lastMessage.text.count > maxLength {
-            return String(lastMessage.text.prefix(maxLength)) + "..."
+        if formattedMessage.count > maxLength {
+            return String(formattedMessage.prefix(maxLength)) + "..."
         }
-        return lastMessage.text
+        return formattedMessage
+    }
+    
+    private func formatMessagePreview(_ message: CommunityMessage) -> String {
+        return "\(message.senderName): \(message.text)"
+    }
+    
+    private func formatMessagePreview(_ message: FirestoreCommunityMessage) -> String {
+        return "\(message.sender_name): \(message.message)"
     }
     
     private func getLastMessageTimestamp(_ community: FirestoreCommunity) -> String {
@@ -2174,7 +2184,13 @@ struct MessagesView: View {
     private func loadMessages(for community: FirestoreCommunity) {
         guard let communityId = community.id else { return }
 
+        isLoadingMessages = true
         firestoreService.fetchMessages(for: communityId)
+        
+        // Set loading to false after a short delay to ensure messages are loaded
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            isLoadingMessages = false
+        }
     }
     
     private var chatListView: some View {
@@ -2184,6 +2200,8 @@ struct MessagesView: View {
             
             if firestoreService.userCommunities.isEmpty {
                 emptyStateView
+            } else if isLoadingMessages {
+                loadingStateView
             } else {
                 chatListScrollView
             }
@@ -2191,21 +2209,8 @@ struct MessagesView: View {
     }
     
     private var chatHeaderView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Chat")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.black)
-            
-            Text("Message your community members")
-                .font(.subheadline)
-                .foregroundColor(.gray)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 20)
-        .background(Color.white)
+        // Empty view - header removed
+        EmptyView()
     }
     
     private var searchBarView: some View {
@@ -2253,6 +2258,22 @@ struct MessagesView: View {
         }
     }
     
+    private var loadingStateView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
+                .scaleEffect(1.2)
+            
+            Text("Loading messages...")
+                .font(.subheadline)
+                .foregroundColor(.gray)
+            
+            Spacer()
+        }
+    }
+    
     private var chatListScrollView: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -2270,9 +2291,15 @@ struct MessagesView: View {
         .background(Color.white)
         .refreshable {
             // Refresh data when user pulls down
+            isLoadingMessages = true
             firestoreService.fetchUserCommunities()
             // Refresh unread counts and last messages
             firestoreService.fetchLastMessagesForUserCommunities()
+            
+            // Set loading to false after refresh
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                isLoadingMessages = false
+            }
         }
 
     }
@@ -2390,8 +2417,20 @@ struct MessagesView: View {
         .onAppear {
             // Refresh communities when view appears
             firestoreService.fetchUserCommunities()
+            // Fetch last messages for all communities to reduce lag
+            firestoreService.fetchLastMessagesForUserCommunities()
             // Initialize unread counts immediately
             initializeUnreadCounts()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            // Refresh data when app becomes active
+            firestoreService.fetchUserCommunities()
+            firestoreService.fetchLastMessagesForUserCommunities()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Refresh data when app comes to foreground
+            firestoreService.fetchUserCommunities()
+            firestoreService.fetchLastMessagesForUserCommunities()
         }
 
         .onChange(of: firestoreService.messages) { _, newMessages in
@@ -3748,21 +3787,6 @@ struct CommunitiesView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Your Communities")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
-                    
-                    Text("Manage your betting groups and join new ones")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                
                 // Search Bar (styled like Chat page)
                 HStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
@@ -4145,21 +4169,6 @@ struct CreateView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Create")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
-                    
-                    Text("Create a new bet or community")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                
                 // Create Options
                 VStack(spacing: 16) {
                     // Create Bet Option
@@ -4806,17 +4815,6 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Edit Profile")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                
                 // Profile Information Card
                 VStack(spacing: 24) {
                     // Profile Summary
@@ -6077,14 +6075,8 @@ struct EditProfileView: View {
                     
                     // Title
                     VStack(spacing: 8) {
-                        Text("Edit Profile")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
-                        
-                        Text("Update your profile information.")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
+                        // Header removed
+                        // Subheader removed
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -8280,11 +8272,11 @@ struct JoinBetView: View {
     }
     
     private var shortRulesText: String {
-        "Every bet on Blitz requires two sides to be matched before it's active. Once both users have staked an equal number of Blitz Points, the bet becomes locked and cannot be edited or canceled."
+        "Every bet on Sling requires two sides to be matched before it's active. Once both users have staked an equal number of Sling Points, the bet becomes locked and cannot be edited or canceled."
     }
     
     private var fullRulesText: String {
-        "Every bet on Blitz requires two sides to be matched before it's active. Once both users have staked an equal number of Blitz Points, the bet becomes locked and cannot be edited or canceled. If only one person has joined, the bet remains unmatched and inactive. After the event concludes, the outcome must be settled by the users, and Blitz Points are awarded to the winner accordingly. All bets are tracked within the community they were created in, and participants are responsible for resolving results honestly."
+        "Every bet on Sling requires two sides to be matched before it's active. Once both users have staked an equal number of Sling Points, the bet becomes locked and cannot be edited or canceled. If only one person has joined, the bet remains unmatched and inactive. After the event concludes, the outcome must be settled by the users, and Sling Points are awarded to the winner accordingly. All bets are tracked within the community they were created in, and participants are responsible for resolving results honestly."
     }
     
     var body: some View {
@@ -8426,7 +8418,7 @@ struct JoinBetView: View {
                                                         .fontWeight(.medium)
                                                         .foregroundColor(.black)
                                                     
-                                                    Text("\(participant.chosen_option) • \(String(format: "%.2f", Double(participant.stake_amount))) Blitz")
+                                                    Text("\(participant.chosen_option) • \(String(format: "%.2f", Double(participant.stake_amount))) Sling")
                                                         .font(.caption)
                                                         .foregroundColor(.gray)
                                                 }
@@ -8460,7 +8452,7 @@ struct JoinBetView: View {
                         
                         // Betting Rules Section
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("How Betting on Blitz Works:")
+                            Text("How Betting on Sling Works:")
                                 .font(.headline)
                                 .fontWeight(.bold)
                                 .foregroundColor(.black)
@@ -9020,7 +9012,7 @@ struct BettingInterfaceView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundColor(.red)
-                        Text("Insufficient Blitz Points. You have \(String(format: "%.2f", Double(currentBalance))) points.")
+                        Text("Insufficient Sling Points. You have \(String(format: "%.2f", Double(currentBalance))) points.")
                             .font(.caption)
                             .foregroundColor(.red)
                     }
