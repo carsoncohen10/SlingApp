@@ -597,8 +597,7 @@ struct HomeView: View {
             }
         }
         .onAppear {
-            // Debug logging when view appears
-            debugLogBetFeedState()
+            // View appeared
         }
     }
     
@@ -628,11 +627,7 @@ struct HomeView: View {
         return filtered
     }
     
-    // MARK: - Debug Methods
-    
-    private func debugLogBetFeedState() {
-        // Debug logging removed for cleaner console
-    }
+
     
     // MARK: - Floating Plus Button
     
