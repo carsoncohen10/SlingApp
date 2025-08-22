@@ -544,6 +544,7 @@ class FirestoreService: ObservableObject {
     }
 
     func fetchBets() {
+        print("🔍 fetchBets() called for user: \(currentUser?.email ?? "unknown")")
         guard let userEmail = currentUser?.email else { 
             print("❌ No user email available")
             return 
@@ -583,6 +584,8 @@ class FirestoreService: ObservableObject {
                     return memberData?.community_id
                 }
                 
+                print("🔍 fetchBets: Found \(communityIds.count) community IDs: \(communityIds)")
+                
                 if communityIds.isEmpty {
                     DispatchQueue.main.async {
                         self?.bets = []
@@ -591,6 +594,7 @@ class FirestoreService: ObservableObject {
                 }
                 
                 // Now fetch bets from these communities
+                print("🔍 fetchBets: Querying Firestore with community IDs: \(communityIds)")
                 self?.db.collection("Bet")
                     .whereField("community_id", in: communityIds)
                     .getDocuments { [weak self] betSnapshot, betError in
@@ -603,43 +607,131 @@ class FirestoreService: ObservableObject {
                             
                             let betDocuments = betSnapshot?.documents ?? []
                             
+                            print("🔍 fetchBets: Found \(betDocuments.count) bet documents")
+                            
+                            // Comprehensive logging for debugging
+                            let currentTime = Date()
+                            let formatter = DateFormatter()
+                            formatter.dateStyle = .full
+                            formatter.timeStyle = .full
+                            
+                            print("=" + String(repeating: "=", count: 80))
+                            print("🔍 COMPREHENSIVE BET DEBUGGING REPORT")
+                            print("=" + String(repeating: "=", count: 80))
+                            print("⏰ Current Time: \(formatter.string(from: currentTime))")
+                            print("⏰ Current Time (ISO): \(ISO8601DateFormatter().string(from: currentTime))")
+                            print("🌍 User Communities: \(communityIds)")
+                            print("📊 Total Bet Documents Found: \(betDocuments.count)")
+                            print("-" + String(repeating: "-", count: 80))
+                            
+                            // Log all bets with full metadata
+                            print("📋 ALL BETS IN COLLECTION:")
+                            for (index, doc) in betDocuments.enumerated() {
+                                let data = doc.data()
+                                let title = data["title"] as? String ?? "unknown"
+                                let communityId = data["community_id"] as? String ?? "unknown"
+                                let deadline = data["deadline"] as? Date ?? Date()
+                                let status = data["status"] as? String ?? "unknown"
+                                let createdBy = data["created_by"] as? String ?? "unknown"
+                                let createdDate = data["created_date"] as? Date ?? Date()
+                                
+                                let timeDiff = deadline.timeIntervalSince(currentTime)
+                                let hoursDiff = timeDiff / 3600
+                                
+                                print("  Bet \(index + 1): '\(title)'")
+                                print("    - Community ID: \(communityId)")
+                                print("    - Status: \(status)")
+                                print("    - Deadline: \(formatter.string(from: deadline))")
+                                print("    - Time Difference: \(hoursDiff) hours (\(timeDiff) seconds)")
+                                print("    - Created By: \(createdBy)")
+                                print("    - Created Date: \(formatter.string(from: createdDate))")
+                                print("")
+                            }
+                            
+                            print("-" + String(repeating: "-", count: 80))
+                            
+                            // Log bets relevant to user's communities
+                            print("🏘️ BETS RELEVANT TO USER'S COMMUNITIES:")
+                            for communityId in communityIds {
+                                let communityBets = betDocuments.filter { doc in
+                                    let data = doc.data()
+                                    return data["community_id"] as? String == communityId
+                                }
+                                
+                                if let community = self?.userCommunities.first(where: { $0.id == communityId }) {
+                                    print("  Community: \(community.name) (ID: \(communityId))")
+                                    print("    - Total Bets: \(communityBets.count)")
+                                    
+                                    for betDoc in communityBets {
+                                        let data = betDoc.data()
+                                        let title = data["title"] as? String ?? "unknown"
+                                        let status = data["status"] as? String ?? "unknown"
+                                        let deadline = data["deadline"] as? Date ?? Date()
+                                        let timeDiff = deadline.timeIntervalSince(currentTime)
+                                        let hoursDiff = timeDiff / 3600
+                                        
+                                        print("      • '\(title)' - Status: \(status), Deadline: \(hoursDiff) hours")
+                                    }
+                                    print("")
+                                }
+                            }
+                            
+                            print("-" + String(repeating: "-", count: 80))
+                            
+                            // Log expiration analysis
+                            print("⏰ EXPIRATION ANALYSIS:")
+                            let openBets = betDocuments.filter { doc in
+                                let data = doc.data()
+                                return (data["status"] as? String ?? "").lowercased() == "open"
+                            }
+                            
+                            let expiredBets = openBets.filter { doc in
+                                let data = doc.data()
+                                let deadline = data["deadline"] as? Date ?? Date()
+                                return deadline < currentTime
+                            }
+                            
+                            let futureBets = openBets.filter { doc in
+                                let data = doc.data()
+                                let deadline = data["deadline"] as? Date ?? Date()
+                                return deadline > currentTime
+                            }
+                            
+                            print("  Open Bets: \(openBets.count)")
+                            print("  Expired Bets: \(expiredBets.count)")
+                            print("  Future Bets: \(futureBets.count)")
+                            
+                            if !expiredBets.isEmpty {
+                                print("  Expired Bet Details:")
+                                for betDoc in expiredBets {
+                                    let data = betDoc.data()
+                                    let title = data["title"] as? String ?? "unknown"
+                                    let deadline = data["deadline"] as? Date ?? Date()
+                                    let timeDiff = deadline.timeIntervalSince(currentTime)
+                                    print("    • '\(title)' - Expired by \(abs(timeDiff)) seconds")
+                                }
+                            }
+                            
+                            if !futureBets.isEmpty {
+                                print("  Future Bet Details:")
+                                for betDoc in futureBets {
+                                    let data = betDoc.data()
+                                    let title = data["title"] as? String ?? "unknown"
+                                    let deadline = data["deadline"] as? Date ?? Date()
+                                    let timeDiff = deadline.timeIntervalSince(currentTime)
+                                    let hoursDiff = timeDiff / 3600
+                                    print("    • '\(title)' - Due in \(hoursDiff) hours")
+                                }
+                            }
+                            
+                            print("=" + String(repeating: "=", count: 80))
+                            
                             let fetchedBets = betDocuments.compactMap { document in
                                 do {
                                     let bet = try document.data(as: FirestoreBet.self)
                                     return bet
                                 } catch {
-                                    // Try to create a fallback bet object
-                                    let data = document.data()
-                                    if let title = data["title"] as? String,
-                                       let communityId = data["community_id"] as? String {
-                                        // Create a minimal bet object with required fields
-                                        let fallbackBet = FirestoreBet(
-                                            id: nil, // Don't set @DocumentID field to avoid warning
-                                            bet_type: data["bet_type"] as? String ?? "unknown",
-                                            community_id: communityId,
-                                            community_name: nil, // Will be filled in later if needed
-                                            created_by: data["created_by"] as? String ?? "Unknown",
-                                            creator_email: data["creator_email"] as? String ?? "Unknown",
-                                            deadline: data["deadline"] as? Date ?? Date(),
-                                            odds: data["odds"] as? [String: String] ?? [:],
-                                            outcomes: data["outcomes"] as? [String], // Pass as optional
-                                            options: data["options"] as? [String] ?? [],
-                                            status: data["status"] as? String ?? "unknown",
-                                            title: title,
-                                            description: data["description"] as? String ?? "",
-                                            winner_option: data["winner_option"] as? String,
-                                            winner: data["winner"] as? String,
-                                            image_url: data["image_url"] as? String,
-                                            pool_by_option: data["pool_by_option"] as? [String: Int],
-                                            total_pool: data["total_pool"] as? Int,
-                                            total_participants: data["total_participants"] as? Int,
-                                            created_date: data["created_date"] as? Date ?? Date(),
-                                            updated_date: data["updated_date"] as? Date
-                                        )
-                                        
-                                        return fallbackBet
-                                    }
-                                    
+                                    print("❌ Error decoding bet document '\(document.documentID)': \(error)")
                                     return nil
                                 }
                             }
@@ -650,6 +742,12 @@ class FirestoreService: ObservableObject {
                             // Sort bets by deadline (most recent first) to ensure settled bets appear
                             let sortedBets = fetchedBets.sorted { $0.deadline > $1.deadline }
                             
+                            print("🔍 fetchBets: Successfully processed \(sortedBets.count) bets")
+                            if !sortedBets.isEmpty {
+                                print("🔍 fetchBets: First bet title: \(sortedBets.first?.title ?? "unknown")")
+                                print("🔍 fetchBets: Last bet title: \(sortedBets.last?.title ?? "unknown")")
+                            }
+                            
                             self?.bets = sortedBets
                         }
                     }
@@ -658,8 +756,18 @@ class FirestoreService: ObservableObject {
     
     func checkAndUpdateExpiredBets(_ bets: [FirestoreBet]) {
         let now = Date()
+        print("⏰ checkAndUpdateExpiredBets: Current time: \(now)")
+        
         let expiredBets = bets.filter { bet in
-            bet.status.lowercased() == "open" && bet.deadline < now
+            let isOpen = bet.status.lowercased() == "open"
+            let isExpired = bet.deadline < now
+            let timeDiff = bet.deadline.timeIntervalSince(now)
+            
+            if isOpen && isExpired {
+                print("⏰ Bet '\(bet.title)' will be closed - Status: \(bet.status), Deadline: \(bet.deadline), Time diff: \(timeDiff) seconds")
+            }
+            
+            return isOpen && isExpired
         }
         
         if !expiredBets.isEmpty {

@@ -142,7 +142,7 @@ struct FirestoreBet: Identifiable, Codable, Equatable {
     var options: [String]
     var status: String
     var title: String
-    var description: String
+    var description: String?
     var winner_option: String?
     var winner: String?
     var image_url: String? // Unsplash image URL stored in Firestore
@@ -153,7 +153,7 @@ struct FirestoreBet: Identifiable, Codable, Equatable {
     var updated_date: Date?
     
     // Regular initializer for creating fallback objects
-    init(id: String?, bet_type: String, community_id: String, community_name: String?, created_by: String, creator_email: String, deadline: Date, odds: [String: String], outcomes: [String]?, options: [String], status: String, title: String, description: String, winner_option: String?, winner: String?, image_url: String?, pool_by_option: [String: Int]?, total_pool: Int?, total_participants: Int?, created_date: Date, updated_date: Date?) {
+    init(id: String?, bet_type: String, community_id: String, community_name: String?, created_by: String, creator_email: String, deadline: Date, odds: [String: String], outcomes: [String]?, options: [String], status: String, title: String, description: String?, winner_option: String?, winner: String?, image_url: String?, pool_by_option: [String: Int]?, total_pool: Int?, total_participants: Int?, created_date: Date, updated_date: Date?) {
         self.id = id
         self.bet_type = bet_type
         self.community_id = community_id
@@ -193,7 +193,7 @@ struct FirestoreBet: Identifiable, Codable, Equatable {
         options = try container.decode([String].self, forKey: .options)
         status = try container.decode(String.self, forKey: .status)
         title = try container.decode(String.self, forKey: .title)
-        description = try container.decode(String.self, forKey: .description)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
         winner_option = try container.decodeIfPresent(String.self, forKey: .winner_option)
         winner = try container.decodeIfPresent(String.self, forKey: .winner)
         image_url = try container.decodeIfPresent(String.self, forKey: .image_url)

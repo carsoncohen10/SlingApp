@@ -7126,8 +7126,11 @@ struct CreateBetView: View {
         
         // Find the selected community
         guard let community = firestoreService.userCommunities.first(where: { $0.name == selectedCommunity }) else {
+            print("❌ CreateBet: Community not found for name: \(selectedCommunity)")
             return
         }
+        
+        print("🔍 CreateBet: Selected community - Name: \(community.name), ID: \(community.id ?? "nil")")
         
         // Convert odds array to dictionary
         var oddsDict: [String: String] = [:]
@@ -7154,12 +7157,17 @@ struct CreateBetView: View {
             betType = "yes_no"
         }
         
+        // Ensure deadline is in the future with a 1-hour buffer
+        let currentDate = Date()
+        let minimumDeadline = currentDate.addingTimeInterval(60 * 60) // At least 1 hour from now
+        let finalDeadline = bettingCloseDate > minimumDeadline ? bettingCloseDate : minimumDeadline
+        
         let betData: [String: Any] = [
             "title": marketQuestion,
             "community_id": community.id ?? "",
             "options": outcomes,
             "odds": oddsDict,
-            "deadline": bettingCloseDate,
+            "deadline": finalDeadline,
             "bet_type": betType,
             "spread_line": spreadLine.isEmpty ? NSNull() : spreadLine,
             "over_under_line": overUnderLine.isEmpty ? NSNull() : overUnderLine,
@@ -7167,6 +7175,7 @@ struct CreateBetView: View {
             "created_by": firestoreService.currentUser?.email ?? "",
             "creator_email": firestoreService.currentUser?.email ?? "",
             "created_by_id": firestoreService.currentUser?.id ?? "",
+            "description": marketQuestion, // Use the title as description for now
             "image_url": NSNull(), // Will be populated later with Unsplash image
             "pool_by_option": Dictionary(uniqueKeysWithValues: outcomes.map { ($0, 0) }), // Initialize pool with 0 for each option
             "total_pool": NSNull(), // Initialize total pool to null
@@ -7175,6 +7184,16 @@ struct CreateBetView: View {
             "created_date": Date(),
             "updated_date": Date()
         ]
+        
+        print("🔍 CreateBet: Bet data - Title: \(marketQuestion), Community ID: \(community.id ?? "nil")")
+        print("🔍 CreateBet: Original deadline: \(bettingCloseDate)")
+        print("🔍 CreateBet: Current date: \(currentDate)")
+        print("🔍 CreateBet: Minimum deadline: \(minimumDeadline)")
+        print("🔍 CreateBet: Final deadline: \(finalDeadline)")
+        print("🔍 CreateBet: Final deadline (ISO): \(ISO8601DateFormatter().string(from: finalDeadline))")
+        print("🔍 CreateBet: Time difference (seconds): \(finalDeadline.timeIntervalSince(currentDate))")
+        print("🔍 CreateBet: Time difference (hours): \(finalDeadline.timeIntervalSince(currentDate) / 3600)")
+        print("🔍 CreateBet: Available communities: \(firestoreService.userCommunities.map { "\($0.name): \($0.id ?? "nil")" })")
         
         firestoreService.createBet(betData: betData) { success, betId in
             DispatchQueue.main.async {
@@ -7428,7 +7447,13 @@ struct DatePickerView: View {
     var body: some View {
         NavigationView {
             VStack {
-                DatePicker("Select Date", selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
+                Text("Select a date and time at least 1 hour in the future for betting to close")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                
+                DatePicker("Select Date", selection: $selectedDate, in: Date().addingTimeInterval(60 * 60)..., displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(WheelDatePickerStyle())
                     .padding()
                 

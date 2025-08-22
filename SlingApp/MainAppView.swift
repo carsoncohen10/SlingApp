@@ -610,6 +610,13 @@ struct HomeView: View {
                 // Only show open bets that haven't expired
                 let isOpen = bet.status.lowercased() == "open"
                 let notExpired = bet.deadline > Date()
+                let currentDate = Date()
+                
+                // Debug logging for your specific bet
+                if bet.title == "Will Netflix stock get passed?" {
+                    print("🔍 HomeView Filter: Bet '\(bet.title)' - Status: \(bet.status), Deadline: \(bet.deadline), Current: \(currentDate), IsOpen: \(isOpen), NotExpired: \(notExpired)")
+                }
+                
                 return isOpen && notExpired
             }
             : firestoreService.bets.filter { bet in
@@ -618,12 +625,112 @@ struct HomeView: View {
                     let nameMatches = community.name == selectedFilter
                     let isOpen = bet.status.lowercased() == "open"
                     let notExpired = bet.deadline > Date()
+                    let currentDate = Date()
+                    
+                    // Debug logging for your specific bet
+                    if bet.title == "Will Netflix stock get passed?" {
+                        print("🔍 HomeView Filter: Bet '\(bet.title)' - Status: \(bet.status), Deadline: \(bet.deadline), Current: \(currentDate), IsOpen: \(isOpen), NotExpired: \(notExpired), NameMatches: \(nameMatches)")
+                    }
+                    
+                    // Debug logging for community matching
+                    if bet.title == "Will SpongeBob be on tonight?" {
+                        print("🔍 HomeView Filter: Bet '\(bet.title)' - Community ID: \(bet.community_id), Community Name: \(community.name), Selected Filter: \(selectedFilter), NameMatches: \(nameMatches)")
+                    }
+                    
                     return nameMatches && isOpen && notExpired
                 } else {
+                    print("🔍 HomeView Filter: Bet '\(bet.title)' - No community found for ID: \(bet.community_id)")
                     return false
                 }
             }
         
+        // Comprehensive HomeView filtering analysis
+        let currentTime = Date()
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        formatter.timeStyle = .full
+        
+        print("=" + String(repeating: "=", count: 80))
+        print("🏠 HOMEVIEW FILTERING ANALYSIS")
+        print("=" + String(repeating: "=", count: 80))
+        print("⏰ Current Time: \(formatter.string(from: currentTime))")
+        print("🏷️ Selected Filter: \(selectedFilter)")
+        print("📊 Total Bets Available: \(firestoreService.bets.count)")
+        print("✅ Filtered Bets: \(filtered.count)")
+        print("-" + String(repeating: "-", count: 80))
+        
+        // Analyze all bets
+        print("🔍 BET ANALYSIS:")
+        for (index, bet) in firestoreService.bets.enumerated() {
+            let isOpen = bet.status.lowercased() == "open"
+            let notExpired = bet.deadline > currentTime
+            let timeDiff = bet.deadline.timeIntervalSince(currentTime)
+            let hoursDiff = timeDiff / 3600
+            
+            print("  Bet \(index + 1): '\(bet.title)'")
+            print("    - Status: \(bet.status) (IsOpen: \(isOpen))")
+            print("    - Deadline: \(formatter.string(from: bet.deadline))")
+            print("    - Time Difference: \(hoursDiff) hours (\(timeDiff) seconds)")
+            print("    - NotExpired: \(notExpired)")
+            print("    - Community ID: \(bet.community_id)")
+            
+            // Check community filter
+            if selectedFilter != "All Bets" {
+                if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+                    let nameMatches = community.name == selectedFilter
+                    print("    - Community Name: \(community.name)")
+                    print("    - Name Matches Filter: \(nameMatches)")
+                } else {
+                    print("    - Community: NOT FOUND")
+                }
+            }
+            
+            let wouldShow = isOpen && notExpired
+            print("    - Would Show: \(wouldShow)")
+            print("")
+        }
+        
+        print("-" + String(repeating: "-", count: 80))
+        
+        // Show why bets are filtered out
+        if filtered.isEmpty && !firestoreService.bets.isEmpty {
+            print("❌ ALL BETS FILTERED OUT - REASONS:")
+            
+            let closedBets = firestoreService.bets.filter { $0.status.lowercased() != "open" }
+            let expiredBets = firestoreService.bets.filter { $0.status.lowercased() == "open" && $0.deadline <= currentTime }
+            let communityMismatchBets = selectedFilter != "All Bets" ? firestoreService.bets.filter { bet in
+                if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+                    return community.name != selectedFilter
+                }
+                return true
+            } : []
+            
+            if !closedBets.isEmpty {
+                print("  🔒 Closed/Cancelled Bets (\(closedBets.count)):")
+                for bet in closedBets {
+                    print("    • '\(bet.title)' - Status: \(bet.status)")
+                }
+            }
+            
+            if !expiredBets.isEmpty {
+                print("  ⏰ Expired Bets (\(expiredBets.count)):")
+                for bet in expiredBets {
+                    let timeDiff = bet.deadline.timeIntervalSince(currentTime)
+                    print("    • '\(bet.title)' - Expired by \(abs(timeDiff)) seconds")
+                }
+            }
+            
+            if !communityMismatchBets.isEmpty {
+                print("  🏘️ Community Mismatch Bets (\(communityMismatchBets.count)):")
+                for bet in communityMismatchBets {
+                    if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+                        print("    • '\(bet.title)' - Community: \(community.name), Filter: \(selectedFilter)")
+                    }
+                }
+            }
+        }
+        
+        print("=" + String(repeating: "=", count: 80))
         return filtered
     }
     
