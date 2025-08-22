@@ -157,7 +157,14 @@ class UnsplashImageService: ObservableObject {
             
             do {
                 let result = try JSONDecoder().decode(UnsplashResponse.self, from: data)
-        
+                
+                print("✅ Successfully decoded Unsplash response with \(result.results.count) images")
+                
+                // Debug: Print first few image details
+                if result.results.count > 0 {
+                    let firstImage = result.results[0]
+                    print("🔍 First image - ID: \(firstImage.id), Description: \(firstImage.description ?? "nil"), Alt: \(firstImage.alt_description ?? "nil")")
+                }
                 
                 if result.results.isEmpty {
                     let errorMessage = "⚠️ No images found for query: \(enrichedQuery)"
@@ -187,6 +194,22 @@ class UnsplashImageService: ObservableObject {
                 // Print raw response for debugging
                 if let responseString = String(data: data, encoding: .utf8) {
                     print("📄 Raw response: \(responseString.prefix(500))...")
+                }
+                
+                // Print the specific decoding error details
+                if let decodingError = error as? DecodingError {
+                    switch decodingError {
+                    case .keyNotFound(let key, let context):
+                        print("🔑 Missing key: \(key.stringValue) at path: \(context.codingPath)")
+                    case .typeMismatch(let type, let context):
+                        print("🔄 Type mismatch: expected \(type) at path: \(context.codingPath)")
+                    case .valueNotFound(let type, let context):
+                        print("💨 Value not found: expected \(type) at path: \(context.codingPath)")
+                    case .dataCorrupted(let context):
+                        print("💥 Data corrupted at path: \(context.codingPath)")
+                    @unknown default:
+                        print("❓ Unknown decoding error")
+                    }
                 }
                 
                 DispatchQueue.main.async {
@@ -272,10 +295,12 @@ class UnsplashImageService: ObservableObject {
             }
             
             // Tag match
-            for tag in image.tags {
-                let tagName = tag.title.lowercased()
-                for word in titleWords {
-                    if tagName.contains(word) { score += 1.0 }
+            if let tags = image.tags {
+                for tag in tags {
+                    let tagName = tag.title.lowercased()
+                    for word in titleWords {
+                        if tagName.contains(word) { score += 1.0 }
+                    }
                 }
             }
             
@@ -287,7 +312,9 @@ class UnsplashImageService: ObservableObject {
             }
             
             // Likes tiebreaker
-            score += Double(image.likes) * 0.001
+            if let likes = image.likes {
+                score += Double(likes) * 0.001
+            }
             
             if score > bestScore {
                 bestScore = score
@@ -319,9 +346,9 @@ struct UnsplashImage: Codable {
     let blur_hash: String?
     let description: String?
     let alt_description: String?
-    let likes: Int
+    let likes: Int?
     let urls: UnsplashURLs
-    let tags: [UnsplashTag]
+    let tags: [UnsplashTag]?
     let user: UnsplashUser
 }
 
@@ -7134,27 +7161,50 @@ struct CreateBetView: View {
             "odds": oddsDict,
             "deadline": bettingCloseDate,
             "bet_type": betType,
-            "spread_line": spreadLine.isEmpty ? nil : (Double(spreadLine) as Any),
-            "over_under_line": overUnderLine.isEmpty ? nil : (Double(overUnderLine) as Any),
+            "spread_line": spreadLine.isEmpty ? NSNull() : spreadLine,
+            "over_under_line": overUnderLine.isEmpty ? NSNull() : overUnderLine,
             "status": "open",
-            "created_by": firestoreService.currentUser?.display_name ?? firestoreService.currentUser?.full_name ?? "Unknown",
+            "created_by": firestoreService.currentUser?.email ?? "",
             "creator_email": firestoreService.currentUser?.email ?? "",
             "created_by_id": firestoreService.currentUser?.id ?? "",
-            "image_url": "" as Any, // Will be populated later with Unsplash image
+            "image_url": NSNull(), // Will be populated later with Unsplash image
             "pool_by_option": Dictionary(uniqueKeysWithValues: outcomes.map { ($0, 0) }), // Initialize pool with 0 for each option
-            "total_pool": 0, // Initialize total pool to 0
-            "total_participants": 0, // Initialize total participants to 0
+            "total_pool": NSNull(), // Initialize total pool to null
+            "total_participants": NSNull(), // Initialize total participants to null
+            "winner_option": NSNull(), // Will be set when bet is settled
             "created_date": Date(),
             "updated_date": Date()
         ]
         
-        firestoreService.createBet(betData: betData) { success, error in
+        firestoreService.createBet(betData: betData) { success, betId in
             DispatchQueue.main.async {
-                if success {
+                if success, let betId = betId {
+                    // After successful bet creation, fetch and update the image
+                    self.fetchAndUpdateBetImage(betId: betId, betTitle: marketQuestion)
                     dismiss()
                 } else {
-                    print("Error creating bet: \(error ?? "Unknown error")")
+                    print("Error creating bet: Unknown error")
                 }
+            }
+        }
+    }
+    
+    private func fetchAndUpdateBetImage(betId: String, betTitle: String) {
+        // Create an instance of UnsplashImageService to fetch the image
+        let imageService = UnsplashImageService()
+        
+        imageService.getImageForBet(title: betTitle) { imageURL in
+            if let imageURL = imageURL {
+                // Update the bet document with the fetched image URL
+                self.firestoreService.updateBetImage(betId: betId, imageURL: imageURL) { success in
+                    if success {
+                        print("✅ Bet image updated successfully: \(imageURL)")
+                    } else {
+                        print("❌ Failed to update bet image")
+                    }
+                }
+            } else {
+                print("⚠️ No image found for bet: \(betTitle)")
             }
         }
     }

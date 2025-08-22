@@ -1408,6 +1408,23 @@ class FirestoreService: ObservableObject {
         }
     }
     
+    func updateBetImage(betId: String, imageURL: String, completion: @escaping (Bool) -> Void) {
+        let updateData: [String: Any] = [
+            "image_url": imageURL,
+            "updated_date": Date()
+        ]
+        
+        db.collection("Bet").document(betId).updateData(updateData) { error in
+            if let error = error {
+                print("❌ Error updating bet image: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                print("✅ Bet image updated successfully")
+                completion(true)
+            }
+        }
+    }
+    
     func joinCommunity(inviteCode: String, completion: @escaping (Bool, String?) -> Void) {
         guard let userEmail = currentUser?.email,
               let userId = currentUser?.id else {
