@@ -105,8 +105,8 @@ class UnsplashImageService: ObservableObject {
             self.lastError = nil
         }
         
-        print("🔍 Fetching image for title: '\(title)'")
-        print("📡 Request URL: \(url.absoluteString)")
+
+
         
         URLSession.shared.dataTask(with: request) { data, response, error in
             // Log response details
@@ -157,7 +157,7 @@ class UnsplashImageService: ObservableObject {
             
             do {
                 let result = try JSONDecoder().decode(UnsplashResponse.self, from: data)
-                print("🖼️ Found \(result.results.count) images")
+        
                 
                 if result.results.isEmpty {
                     let errorMessage = "⚠️ No images found for query: \(enrichedQuery)"
@@ -406,9 +406,9 @@ struct BetImageView: View {
         }
         .onAppear {
             if let url = imageURL {
-                print("🖼️ Using stored image URL for '\(title)': \(url)")
+        
             } else {
-                print("📝 No image URL found for bet: '\(title)'")
+        
             }
         }
     }
@@ -2146,7 +2146,7 @@ struct MessagesView: View {
     
     private func loadMessages(for community: FirestoreCommunity) {
         guard let communityId = community.id else { return }
-        print("🔄 Loading messages for community: \(community.name) (ID: \(communityId))")
+
         firestoreService.fetchMessages(for: communityId)
     }
     
@@ -2368,7 +2368,7 @@ struct MessagesView: View {
         }
 
         .onChange(of: firestoreService.messages) { _, newMessages in
-            print("📱 Messages array changed, new count: \(newMessages.count)")
+    
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             isKeyboardActive = false
@@ -3019,47 +3019,32 @@ struct BetAnnouncementCard: View {
             onBetTap()
         }
         .onAppear {
-            print("🔍 BetAnnouncementCard appeared for message: \(message.id)")
-            print("🔍 Message type: \(message.messageType)")
-            print("🔍 Bet ID: \(message.betId ?? "nil")")
             loadBetDetails()
         }
     }
     
     private func loadBetDetails() {
         guard let betId = message.betId else {
-            print("❌ No bet ID found in message")
             isLoading = false
             return
         }
         
-        print("🔍 Loading bet details for bet ID: \(betId)")
         firestoreService.fetchBet(by: betId) { fetchedBet in
             DispatchQueue.main.async {
-                print("🔍 Bet fetch completed, result: \(fetchedBet != nil ? "success" : "failed")")
                 self.bet = fetchedBet
                 self.isLoading = false
                 
                 if let fetchedBet = fetchedBet {
-                    print("🔍 Bet title: \(fetchedBet.title)")
-                    print("🔍 Community ID: \(fetchedBet.community_id)")
-                    print("🔍 Creator email: \(fetchedBet.creator_email)")
-                    
                     // Get community name - first try userCommunities, then fetch from Firestore if needed
                     if let community = firestoreService.userCommunities.first(where: { $0.id == fetchedBet.community_id }) {
                         self.communityName = community.name
-                        print("✅ Found community in userCommunities: \(community.name)")
                     } else {
-                        print("⚠️ Community not found in userCommunities, fetching from Firestore...")
                         // If not in userCommunities, fetch the community directly
                         self.fetchCommunityName(communityId: fetchedBet.community_id)
                     }
                     
                     // Extract first name from creator email
                     self.creatorFirstName = extractFirstName(from: fetchedBet.creator_email)
-                    print("✅ Creator first name: \(self.creatorFirstName)")
-                } else {
-                    print("❌ No bet data received")
                 }
             }
         }
@@ -3072,7 +3057,6 @@ struct BetAnnouncementCard: View {
             .getDocuments { snapshot, error in
                 DispatchQueue.main.async {
                     if let error = error {
-                        print("❌ Error fetching community name: \(error.localizedDescription)")
                         self.communityName = "Community"
                         return
                     }
@@ -6533,7 +6517,7 @@ struct CreateBetView: View {
                         .padding(.horizontal, 12)
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
-                        .onChange(of: spreadLine) { newValue in
+                        .onChange(of: spreadLine) { oldValue, newValue in
                             // Filter to only allow numbers, decimal points, and minus signs
                             let filtered = newValue.filter { "0123456789.-".contains($0) }
                             if filtered != newValue {
@@ -6588,7 +6572,7 @@ struct CreateBetView: View {
                         .padding(.horizontal, 12)
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
-                        .onChange(of: overUnderLine) { newValue in
+                        .onChange(of: overUnderLine) { oldValue, newValue in
                             // Filter to only allow numbers, decimal points, and minus signs
                             let filtered = newValue.filter { "0123456789.-".contains($0) }
                             if filtered != newValue {
@@ -7150,8 +7134,8 @@ struct CreateBetView: View {
             "odds": oddsDict,
             "deadline": bettingCloseDate,
             "bet_type": betType,
-            "spread_line": spreadLine.isEmpty ? nil : Double(spreadLine),
-            "over_under_line": overUnderLine.isEmpty ? nil : Double(overUnderLine),
+            "spread_line": spreadLine.isEmpty ? nil : (Double(spreadLine) as Any),
+            "over_under_line": overUnderLine.isEmpty ? nil : (Double(overUnderLine) as Any),
             "status": "open",
             "created_date": Date(),
             "updated_date": Date()
@@ -7216,7 +7200,7 @@ struct AdjustOddsView: View {
                         
                         Slider(value: $sliderValue, in: getSliderRange(), step: 5)
                             .accentColor(.slingBlue)
-                            .onChange(of: sliderValue) { newValue in
+                            .onChange(of: sliderValue) { oldValue, newValue in
                                 updateOddsAndPercentage(from: newValue)
                                 checkAndExpandRange()
                             }

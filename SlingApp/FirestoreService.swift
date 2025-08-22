@@ -72,7 +72,7 @@ class FirestoreService: ObservableObject {
     }
     
     private func fetchCurrentUser(userId: String) {
-        print("🔄 Fetching current user by UID: \(userId)")
+
         
         // Since user documents are stored using email as document ID, try to get email first
         if let userEmail = Auth.auth().currentUser?.email {
@@ -89,7 +89,6 @@ class FirestoreService: ObservableObject {
                             self?.currentUser = user
                         } catch {
                             print("❌ Error decoding user: \(error)")
-                            print("🔍 Document fields: \(document.data()?.keys.joined(separator: ", ") ?? "none")")
                         }
                         
                         // Fetch user bet participations when user is loaded
@@ -112,7 +111,6 @@ class FirestoreService: ObservableObject {
                                         self?.currentUser = user
                                     } catch {
                                         print("❌ Error decoding user by UID: \(error)")
-                                        print("🔍 UID Document fields: \(uidDocument.data()?.keys.joined(separator: ", ") ?? "none")")
                                     }
                                     
                                     // Fetch user bet participations when user is loaded
@@ -143,7 +141,6 @@ class FirestoreService: ObservableObject {
                             self?.currentUser = user
                         } catch {
                             print("❌ Error decoding user by UID: \(error)")
-                            print("🔍 UID Document fields: \(document.data()?.keys.joined(separator: ", ") ?? "none")")
                         }
                         
                         // Fetch user bet participations when user is loaded
@@ -157,7 +154,7 @@ class FirestoreService: ObservableObject {
     }
     
     func refreshCurrentUser() {
-        print("🔄 Refreshing current user...")
+
         
         // Try to fetch user by email first, then fallback to UID
         if let userEmail = currentUser?.email {
@@ -173,7 +170,6 @@ class FirestoreService: ObservableObject {
                             self?.currentUser = user
                         } catch {
                             print("❌ Error decoding user on refresh: \(error)")
-                            print("🔍 Refresh Document fields: \(document.data()?.keys.joined(separator: ", ") ?? "none")")
                         }
                         
                         // Fetch user bet participations when user is refreshed
@@ -317,19 +313,14 @@ class FirestoreService: ObservableObject {
     
     func updateTotalUnreadCount() {
         guard let userId = currentUser?.id else { 
-            print("❌ Cannot update unread count: User ID not found")
             return 
         }
         
-        print("🔍 Updating total unread count for user: \(userId)")
         var totalUnread = 0
         
         for community in userCommunities {
             if let communityId = community.id,
                let chatHistory = community.chat_history {
-                
-                print("🔍 Checking community: \(community.name) (ID: \(communityId))")
-                print("🔍 Chat history count: \(chatHistory.count)")
                 
                 for (_, message) in chatHistory {
                     // Check if message is not read by current user
@@ -399,48 +390,29 @@ class FirestoreService: ObservableObject {
             return
         }
         
-        print("🔍 Carson Cohen debugging: User ID: \(userId)")
-        print("🔍 Querying ALL CommunityMember documents to check created_by_id...")
-        
         // First, get ALL CommunityMember documents to check created_by_id
         db.collection("CommunityMember").getDocuments { [weak self] allSnapshot, allError in
             if let allError = allError {
-                print("❌ Error fetching all CommunityMember documents: \(allError.localizedDescription)")
+                print("❌ Error fetching CommunityMember documents: \(allError.localizedDescription)")
                 return
             }
             
-            let allDocuments = allSnapshot?.documents ?? []
-            print("🔍 Found \(allDocuments.count) total CommunityMember documents")
-            
-            // Check each document for created_by_id matching userId
-            for doc in allDocuments {
-                let data = doc.data()
-                if let createdById = data["created_by_id"] as? String, createdById == userId {
-                    if let communityId = data["community_id"] as? String {
-                        print("🔍 Carson Cohen debugging: Found CommunityMember created by current user - community_id: \(communityId)")
-                    }
-                }
-            }
-            
-            // Now proceed with the original filtered query for user's communities
+            // Now proceed with the filtered query for user's communities
             self?.performFilteredCommunityMemberQuery(userEmail: userEmail, userId: userId)
         }
     }
     
     private func performFilteredCommunityMemberQuery(userEmail: String, userId: String) {
-        print("🔍 Now performing filtered query for user's communities...")
-        
         // Get all CommunityMember records for this user
         db.collection("CommunityMember")
             .whereField("user_email", isEqualTo: userEmail)
             .getDocuments { [weak self] snapshot, error in
                 if let error = error {
-                    print("❌ Error: \(error.localizedDescription)")
+                    print("❌ Error fetching CommunityMember documents: \(error.localizedDescription)")
                     return
                 }
                 
                 let documents = snapshot?.documents ?? []
-                print("🔍 Found \(documents.count) CommunityMember documents for user")
                 
                 // Filter for active memberships (handle both Int and Bool)
                 let activeDocuments = documents.filter { document in
@@ -449,11 +421,10 @@ class FirestoreService: ObservableObject {
                         return isActiveInt == 1
                     } else if let isActiveBool = data["is_active"] as? Bool {
                         return isActiveBool
+                    } else {
+                        return false
                     }
-                    return false
                 }
-                
-                print("🔍 Found \(activeDocuments.count) active CommunityMember documents for user")
                 
                 if activeDocuments.isEmpty {
                     DispatchQueue.main.async {
@@ -468,8 +439,6 @@ class FirestoreService: ObservableObject {
                     return memberData?.community_id
                 }
                 
-                print("🔍 Extracted \(communityIds.count) community IDs")
-                
                 // Fetch community data
                 var fetchedCommunities: [FirestoreCommunity] = []
                 let group = DispatchGroup()
@@ -477,50 +446,56 @@ class FirestoreService: ObservableObject {
                 for communityId in communityIds {
                     group.enter()
                     
-                    print("🔍 Attempting to fetch community with ID: \(communityId)")
-                    
-                    // Debug: Let's see what's actually in the community collection
+                    // Fetch the specific community by ID
                     self?.db.collection("community").getDocuments { allSnapshot, allError in
                         defer {
                             group.leave()
                         }
                         
                         if let allError = allError {
-                            print("❌ Error fetching all communities: \(allError.localizedDescription)")
+                            print("❌ Error fetching communities: \(allError.localizedDescription)")
                             return
                         }
                         
                         let allCommunities = allSnapshot?.documents ?? []
-                        print("🔍 Total communities in collection: \(allCommunities.count)")
                         
-                        for commDoc in allCommunities {
-                            let commData = commDoc.data()
-                            print("🔍 Community doc ID: \(commDoc.documentID), data: \(commData)")
-                        }
-                        
-                        // Now try to find the specific community
+                        // Find the specific community by matching either document ID or the 'id' field
                         let targetCommunity = allCommunities.first { doc in
-                            doc.data()["id"] as? String == communityId || doc.documentID == communityId
+                            let docId = doc.documentID
+                            let data = doc.data()
+                            let communityIdField = data["id"] as? String
+                            
+                            // Try multiple matching strategies
+                            let matchesDocId = docId == communityId
+                            let matchesIdField = communityIdField == communityId
+                            
+                            // Also check if the community ID is contained in the document ID or vice versa
+                            let docIdContainsCommunityId = docId.contains(communityId)
+                            let communityIdContainsDocId = communityId.contains(docId)
+                            
+                            return matchesDocId || matchesIdField || docIdContainsCommunityId || communityIdContainsDocId
                         }
                         
                         if let targetCommunity = targetCommunity {
-                            print("✅ Found community: \(targetCommunity.documentID)")
-                            print("🔍 Attempting to decode community data...")
                             
                             do {
                                 var community = try targetCommunity.data(as: FirestoreCommunity.self)
                                 community.documentId = targetCommunity.documentID
                                 fetchedCommunities.append(community)
-                                print("✅ Successfully loaded community: \(community.name)")
-                                print("🔍 Current fetchedCommunities count: \(fetchedCommunities.count)")
                             } catch {
                                 print("❌ Failed to decode community: \(error)")
-                                print("🔍 Raw community data: \(targetCommunity.data())")
                                 
                                 // Fallback: try to create a basic community object
-                                if let data = targetCommunity.data() as? [String: Any],
-                                   let name = data["name"] as? String {
-                                    print("🔄 Creating fallback community object for: \(name)")
+                                let data = targetCommunity.data()
+                                if let name = data["name"] as? String {
+                                    // Handle member_count that might be Int or Double
+                                    var memberCount = 0
+                                    if let memberCountInt = data["member_count"] as? Int {
+                                        memberCount = memberCountInt
+                                    } else if let memberCountDouble = data["member_count"] as? Double {
+                                        memberCount = Int(memberCountDouble)
+                                    }
+                                    
                                     // Create a minimal community object
                                     let fallbackCommunity = FirestoreCommunity(
                                         documentId: targetCommunity.documentID,
@@ -530,7 +505,7 @@ class FirestoreService: ObservableObject {
                                         created_by: data["created_by"] as? String ?? "Unknown",
                                         created_date: data["created_date"] as? Date ?? Date(),
                                         invite_code: data["invite_code"] as? String ?? "",
-                                        member_count: data["member_count"] as? Int ?? 0,
+                                        member_count: memberCount,
                                         bet_count: nil,
                                         total_bets: data["total_bets"] as? Int ?? 0,
                                         members: data["members"] as? [String],
@@ -542,31 +517,32 @@ class FirestoreService: ObservableObject {
                                         chat_history: nil
                                     )
                                     fetchedCommunities.append(fallbackCommunity)
-                                    print("✅ Added fallback community: \(name)")
-                                    print("🔍 Current fetchedCommunities count: \(fetchedCommunities.count)")
                                 }
                             }
-                        } else {
-                            print("❌ Community not found: \(communityId)")
                         }
                     }
                 }
                 
-                print("🔍 Waiting for \(communityIds.count) communities to be fetched...")
                 group.notify(queue: .main) { [weak self] in
                     DispatchQueue.main.async {
-                        print("🔍 Group notification received, setting userCommunities to \(fetchedCommunities.count) communities")
                         self?.userCommunities = fetchedCommunities
-                        print("✅ Total communities loaded: \(fetchedCommunities.count)")
-                        print("🔍 Communities loaded: \(fetchedCommunities.map { $0.name })")
+                        print("✅ Loaded \(fetchedCommunities.count) communities")
                         self?.updateTotalUnreadCount()
+                        
+                        // Now that communities are loaded, fetch bets
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            self?.fetchBets()
+                        }
                     }
                 }
             }
-    } 
+    }
 
     func fetchBets() {
-        guard let userEmail = currentUser?.email else { return }
+        guard let userEmail = currentUser?.email else { 
+            print("❌ No user email available")
+            return 
+        }
         
         // First, get all CommunityMember records for this user to get community IDs
         db.collection("CommunityMember")
@@ -591,8 +567,9 @@ class FirestoreService: ObservableObject {
                         return isActiveInt == 1
                     } else if let isActiveBool = data["is_active"] as? Bool {
                         return isActiveBool
+                    } else {
+                        return false
                     }
-                    return false
                 }
                 
                 // Extract community IDs from the member records
@@ -614,14 +591,50 @@ class FirestoreService: ObservableObject {
                     .getDocuments { [weak self] betSnapshot, betError in
                         DispatchQueue.main.async {
                             if let betError = betError {
-                                print("❌ Error fetching bets: \(betError.localizedDescription)")
+                                print("❌ fetchBets: Error fetching bets: \(betError.localizedDescription)")
                                 self?.bets = []
                                 return
                             }
                             
-                            let fetchedBets = betSnapshot?.documents.compactMap { document in
-                                try? document.data(as: FirestoreBet.self)
-                            } ?? []
+                            let betDocuments = betSnapshot?.documents ?? []
+                            
+                            let fetchedBets = betDocuments.compactMap { document in
+                                do {
+                                    let bet = try document.data(as: FirestoreBet.self)
+                                    return bet
+                                } catch {
+                                    // Try to create a fallback bet object
+                                    let data = document.data()
+                                    if let title = data["title"] as? String,
+                                       let communityId = data["community_id"] as? String {
+                                        // Create a minimal bet object with required fields
+                                        let fallbackBet = FirestoreBet(
+                                            id: nil, // Don't set @DocumentID field to avoid warning
+                                            bet_type: data["bet_type"] as? String ?? "unknown",
+                                            community_id: communityId,
+                                            community_name: nil, // Will be filled in later if needed
+                                            created_by: data["created_by"] as? String ?? "Unknown",
+                                            creator_email: data["creator_email"] as? String ?? "Unknown",
+                                            deadline: data["deadline"] as? Date ?? Date(),
+                                            odds: data["odds"] as? [String: String] ?? [:],
+                                            outcomes: data["outcomes"] as? [String], // Pass as optional
+                                            options: data["options"] as? [String] ?? [],
+                                            status: data["status"] as? String ?? "unknown",
+                                            title: title,
+                                            description: data["description"] as? String ?? "",
+                                            winner_option: data["winner_option"] as? String,
+                                            winner: data["winner"] as? String,
+                                            image_url: data["image_url"] as? String,
+                                            created_date: data["created_date"] as? Date ?? Date(),
+                                            updated_date: data["updated_date"] as? Date
+                                        )
+                                        
+                                        return fallbackBet
+                                    }
+                                    
+                                    return nil
+                                }
+                            }
                             
                             // Check for expired bets and update their status
                             self?.checkAndUpdateExpiredBets(fetchedBets)
@@ -653,7 +666,7 @@ class FirestoreService: ObservableObject {
     func updateExpiredBetStatus(betId: String, newStatus: String) {
         guard !betId.isEmpty else { return }
         
-        print("🔄 Updating expired bet \(betId) status to: \(newStatus)")
+
         
         let updateData: [String: Any] = [
             "status": newStatus,
@@ -733,18 +746,13 @@ class FirestoreService: ObservableObject {
         // Remove existing listener if any
         messageListener?.remove()
         
-        print("🔍 Starting to fetch messages for community: \(communityId)")
-        
         // First, find the community document ID from the community ID
         guard let community = userCommunities.first(where: { $0.id == communityId }),
               let documentId = community.documentId else {
-            print("❌ Community not found or missing document ID for community ID: \(communityId)")
-            print("📱 Available communities: \(userCommunities.map { "\($0.name) (ID: \($0.id ?? "nil"), DocID: \($0.documentId ?? "nil"))" })")
+            print("❌ Community not found for ID: \(communityId)")
             self.messages = []
             return
         }
-        
-        print("🔍 Using document ID: \(documentId) for community: \(communityId)")
         
         // Set up real-time listener for the community document to get chat_history updates
         messageListener = db.collection("community")
@@ -757,46 +765,30 @@ class FirestoreService: ObservableObject {
                     }
                     
                     guard let document = snapshot, document.exists else {
-                        print("📱 Community document not found: \(communityId)")
                         self?.messages = []
                         return
                     }
                     
-                    print("📄 Community document found, parsing data...")
-                    
                     do {
                         let communityData = try document.data(as: FirestoreCommunity.self)
-                        print("✅ Community data parsed successfully")
-                        print("📄 Community name: \(communityData.name)")
-                        print("📄 Community ID: \(communityData.id ?? "nil")")
                         
                         // Extract messages from chat_history field
                         if let chatHistory = communityData.chat_history, !chatHistory.isEmpty {
-                            print("📝 Found \(chatHistory.count) messages in chat_history")
-                            print("📝 Chat history keys: \(Array(chatHistory.keys))")
                             var fetchedMessages: [CommunityMessage] = []
                             
-                            for (messageId, messageData) in chatHistory {
-                                print("📨 Processing message ID: \(messageId)")
-                                print("📨 Message data: \(messageData)")
-                                
+                            for (_, messageData) in chatHistory {
                                 let message = messageData.toCommunityMessage()
                                 fetchedMessages.append(message)
-                                print("✅ Message processed: \(messageData.sender_name): \(messageData.message)")
-                                print("✅ Message read_by: \(message.readBy)")
                             }
                             
                             // Sort messages by timestamp (oldest first)
                             fetchedMessages.sort { $0.timestamp < $1.timestamp }
                             
                             self?.messages = fetchedMessages
-                            print("✅ Loaded \(fetchedMessages.count) messages from Firestore for community \(communityId)")
                             
                             // Update unread count when new messages arrive
                             self?.updateTotalUnreadCount()
                         } else {
-                            print("📱 No chat history found for community \(communityId)")
-                            print("📱 Chat history field: \(communityData.chat_history?.count ?? 0)")
                             self?.messages = []
                             
                             // Update unread count even when no messages
@@ -804,7 +796,6 @@ class FirestoreService: ObservableObject {
                         }
                     } catch {
                         print("❌ Error parsing community data: \(error.localizedDescription)")
-                        print("❌ Raw document data: \(document.data() ?? [:])")
                         self?.messages = []
                     }
                 }
@@ -812,15 +803,11 @@ class FirestoreService: ObservableObject {
     }
     
     func fetchLastMessagesForUserCommunities() {
-        print("🔄 fetchLastMessagesForUserCommunities called with \(userCommunities.count) communities")
         for community in userCommunities {
             guard let communityId = community.id,
                   let documentId = community.documentId else { 
-                print("❌ Missing community ID or document ID for community: \(community.name)")
                 continue 
             }
-            
-            print("🔄 Fetching last message for community: \(community.name) (ID: \(communityId), DocID: \(documentId))")
             
             // Fetch the community document using the actual document ID
             db.collection("community").document(documentId).getDocument { [weak self] snapshot, error in
@@ -830,7 +817,6 @@ class FirestoreService: ObservableObject {
                 }
                 
                 guard let document = snapshot, document.exists else {
-                    print("📱 Community document not found: \(documentId)")
                     return
                 }
                 
@@ -839,7 +825,6 @@ class FirestoreService: ObservableObject {
                     
                     // Extract most recent message from chat_history
                     if let chatHistory = communityData.chat_history, !chatHistory.isEmpty {
-                        print("📱 Found chat_history for \(community.name) with \(chatHistory.count) messages")
                         // Find the message with the most recent timestamp
                         let mostRecentMessage = chatHistory.values.max { $0.time_stamp < $1.time_stamp }
                         
@@ -858,11 +843,8 @@ class FirestoreService: ObservableObject {
                             
                             DispatchQueue.main.async {
                                 self?.communityLastMessages[communityId] = lastMessage
-                                print("✅ Updated communityLastMessages for \(community.name): '\(lastMessage.text)'")
                             }
                         }
-                    } else {
-                        print("📱 No chat_history found for \(community.name)")
                     }
                 } catch {
                     print("❌ Error parsing community data for \(communityId): \(error)")
@@ -899,7 +881,7 @@ class FirestoreService: ObservableObject {
                 "sender_email": userEmail,
                 "message": text,
                 "time_stamp": now,
-                "type": "text",
+                "type": "regular",
                 "read_by": [userId], // Mark as read by sender
                 "created_by": userEmail,
                 "created_by_id": userId,
@@ -958,9 +940,6 @@ class FirestoreService: ObservableObject {
             return
         }
         
-        print("🔍 Marking messages as read for community: \(communityId) (DocID: \(documentId))")
-        print("🔍 Current user ID: \(userId)")
-        
         // Get the community document to access chat_history
         db.collection("community").document(documentId).getDocument { [weak self] document, error in
             if let error = error {
@@ -976,30 +955,20 @@ class FirestoreService: ObservableObject {
                 return
             }
             
-            print("📝 Found \(chatHistory.count) messages to process")
-            print("📝 Chat history keys: \(Array(chatHistory.keys))")
-            
             // Prepare batch update for all messages that need to be marked as read
             var updates: [String: Any] = [:]
             var messagesUpdated = 0
             
             for (messageId, messageData) in chatHistory {
-                print("📨 Processing message \(messageId): \(messageData)")
-                
                 if let readBy = messageData["read_by"] as? [String] {
-                    print("📨 Message \(messageId) read_by: \(readBy)")
                     if !readBy.contains(userId) {
                         // Add current user to read_by array
                         var updatedReadBy = readBy
                         updatedReadBy.append(userId)
                         updates["chat_history.\(messageId).read_by"] = updatedReadBy
                         messagesUpdated += 1
-                        print("📨 Marking message \(messageId) as read by user \(userId)")
-                    } else {
-                        print("📨 Message \(messageId) already read by user \(userId)")
                     }
                 } else {
-                    print("⚠️ Message \(messageId) missing read_by field, creating it")
                     // If read_by field doesn't exist, create it with current user
                     updates["chat_history.\(messageId).read_by"] = [userId]
                     messagesUpdated += 1
@@ -1007,13 +976,9 @@ class FirestoreService: ObservableObject {
             }
             
             if updates.isEmpty {
-                print("✅ No messages need to be marked as read")
                 completion(true)
                 return
             }
-            
-            print("🔄 Updating \(messagesUpdated) messages with batch update")
-            print("🔄 Updates: \(updates)")
             
             // Update the community document with all the read_by changes
             self?.db.collection("community").document(documentId).updateData(updates) { error in
@@ -1021,8 +986,6 @@ class FirestoreService: ObservableObject {
                     print("❌ Error marking messages as read: \(error.localizedDescription)")
                     completion(false)
                 } else {
-                    print("✅ Successfully marked \(messagesUpdated) messages as read for community \(communityId)")
-                    
                     // Refresh messages to update local state
                     self?.fetchMessages(for: communityId)
                     
@@ -1050,8 +1013,6 @@ class FirestoreService: ObservableObject {
             return
         }
         
-        print("🔍 Marking individual message \(messageId) as read for community: \(communityId)")
-        
         // Update the specific message's read_by field
         let updateData: [String: Any] = [
             "chat_history.\(messageId).read_by": FieldValue.arrayUnion([userId])
@@ -1062,8 +1023,6 @@ class FirestoreService: ObservableObject {
                 print("❌ Error marking message as read: \(error.localizedDescription)")
                 completion(false)
             } else {
-                print("✅ Successfully marked message \(messageId) as read")
-                
                 // Update unread count
                 self?.updateTotalUnreadCount()
                 
@@ -1208,7 +1167,7 @@ class FirestoreService: ObservableObject {
                     try? document.data(as: BetParticipant.self)
                 } ?? []
                 
-                print("📊 Found \(participations.count) participations for \(userEmail) in community \(communityId)")
+
                 
                 // Calculate net balance from bet participations within this community
                 let netBalance = participations.reduce(0.0) { total, participation in
@@ -1222,14 +1181,13 @@ class FirestoreService: ObservableObject {
                     return total + amount
                 }
                 
-                print("💰 Calculated net balance for \(userEmail) in community \(communityId): \(netBalance)")
+
                 completion(netBalance)
             }
     }
     
     // Calculate total balance across all communities for a user
     func calculateTotalBalance(userEmail: String, completion: @escaping (Double) -> Void) {
-        print("🔍 Calculating total balance for \(userEmail) across all communities")
         db.collection("BetParticipant")
             .whereField("user_email", isEqualTo: userEmail)
             .getDocuments { snapshot, error in
@@ -1243,8 +1201,6 @@ class FirestoreService: ObservableObject {
                     try? document.data(as: BetParticipant.self)
                 } ?? []
                 
-                print("📊 Found \(participations.count) participations for \(userEmail)")
-                
                 // Calculate net balance from all bet participations
                 let netBalance = participations.reduce(0.0) { total, participation in
                     var amount = -Double(participation.stake_amount) // Initial bet cost
@@ -1254,7 +1210,6 @@ class FirestoreService: ObservableObject {
                     return total + amount
                 }
                 
-                print("💰 Calculated total balance for \(userEmail): \(netBalance)")
                 completion(netBalance)
             }
     }
@@ -1719,7 +1674,7 @@ class FirestoreService: ObservableObject {
     
     func calculateMemberBalances(communityId: String, completion: @escaping ([String: Double]) -> Void) {
         // Implementation for calculating member balances
-        print("💰 Calculating member balances for community: \(communityId)")
+
         completion([:])
     }
     
@@ -1938,4 +1893,6 @@ class FirestoreService: ObservableObject {
         // For now, just return a simple calculation
         return Double(stakeAmount) * 2.0 // Simple 2:1 payout
     }
+    
+
 }

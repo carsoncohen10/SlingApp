@@ -60,7 +60,7 @@ struct FirestoreCommunity: Identifiable, Codable, Equatable {
     var updated_date: Date?
     var chat_history: [String: FirestoreCommunityMessage]? // Messages stored as a map with message ID as key
     
-    // Custom initializer to handle both Int and Bool for is_active field
+    // Custom initializer to handle both Int and Bool for is_active field, and Int/Double for member_count
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
@@ -71,7 +71,16 @@ struct FirestoreCommunity: Identifiable, Codable, Equatable {
         created_by = try container.decode(String.self, forKey: .created_by)
         created_date = try container.decode(Date.self, forKey: .created_date)
         invite_code = try container.decode(String.self, forKey: .invite_code)
-        member_count = try container.decode(Int.self, forKey: .member_count)
+        
+        // Handle member_count that might be Int or Double
+        if let memberCountInt = try? container.decode(Int.self, forKey: .member_count) {
+            member_count = memberCountInt
+        } else if let memberCountDouble = try? container.decode(Double.self, forKey: .member_count) {
+            member_count = Int(memberCountDouble)
+        } else {
+            member_count = 0 // Default to 0 if not specified
+        }
+        
         bet_count = try container.decodeIfPresent(Int.self, forKey: .bet_count)
         total_bets = try container.decode(Int.self, forKey: .total_bets)
         members = try container.decodeIfPresent([String].self, forKey: .members)
@@ -124,12 +133,12 @@ struct FirestoreBet: Identifiable, Codable, Equatable {
     @DocumentID var id: String?
     var bet_type: String
     var community_id: String
-    var community_name: String
+    var community_name: String?
     var created_by: String
     var creator_email: String
     var deadline: Date
     var odds: [String: String]
-    var outcomes: [String]
+    var outcomes: [String]? // Make optional since some documents might be missing this field
     var options: [String]
     var status: String
     var title: String
@@ -139,6 +148,59 @@ struct FirestoreBet: Identifiable, Codable, Equatable {
     var image_url: String? // Unsplash image URL stored in Firestore
     var created_date: Date
     var updated_date: Date?
+    
+    // Regular initializer for creating fallback objects
+    init(id: String?, bet_type: String, community_id: String, community_name: String?, created_by: String, creator_email: String, deadline: Date, odds: [String: String], outcomes: [String]?, options: [String], status: String, title: String, description: String, winner_option: String?, winner: String?, image_url: String?, created_date: Date, updated_date: Date?) {
+        self.id = id
+        self.bet_type = bet_type
+        self.community_id = community_id
+        self.community_name = community_name
+        self.created_by = created_by
+        self.creator_email = creator_email
+        self.deadline = deadline
+        self.odds = odds
+        self.outcomes = outcomes ?? [] // Default to empty array if nil
+        self.options = options
+        self.status = status
+        self.title = title
+        self.description = description
+        self.winner_option = winner_option
+        self.winner = winner
+        self.image_url = image_url
+        self.created_date = created_date
+        self.updated_date = updated_date
+    }
+    
+    // Custom initializer to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        bet_type = try container.decode(String.self, forKey: .bet_type)
+        community_id = try container.decode(String.self, forKey: .community_id)
+        community_name = try container.decodeIfPresent(String.self, forKey: .community_name)
+        created_by = try container.decode(String.self, forKey: .created_by)
+        creator_email = try container.decode(String.self, forKey: .creator_email)
+        deadline = try container.decode(Date.self, forKey: .deadline)
+        odds = try container.decode([String: String].self, forKey: .odds)
+        outcomes = try container.decodeIfPresent([String].self, forKey: .outcomes) ?? [] // Default to empty array if missing
+        options = try container.decode([String].self, forKey: .options)
+        status = try container.decode(String.self, forKey: .status)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+        winner_option = try container.decodeIfPresent(String.self, forKey: .winner_option)
+        winner = try container.decodeIfPresent(String.self, forKey: .winner)
+        image_url = try container.decodeIfPresent(String.self, forKey: .image_url)
+        created_date = try container.decode(Date.self, forKey: .created_date)
+        updated_date = try container.decodeIfPresent(Date.self, forKey: .updated_date)
+    }
+    
+    // Coding keys
+    private enum CodingKeys: String, CodingKey {
+        case id, bet_type, community_id, community_name, created_by, creator_email
+        case deadline, odds, outcomes, options, status, title, description
+        case winner_option, winner, image_url, created_date, updated_date
+    }
 }
 
 struct FirestoreNotification: Identifiable, Codable {

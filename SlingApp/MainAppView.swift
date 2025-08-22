@@ -261,7 +261,7 @@ struct MainAppView: View {
     private func refreshHomeData() async {
         // Fetch fresh data from Firestore
         firestoreService.fetchUserCommunities()
-        firestoreService.fetchBets()
+        // fetchBets() is now called automatically after communities are loaded
     }
     
     private func navigateToHomeWithFilter(_ communityName: String) {
@@ -432,8 +432,9 @@ struct HomeView: View {
             // Create array of (community, bet count) pairs
             let communitiesWithCounts = firestoreService.userCommunities.map { community in
                 let betCount = firestoreService.bets.filter { bet in
-                    bet.community_id == community.id
+                    return bet.community_id == community.id
                 }.count
+                
                 return (community: community, betCount: betCount)
             }
             
@@ -444,6 +445,7 @@ struct HomeView: View {
             
             categories.append(contentsOf: sortedCommunities)
         }
+        
         return categories
     }
     
@@ -456,6 +458,8 @@ struct HomeView: View {
                     firestoreService: firestoreService,
                     onNotificationsTap: { showingNotifications = true }
                 )
+            
+
             
             // Main Content
             ScrollView {
@@ -481,7 +485,7 @@ struct HomeView: View {
             }
             .onAppear {
                 firestoreService.fetchUserCommunities()
-                firestoreService.fetchBets()
+                // fetchBets() is now called automatically after communities are loaded
                 firestoreService.fetchNotifications()
                 firestoreService.refreshCurrentUser()
                 
@@ -492,7 +496,7 @@ struct HomeView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 firestoreService.fetchUserCommunities()
-                firestoreService.fetchBets()
+                // fetchBets() is now called automatically after communities are loaded
                 firestoreService.fetchNotifications()
                 firestoreService.refreshCurrentUser()
                 
@@ -577,20 +581,6 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Filter bets based on selected community and exclude expired bets
-                let filteredBets = selectedFilter == "All Bets" 
-                    ? firestoreService.bets.filter { bet in
-                        // Only show open bets that haven't expired
-                        bet.status.lowercased() == "open" && bet.deadline > Date()
-                    }
-                    : firestoreService.bets.filter { bet in
-                        // Find the community by ID, check if its name matches the selected filter, and exclude expired bets
-                        if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
-                            return community.name == selectedFilter && bet.status.lowercased() == "open" && bet.deadline > Date()
-                        }
-                        return false
-                    }
-                
                 // Feed of Bets from user's joined communities
                 ForEach(filteredBets) { bet in
                     HomeBetCard(
@@ -606,6 +596,42 @@ struct HomeView: View {
                 }
             }
         }
+        .onAppear {
+            // Debug logging when view appears
+            debugLogBetFeedState()
+        }
+    }
+    
+    // MARK: - Computed Properties
+    
+    private var filteredBets: [FirestoreBet] {
+        // Filter bets based on selected community and exclude expired bets
+        let filtered = selectedFilter == "All Bets" 
+            ? firestoreService.bets.filter { bet in
+                // Only show open bets that haven't expired
+                let isOpen = bet.status.lowercased() == "open"
+                let notExpired = bet.deadline > Date()
+                return isOpen && notExpired
+            }
+            : firestoreService.bets.filter { bet in
+                // Find the community by ID, check if its name matches the selected filter, and exclude expired bets
+                if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+                    let nameMatches = community.name == selectedFilter
+                    let isOpen = bet.status.lowercased() == "open"
+                    let notExpired = bet.deadline > Date()
+                    return nameMatches && isOpen && notExpired
+                } else {
+                    return false
+                }
+            }
+        
+        return filtered
+    }
+    
+    // MARK: - Debug Methods
+    
+    private func debugLogBetFeedState() {
+        // Debug logging removed for cleaner console
     }
     
     // MARK: - Floating Plus Button
@@ -661,7 +687,7 @@ struct HomeView: View {
     private func refreshHomeData() async {
         // Fetch fresh data from Firestore
         firestoreService.fetchUserCommunities()
-        firestoreService.fetchBets()
+        // fetchBets() is now called automatically after communities are loaded
     }
 }
 
