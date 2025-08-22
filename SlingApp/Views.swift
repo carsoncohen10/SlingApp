@@ -405,10 +405,10 @@ struct BetImageView: View {
             }
         }
         .onAppear {
-            if let url = imageURL {
-        
+            if imageURL != nil {
+                // Image URL is available
             } else {
-        
+                // No image URL available
             }
         }
     }
@@ -3054,9 +3054,9 @@ struct BetAnnouncementCard: View {
         // Fetch community name directly from Firestore
         firestoreService.db.collection("community")
             .whereField("id", isEqualTo: communityId)
-            .getDocuments { snapshot, error in
+            .getDocuments { snapshot, _ in
                 DispatchQueue.main.async {
-                    if let error = error {
+                    if snapshot == nil {
                         self.communityName = "Community"
                         return
                     }
@@ -7137,6 +7137,13 @@ struct CreateBetView: View {
             "spread_line": spreadLine.isEmpty ? nil : (Double(spreadLine) as Any),
             "over_under_line": overUnderLine.isEmpty ? nil : (Double(overUnderLine) as Any),
             "status": "open",
+            "created_by": firestoreService.currentUser?.display_name ?? firestoreService.currentUser?.full_name ?? "Unknown",
+            "creator_email": firestoreService.currentUser?.email ?? "",
+            "created_by_id": firestoreService.currentUser?.id ?? "",
+            "image_url": "" as Any, // Will be populated later with Unsplash image
+            "pool_by_option": Dictionary(uniqueKeysWithValues: outcomes.map { ($0, 0) }), // Initialize pool with 0 for each option
+            "total_pool": 0, // Initialize total pool to 0
+            "total_participants": 0, // Initialize total participants to 0
             "created_date": Date(),
             "updated_date": Date()
         ]

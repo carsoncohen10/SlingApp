@@ -146,11 +146,14 @@ struct FirestoreBet: Identifiable, Codable, Equatable {
     var winner_option: String?
     var winner: String?
     var image_url: String? // Unsplash image URL stored in Firestore
+    var pool_by_option: [String: Int]? // Map of option → pooled amount
+    var total_pool: Int? // Total amount in the betting pool
+    var total_participants: Int? // Total number of participants
     var created_date: Date
     var updated_date: Date?
     
     // Regular initializer for creating fallback objects
-    init(id: String?, bet_type: String, community_id: String, community_name: String?, created_by: String, creator_email: String, deadline: Date, odds: [String: String], outcomes: [String]?, options: [String], status: String, title: String, description: String, winner_option: String?, winner: String?, image_url: String?, created_date: Date, updated_date: Date?) {
+    init(id: String?, bet_type: String, community_id: String, community_name: String?, created_by: String, creator_email: String, deadline: Date, odds: [String: String], outcomes: [String]?, options: [String], status: String, title: String, description: String, winner_option: String?, winner: String?, image_url: String?, pool_by_option: [String: Int]?, total_pool: Int?, total_participants: Int?, created_date: Date, updated_date: Date?) {
         self.id = id
         self.bet_type = bet_type
         self.community_id = community_id
@@ -167,6 +170,9 @@ struct FirestoreBet: Identifiable, Codable, Equatable {
         self.winner_option = winner_option
         self.winner = winner
         self.image_url = image_url
+        self.pool_by_option = pool_by_option
+        self.total_pool = total_pool
+        self.total_participants = total_participants
         self.created_date = created_date
         self.updated_date = updated_date
     }
@@ -191,6 +197,9 @@ struct FirestoreBet: Identifiable, Codable, Equatable {
         winner_option = try container.decodeIfPresent(String.self, forKey: .winner_option)
         winner = try container.decodeIfPresent(String.self, forKey: .winner)
         image_url = try container.decodeIfPresent(String.self, forKey: .image_url)
+        pool_by_option = try container.decodeIfPresent([String: Int].self, forKey: .pool_by_option)
+        total_pool = try container.decodeIfPresent(Int.self, forKey: .total_pool)
+        total_participants = try container.decodeIfPresent(Int.self, forKey: .total_participants)
         created_date = try container.decode(Date.self, forKey: .created_date)
         updated_date = try container.decodeIfPresent(Date.self, forKey: .updated_date)
     }
@@ -199,7 +208,7 @@ struct FirestoreBet: Identifiable, Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case id, bet_type, community_id, community_name, created_by, creator_email
         case deadline, odds, outcomes, options, status, title, description
-        case winner_option, winner, image_url, created_date, updated_date
+        case winner_option, winner, image_url, pool_by_option, total_pool, total_participants, created_date, updated_date
     }
 }
 

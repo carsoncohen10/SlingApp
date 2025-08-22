@@ -319,8 +319,7 @@ class FirestoreService: ObservableObject {
         var totalUnread = 0
         
         for community in userCommunities {
-            if let communityId = community.id,
-               let chatHistory = community.chat_history {
+            if let chatHistory = community.chat_history {
                 
                 for (_, message) in chatHistory {
                     // Check if message is not read by current user
@@ -360,6 +359,12 @@ class FirestoreService: ObservableObject {
     
     private func generateMessageId() -> String {
         // Generate a 24-character alphanumeric ID similar to other IDs in the app
+        let characters = "abcdefghijklmnopqrstuvwxyz0123456789"
+        return String((0..<24).map { _ in characters.randomElement()! })
+    }
+    
+    private func generateBetId() -> String {
+        // Generate a 24-character alphanumeric ID for bets
         let characters = "abcdefghijklmnopqrstuvwxyz0123456789"
         return String((0..<24).map { _ in characters.randomElement()! })
     }
@@ -625,6 +630,9 @@ class FirestoreService: ObservableObject {
                                             winner_option: data["winner_option"] as? String,
                                             winner: data["winner"] as? String,
                                             image_url: data["image_url"] as? String,
+                                            pool_by_option: data["pool_by_option"] as? [String: Int],
+                                            total_pool: data["total_pool"] as? Int,
+                                            total_participants: data["total_participants"] as? Int,
                                             created_date: data["created_date"] as? Date ?? Date(),
                                             updated_date: data["updated_date"] as? Date
                                         )
@@ -1381,8 +1389,23 @@ class FirestoreService: ObservableObject {
     }
     
     func createBet(betData: [String: Any], completion: @escaping (Bool, String?) -> Void) {
-        let documentRef = db.collection("Bet").addDocument(data: betData)
-        completion(true, documentRef.documentID)
+        // Generate a custom 24-character alphanumeric ID
+        let betId = generateBetId()
+        
+        // Add the ID to the bet data
+        var updatedBetData = betData
+        updatedBetData["id"] = betId
+        
+        // Create the document with the custom ID
+        db.collection("Bet").document(betId).setData(updatedBetData) { error in
+            if let error = error {
+                print("❌ Error creating bet: \(error.localizedDescription)")
+                completion(false, error.localizedDescription)
+            } else {
+                print("✅ Bet created successfully with ID: \(betId)")
+                completion(true, betId)
+            }
+        }
     }
     
     func joinCommunity(inviteCode: String, completion: @escaping (Bool, String?) -> Void) {
