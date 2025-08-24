@@ -948,6 +948,7 @@ struct EnhancedBetCardView: View {
     let bet: FirestoreBet
     let currentUserEmail: String?
     let firestoreService: FirestoreService
+    let isCommunityNameClickable: Bool // Control whether community name is clickable
     @State private var showingJoinBet = false
     @State private var hasRemindedCreator = false
     @State private var showingBettingInterface = false
@@ -980,8 +981,28 @@ struct EnhancedBetCardView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "person.2")
                                 .font(.caption)
-                                .foregroundColor(.gray)
-                            Text("\(communityName) • by \(currentUserEmail == bet.creator_email ? "You" : getFirstNameFromEmail(bet.creator_email))")
+                                .foregroundColor(.slingBlue)
+                            
+                            // Community name - conditionally clickable
+                            if isCommunityNameClickable {
+                                Button(action: {
+                                    // Navigate to community details
+                                    // This would need to be handled by the parent view
+                                }) {
+                                    Text(communityName)
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.slingBlue)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            } else {
+                                Text(communityName)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.gray)
+                            }
+                            
+                            Text("• by \(currentUserEmail == bet.creator_email ? "You" : getFirstNameFromEmail(bet.creator_email))")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                         }
@@ -2441,7 +2462,14 @@ struct MessagesView: View {
         }
         .sheet(isPresented: $showingCommunityInfo) {
             if let community = selectedCommunity {
-                CommunityInfoModal(community: community, firestoreService: firestoreService)
+                EnhancedCommunityDetailView(
+                    community: community, 
+                    firestoreService: firestoreService,
+                    onChatTap: {
+                        // Already in chat, just dismiss the sheet
+                        showingCommunityInfo = false
+                    }
+                )
             }
         }
         .sheet(isPresented: $showingBetDetail) {
@@ -2720,7 +2748,7 @@ struct CommunityInfoModal: View {
                 // Tab selector
                 Picker("", selection: $selectedTab) {
                     Text("Bets").tag(0)
-                    Text("Members").tag(1)
+                    Text("Leaderboard").tag(1)
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .padding(.horizontal, 16)
@@ -2751,7 +2779,8 @@ struct CommunityInfoModal: View {
                                     EnhancedBetCardView(
                                         bet: bet,
                                         currentUserEmail: firestoreService.currentUser?.email,
-                                        firestoreService: firestoreService
+                                        firestoreService: firestoreService,
+                                        isCommunityNameClickable: true
                                     )
                                 }
                             }
@@ -3771,6 +3800,8 @@ struct CommunitiesView: View {
     @State private var searchText = ""
     @State private var showingJoinCommunityModal = false
     @State private var showingCreateCommunityModal = false
+    @State private var outstandingBalances: [OutstandingBalance] = []
+    @State private var showingAllBalances = false
     
     // Computed property to filter communities based on search text
     private var filteredCommunities: [FirestoreCommunity] {
@@ -3786,15 +3817,92 @@ struct CommunitiesView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Search Bar (styled like Chat page)
+                    VStack(spacing: 24) {
+                        // Outstanding Balances Section
+                        if !outstandingBalances.isEmpty {
+                            outstandingBalancesSection
+                        }
+                        
+                        // Search and Actions Section
+                        searchAndActionsSection
+                        
+                        // Communities Section
+                        communitiesSection
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+                    .padding(.bottom, 100) // Space for bottom tab bar
+        }
+        .refreshable {
+            await refreshData()
+        }
+        .background(Color.white)
+        .onAppear {
+            loadOutstandingBalances()
+            firestoreService.fetchUserCommunities()
+            updateCommunityStatistics()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            firestoreService.fetchUserCommunities()
+            updateCommunityStatistics()
+        }
+        .sheet(isPresented: $showingJoinCommunityModal) {
+            JoinCommunityPage(firestoreService: firestoreService)
+        }
+        .sheet(isPresented: $showingCreateCommunityModal) {
+            CreateCommunityPage(firestoreService: firestoreService)
+        }
+        .sheet(isPresented: $showingAllBalances) {
+            AllBalancesView(balances: outstandingBalances)
+        }
+    }
+    
+
+    
+    // MARK: - Outstanding Balances Section
+    private var outstandingBalancesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Outstanding Balances")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                
+                Spacer()
+                
+                Button(action: {
+                    showingAllBalances = true
+                }) {
+                    Text("View All")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.slingBlue)
+                }
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 16) {
+                    ForEach(outstandingBalances) { balance in
+                        OutstandingBalanceCard(balance: balance)
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+        }
+    }
+    
+    // MARK: - Search and Actions Section
+    private var searchAndActionsSection: some View {
+        VStack(spacing: 16) {
+            // Modern Search Bar
                 HStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
+                    .font(.title3)
                         .foregroundColor(.gray)
                     
                     ZStack(alignment: .leading) {
                         if searchText.isEmpty {
-                            Text("Search communities and invite codes")
+                        Text("Search communities...")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                         }
@@ -3805,44 +3913,36 @@ struct CommunitiesView: View {
                             .textFieldStyle(PlainTextFieldStyle())
                     }
                     
-                    // Clear button when search text is not empty
                     if !searchText.isEmpty {
-                        Button(action: {
-                            searchText = ""
-                        }) {
+                    Button(action: { searchText = "" }) {
                             Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
                                 .foregroundColor(.gray)
-                                .font(.subheadline)
                         }
-                    } else {
-                        Spacer()
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+            .padding(.vertical, 14)
                 .background(Color.white)
+            .cornerRadius(16)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
                 )
-                .cornerRadius(10)
-                .padding(.horizontal, 16)
                 
-                // Action Buttons
-                HStack(spacing: 12) {
-                    Button(action: {
-                        showingJoinCommunityModal = true
-                    }) {
+                // Action Buttons - Smaller and more compact
                         HStack(spacing: 8) {
-                            Image(systemName: "person.2")
+                    Button(action: { showingJoinCommunityModal = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.badge.plus")
                                 .font(.subheadline)
-                            Text("Join Community")
+                            Text("Join")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                         }
                         .foregroundColor(.black)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
                         .background(Color.white)
                         .cornerRadius(10)
@@ -3852,32 +3952,63 @@ struct CommunitiesView: View {
                         )
                     }
                     
-                    Button(action: {
-                        showingCreateCommunityModal = true
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus")
+                    Button(action: { showingCreateCommunityModal = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.circle.fill")
                                 .font(.subheadline)
-                            Text("Create Community")
+                            Text("Create")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                         }
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
-                        .background(Color.slingGradient)
+                        .background(AnyShapeStyle(Color.slingGradient))
                         .cornerRadius(10)
                     }
                 }
-                .padding(.horizontal, 16)
+        }
+    }
+    
+    // MARK: - Communities Section
+    private var communitiesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if !filteredCommunities.isEmpty {
+                HStack {
+                    Text("Your Communities")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Text("\(filteredCommunities.count) communities")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                    }
                 
-                // Community Cards
-                if filteredCommunities.isEmpty {
+                LazyVStack(spacing: 16) {
+                    ForEach(filteredCommunities) { community in
+                        ModernCommunityCard(
+                            community: community,
+                            firestoreService: firestoreService,
+                            onViewCommunity: onNavigateToHome
+                        )
+                    }
+                }
+            } else {
                     if searchText.isEmpty {
                         EmptyCommunitiesView(firestoreService: firestoreService)
                     } else {
-                        // Show "no results" view when search has no matches
+                    noSearchResultsView
+                }
+            }
+        }
+    }
+    
+    // MARK: - No Search Results View
+    private var noSearchResultsView: some View {
                         VStack(spacing: 16) {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 48))
@@ -3893,65 +4024,1036 @@ struct CommunitiesView: View {
                                 .foregroundColor(.gray)
                                 .multilineTextAlignment(.center)
                         }
-                        .padding(.horizontal, 16)
-                    }
+        .padding(.vertical, 40)
+    }
+    
+    // MARK: - Helper Methods
+    private func getUserInitials() -> String {
+        let user = firestoreService.currentUser
+        if let firstName = user?.first_name, let lastName = user?.last_name, !firstName.isEmpty, !lastName.isEmpty {
+            let firstInitial = String(firstName.prefix(1)).uppercased()
+            let lastInitial = String(lastName.prefix(1)).uppercased()
+            return "\(firstInitial)\(lastInitial)"
+        } else if let displayName = user?.display_name, !displayName.isEmpty {
+            let components = displayName.components(separatedBy: " ")
+            if components.count >= 2 {
+                let firstInitial = String(components[0].prefix(1)).uppercased()
+                let lastInitial = String(components[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else if components.count == 1 {
+                return String(components[0].prefix(1)).uppercased()
+            }
+        } else if let email = user?.email {
+            return String(email.prefix(1)).uppercased()
+        }
+        return "U"
+    }
+    
+    private func loadOutstandingBalances() {
+        // Mock data for demonstration - in real app, fetch from Firestore
+        let balances = [
+            OutstandingBalance(
+                id: "1",
+                profilePicture: nil,
+                username: "@alexchen",
+                name: "Alex Chen",
+                netAmount: -8.0, // You owe them 8 (net of multiple transactions)
+                transactions: [
+                    BalanceTransaction(
+                        id: "t1",
+                        betId: "bet1",
+                        betTitle: "Will it rain tomorrow?",
+                        amount: 15.0,
+                        isOwed: true,
+                        date: Date().addingTimeInterval(-86400 * 3),
+                        communityName: "Weather Predictors"
+                    ),
+                    BalanceTransaction(
+                        id: "t2",
+                        betId: "bet2",
+                        betTitle: "Lakers vs Warriors",
+                        amount: 7.0,
+                        isOwed: false,
+                        date: Date().addingTimeInterval(-86400 * 1),
+                        communityName: "Sports Fans"
+                    )
+                ],
+                counterpartyId: "alex_chen_id"
+            ),
+            OutstandingBalance(
+                id: "2",
+                profilePicture: nil,
+                username: "@sarahkim",
+                name: "Sarah Kim",
+                netAmount: 25.75, // They owe you 25.75
+                transactions: [
+                    BalanceTransaction(
+                        id: "t3",
+                        betId: "bet3",
+                        betTitle: "Election outcome prediction",
+                        amount: 25.75,
+                        isOwed: false,
+                        date: Date().addingTimeInterval(-86400 * 5),
+                        communityName: "Politics & Predictions"
+                    )
+                ],
+                counterpartyId: "sarah_kim_id"
+            ),
+            OutstandingBalance(
+                id: "3",
+                profilePicture: nil,
+                username: "@mikejones",
+                name: "Mike Jones",
+                netAmount: -42.00, // You owe them 42
+                transactions: [
+                    BalanceTransaction(
+                        id: "t4",
+                        betId: "bet4",
+                        betTitle: "Stock market prediction",
+                        amount: 42.0,
+                        isOwed: true,
+                        date: Date().addingTimeInterval(-86400 * 2),
+                        communityName: "Finance & Markets"
+                    )
+                ],
+                counterpartyId: "mike_jones_id"
+            ),
+            OutstandingBalance(
+                id: "4",
+                profilePicture: nil,
+                username: "@emilybrown",
+                name: "Emily Brown",
+                netAmount: 12.25, // They owe you 12.25
+                transactions: [
+                    BalanceTransaction(
+                        id: "t5",
+                        betId: "bet5",
+                        betTitle: "Movie box office prediction",
+                        amount: 8.0,
+                        isOwed: false,
+                        date: Date().addingTimeInterval(-86400 * 4),
+                        communityName: "Entertainment"
+                    ),
+                    BalanceTransaction(
+                        id: "t6",
+                        betId: "bet6",
+                        betTitle: "Restaurant recommendation bet",
+                        amount: 4.25,
+                        isOwed: false,
+                        date: Date().addingTimeInterval(-86400 * 1),
+                        communityName: "Food Lovers"
+                    )
+                ],
+                counterpartyId: "emily_brown_id"
+            )
+        ]
+        
+        // Sort by most green to least green, then least red to most red
+        outstandingBalances = balances.sorted { first, second in
+            if first.isOwed == second.isOwed {
+                // Both are same type (both owed or both not owed)
+                if first.isOwed {
+                    // Both are red (you owe them) - sort by least to most
+                    return first.displayAmount < second.displayAmount
                 } else {
-                    LazyVStack(spacing: 16) {
-                        ForEach(filteredCommunities) { community in
-                            CommunityCardWithAdmin(
-                                community: community,
-                                firestoreService: firestoreService,
-                                onViewCommunity: onNavigateToHome
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 16)
+                    // Both are green (they owe you) - sort by most to least
+                    return first.displayAmount > second.displayAmount
                 }
+            } else {
+                // Different types - green (they owe you) comes before red (you owe them)
+                return !first.isOwed && second.isOwed
             }
-            .padding(.bottom, 100) // Space for bottom tab bar
-        }
-        .refreshable {
-            // Refresh data when user pulls down
-            await refreshData()
-        }
-        .background(Color.white)
-        .onAppear {
-            firestoreService.fetchUserCommunities()
-            // Update statistics for all communities when view appears
-            for community in firestoreService.userCommunities {
-                if let communityId = community.id {
-                    firestoreService.updateCommunityStatistics(communityId: communityId) { success, error in
-                        if let error = error {
-                            print("❌ Error updating statistics for community \(communityId): \(error)")
-                        }
-                    }
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            firestoreService.fetchUserCommunities()
-            // Update statistics when app comes to foreground
-            for community in firestoreService.userCommunities {
-                if let communityId = community.id {
-                    firestoreService.updateCommunityStatistics(communityId: communityId) { success, error in
-                        if let error = error {
-                            print("❌ Error updating statistics for community \(communityId): \(error)")
-                        }
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showingJoinCommunityModal) {
-            JoinCommunityPage(firestoreService: firestoreService)
-        }
-        .sheet(isPresented: $showingCreateCommunityModal) {
-            CreateCommunityPage(firestoreService: firestoreService)
         }
     }
     
+    private func updateCommunityStatistics() {
+            for community in firestoreService.userCommunities {
+                if let communityId = community.id {
+                    firestoreService.updateCommunityStatistics(communityId: communityId) { success, error in
+                        if let error = error {
+                            print("❌ Error updating statistics for community \(communityId): \(error)")
+                        }
+                    }
+                }
+            }
+        }
+    
     private func refreshData() async {
-        // Fetch fresh data from Firestore
-        firestoreService.fetchUserCommunities()
+            firestoreService.fetchUserCommunities()
+        loadOutstandingBalances()
+    }
+}
+
+// MARK: - Outstanding Balance Model
+
+struct OutstandingBalance: Identifiable {
+    let id: String
+    let profilePicture: String?
+    let username: String
+    let name: String
+    let netAmount: Double // Net amount (positive = they owe you, negative = you owe them)
+    let transactions: [BalanceTransaction] // Individual transactions that make up this balance
+    let counterpartyId: String // ID of the other user
+    
+    // Computed properties for easier use
+    var isOwed: Bool { netAmount < 0 } // true = you owe them, false = they owe you
+    var displayAmount: Double { abs(netAmount) }
+    var isPositive: Bool { netAmount > 0 }
+}
+
+struct BalanceTransaction: Identifiable {
+    let id: String
+    let betId: String
+    let betTitle: String
+    let amount: Double
+    let isOwed: Bool // true = you owe them, false = they owe you
+    let date: Date
+    let communityName: String
+}
+
+// MARK: - All Balances View
+
+struct AllBalancesView: View {
+    let balances: [OutstandingBalance]
+    @Environment(\.dismiss) private var dismiss
+    
+    // Computed property for sorted balances to avoid complex inline sorting
+    private var sortedBalances: [OutstandingBalance] {
+        balances.sorted { first, second in
+            if first.isOwed == second.isOwed {
+                if first.isOwed {
+                    return first.displayAmount < second.displayAmount
+                } else {
+                    return first.displayAmount > second.displayAmount
+                }
+            } else {
+                return !first.isOwed && second.isOwed
+            }
+        }
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title3)
+                            .foregroundColor(.gray)
+                            .frame(width: 40, height: 40)
+                            .background(Color.gray.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Outstanding Balances")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    // Placeholder for balance
+                    Color.clear
+                        .frame(width: 40, height: 40)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .background(Color.white)
+                
+                // Content
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(sortedBalances) { balance in
+                            DetailedBalanceRow(balance: balance)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// MARK: - Detailed Balance Row
+
+struct DetailedBalanceRow: View {
+    let balance: OutstandingBalance
+    @State private var showingResolutionModal = false
+    @State private var showingBreakdownModal = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Main balance row
+            HStack(spacing: 16) {
+                // Profile Picture
+                if let profilePicture = balance.profilePicture, !profilePicture.isEmpty {
+                    AsyncImage(url: URL(string: profilePicture)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .overlay(
+                                Text(String(balance.name.prefix(1)).uppercased())
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                    }
+                    .frame(width: 56, height: 56)
+                    .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(AnyShapeStyle(Color.slingGradient))
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            Text(String(balance.name.prefix(1)).uppercased())
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        )
+                }
+                
+                // User Info
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(balance.name)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    Text(balance.username)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                // Amount
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bolt.fill")
+                            .font(.caption)
+                            .foregroundColor(balance.isOwed ? .red : .green)
+                        
+                        Text("\(String(format: "%.0f", balance.displayAmount))")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(balance.isOwed ? .red : .green)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        (balance.isOwed ? Color.red : Color.green).opacity(0.1)
+                    )
+                    .cornerRadius(8)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 20)
+            
+            // Bet breakdown section
+            VStack(spacing: 12) {
+                // Bet breakdown header
+                HStack {
+                    Text("Breakdown")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    
+                    Spacer()
+                    
+                    Text("\(balance.transactions.count) total")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                .padding(.horizontal, 20)
+                
+                // Show up to 3 bets
+                VStack(spacing: 8) {
+                    ForEach(Array(balance.transactions.prefix(3)), id: \.id) { transaction in
+                        BetBreakdownRow(transaction: transaction)
+                    }
+                    
+                    // Show "View All" if there are more than 3 bets
+                    if balance.transactions.count > 3 {
+                        Button(action: {
+                            showingBreakdownModal = true
+                        }) {
+                            HStack(spacing: 8) {
+                                Text("View All \(balance.transactions.count) Bets")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.slingBlue)
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.slingBlue)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.slingBlue.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+        }
+        .background(Color.white)
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        .sheet(isPresented: $showingBreakdownModal) {
+            BalanceBreakdownModal(balance: balance)
+        }
+        .onTapGesture {
+            showingResolutionModal = true
+        }
+        .sheet(isPresented: $showingResolutionModal) {
+            BalanceResolutionModal(balance: balance)
+        }
+    }
+}
+
+// MARK: - Bet Breakdown Row
+
+struct BetBreakdownRow: View {
+    let transaction: BalanceTransaction
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Bet icon
+            Circle()
+                .fill(transaction.isOwed ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
+                .frame(width: 32, height: 32)
+                .overlay(
+                    Image(systemName: "list.bullet.clipboard")
+                        .font(.caption)
+                        .foregroundColor(transaction.isOwed ? .red : .green)
+                )
+            
+            // Bet details
+            VStack(alignment: .leading, spacing: 2) {
+                Text(transaction.betTitle)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.black)
+                    .lineLimit(1)
+                
+                Text(transaction.communityName)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            // Amount
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.fill")
+                        .font(.caption)
+                        .foregroundColor(transaction.isOwed ? .red : .green)
+                    
+                    Text("\(String(format: "%.0f", transaction.amount))")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(transaction.isOwed ? .red : .green)
+                }
+                
+                Text(transaction.date, style: .date)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.gray.opacity(0.05))
+        .cornerRadius(8)
+    }
+}
+
+// MARK: - Balance Breakdown Modal
+
+struct BalanceBreakdownModal: View {
+    let balance: OutstandingBalance
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title3)
+                            .foregroundColor(.gray)
+                            .frame(width: 40, height: 40)
+                            .background(Color.gray.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(spacing: 4) {
+                        Text("Balance Breakdown")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                        
+                        Text("with \(balance.name)")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Spacer()
+                    
+                    // Placeholder for balance
+                    Color.clear
+                        .frame(width: 40, height: 40)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .background(Color.white)
+                
+                // Summary card
+                VStack(spacing: 16) {
+                    HStack(spacing: 16) {
+                        // Profile Picture
+                        if let profilePicture = balance.profilePicture, !profilePicture.isEmpty {
+                            AsyncImage(url: URL(string: profilePicture)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Circle()
+                                    .fill(AnyShapeStyle(Color.slingGradient))
+                                    .overlay(
+                                        Text(String(balance.name.prefix(1)).uppercased())
+                                            .font(.title2)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                    )
+                            }
+                            .frame(width: 64, height: 64)
+                            .clipShape(Circle())
+                        } else {
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .frame(width: 64, height: 64)
+                                .overlay(
+                                    Text(String(balance.name.prefix(1)).uppercased())
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                )
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(balance.name)
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.black)
+                            
+                            Text(balance.username)
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                        
+                        // Total amount
+                        VStack(alignment: .trailing, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "bolt.fill")
+                                    .font(.title3)
+                                    .foregroundColor(balance.isOwed ? .red : .green)
+                                
+                                Text("\(String(format: "%.0f", balance.displayAmount))")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(balance.isOwed ? .red : .green)
+                            }
+                            
+                            Text("Total Balance")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    .padding(20)
+                    .background(Color.white)
+                    .cornerRadius(16)
+                    .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 20)
+                
+                // All transactions list
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(balance.transactions) { transaction in
+                            DetailedBetBreakdownRow(transaction: transaction)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+                }
+            }
+            .background(Color.white)
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// MARK: - Detailed Bet Breakdown Row
+
+struct DetailedBetBreakdownRow: View {
+    let transaction: BalanceTransaction
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 16) {
+                // Bet icon
+                Circle()
+                    .fill(transaction.isOwed ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
+                    .frame(width: 48, height: 48)
+                    .overlay(
+                        Image(systemName: "list.bullet.clipboard")
+                            .font(.title3)
+                            .foregroundColor(transaction.isOwed ? .red : .green)
+                    )
+                
+                // Bet details
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(transaction.betTitle)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    HStack(spacing: 8) {
+                        Text(transaction.communityName)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                        
+                        Text("•")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                        
+                        Text(transaction.date, style: .date)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                Spacer()
+                
+                // Amount
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("\(String(format: "%.0f", transaction.amount))")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(transaction.isOwed ? .red : .green)
+                    
+                    Text(transaction.isOwed ? "You Owe" : "They Owe")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(transaction.isOwed ? .red : .green)
+                }
+            }
+        }
+        .padding(20)
+        .background(Color.white)
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+    }
+}
+
+// MARK: - Outstanding Balance Card
+
+struct OutstandingBalanceCard: View {
+    let balance: OutstandingBalance
+    @State private var showingResolutionModal = false
+    
+    var body: some View {
+        Button(action: {
+            showingResolutionModal = true
+        }) {
+            VStack(spacing: 12) {
+            // Profile Picture
+            if let profilePicture = balance.profilePicture, !profilePicture.isEmpty {
+                AsyncImage(url: URL(string: profilePicture)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Circle()
+                        .fill(AnyShapeStyle(Color.slingGradient))
+                        .overlay(
+                            Text(String(balance.name.prefix(1)).uppercased())
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        )
+                }
+                .frame(width: 48, height: 48)
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(AnyShapeStyle(Color.slingGradient))
+                    .frame(width: 48, height: 48)
+                    .overlay(
+                        Text(String(balance.name.prefix(1)).uppercased())
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                    )
+            }
+            
+            // User Info
+            VStack(spacing: 4) {
+                Text(balance.name)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                    .lineLimit(1)
+                
+                Text(balance.username)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
+            
+            // Amount
+            HStack(spacing: 4) {
+                Image(systemName: "bolt.fill")
+                    .font(.caption)
+                    .foregroundColor(balance.isOwed ? .red : .green)
+                
+                Text("\(String(format: "%.0f", balance.displayAmount))")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(balance.isOwed ? .red : .green)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                (balance.isOwed ? Color.red : Color.green).opacity(0.1)
+            )
+            .cornerRadius(8)
+            
+
+            }
+            .frame(width: 100)
+            .padding(.vertical, 16)
+            .background(Color.white)
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $showingResolutionModal) {
+            BalanceResolutionModal(balance: balance)
+        }
+    }
+}
+
+// MARK: - Balance Resolution Modal
+
+struct BalanceResolutionModal: View {
+    let balance: OutstandingBalance
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingConfirmation = false
+    @State private var isResolving = false
+    @State private var paymentAmount: String = ""
+
+
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title3)
+                            .foregroundColor(.gray)
+                            .frame(width: 40, height: 40)
+                            .background(Color.gray.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Settle Balance")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    // Placeholder for balance
+                    Color.clear
+                        .frame(width: 40, height: 40)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .background(Color.white)
+                
+                // Content - Single Flow Design
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // 1. Balance Summary & Context
+                        balanceSummarySection
+                        
+                        // 2. Bet Breakdown
+                        betBreakdownSection
+                        
+
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 100) // Space for sticky button
+                }
+                
+                // Sticky Action Button
+                stickyActionButton
+            }
+            .background(Color.white)
+            .navigationBarHidden(true)
+            .alert(balance.isOwed ? "Mark as Paid" : "Mark as Received", isPresented: $showingConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button(balance.isOwed ? "Mark as Paid" : "Mark as Received") {
+                    resolveBalance()
+                }
+            } message: {
+                Text(balance.isOwed ? 
+                     "Are you sure you want to mark this balance as paid? This will remove it from your outstanding balances." :
+                     "Are you sure you want to mark this balance as received? This will remove it from your outstanding balances.")
+            }
+
+        }
+    }
+    
+    // MARK: - Balance Summary Section
+    
+    private var balanceSummarySection: some View {
+        VStack(spacing: 16) {
+            // Profile Picture and Name - Non-clickable
+            VStack(spacing: 16) {
+                VStack(spacing: 16) {
+                    // Profile Picture
+                    if let profilePicture = balance.profilePicture, !profilePicture.isEmpty {
+                        AsyncImage(url: URL(string: profilePicture)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .overlay(
+                                    Text(String(balance.name.prefix(1)).uppercased())
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                )
+                        }
+                        .frame(width: 80, height: 80)
+                        .clipShape(Circle())
+                    } else {
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .frame(width: 80, height: 80)
+                            .overlay(
+                                Text(String(balance.name.prefix(1)).uppercased())
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                    }
+                    
+                    // User Info
+                    VStack(spacing: 8) {
+                        Text(balance.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                        
+                        Text(balance.username)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+            
+            // Amount Display
+            HStack(spacing: 8) {
+                Image(systemName: "bolt.fill")
+                    .font(.title2)
+                    .foregroundColor(balance.isOwed ? .red : .green)
+                
+                Text("\(String(format: "%.0f", balance.displayAmount))")
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(balance.isOwed ? .red : .green)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                (balance.isOwed ? Color.red : Color.green).opacity(0.1)
+            )
+            .cornerRadius(16)
+            
+            // Context Message
+            Text(balance.isOwed ? 
+                 "You owe \(balance.name) from \(balance.transactions.count) bet\(balance.transactions.count == 1 ? "" : "s")" :
+                 "\(balance.name) owes you from \(balance.transactions.count) bet\(balance.transactions.count == 1 ? "" : "s")")
+                .font(.subheadline)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+        }
+        .padding(.top, 20)
+    }
+    
+    // MARK: - Bet Breakdown Section
+    
+    private var betBreakdownSection: some View {
+        VStack(spacing: 16) {
+            // Section Header
+            HStack {
+                Text("Breakdown")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+            
+            // Bet Transactions
+            LazyVStack(spacing: 12) {
+                ForEach(balance.transactions) { transaction in
+                    BalanceTransactionRow(transaction: transaction)
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+    
+
+    
+    // MARK: - Sticky Action Button
+    
+    private var stickyActionButton: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .background(Color.gray.opacity(0.2))
+            
+            Button(action: {
+                showingConfirmation = true
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                    Text(balance.isOwed ? "Mark as Paid" : "Mark as Received")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(AnyShapeStyle(Color.slingGradient))
+                .cornerRadius(16)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(Color.white)
+        }
+    }
+    
+    // MARK: - Helper Functions
+    
+    private func resolveBalance() {
+        isResolving = true
+        
+        // Simulate API call
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            isResolving = false
+            dismiss()
+            
+            // Show success feedback
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+        }
+    }
+}
+
+// MARK: - Balance Transaction Row
+
+struct BalanceTransactionRow: View {
+    let transaction: BalanceTransaction
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(transaction.betTitle)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                        .lineLimit(2)
+                    
+                    Text(transaction.communityName)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    
+                    Text(formatDate(transaction.date))
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bolt.fill")
+                            .font(.caption)
+                            .foregroundColor(transaction.isOwed ? .red : .green)
+                        
+                        Text("\(String(format: "%.0f", transaction.amount))")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundColor(transaction.isOwed ? .red : .green)
+                    }
+                    
+
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.white)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
     }
 }
 
@@ -3985,6 +5087,98 @@ struct CommunityCardWithAdmin: View {
     }
 }
 
+// MARK: - Modern Community Card
+
+struct ModernCommunityCard: View {
+    let community: FirestoreCommunity
+    let firestoreService: FirestoreService
+    let onViewCommunity: ((String) -> Void)?
+    @State private var showingCommunityDetail = false
+    
+    var body: some View {
+        Button(action: {
+            showingCommunityDetail = true
+        }) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header with community info and admin badge
+                HStack(alignment: .center, spacing: 12) {
+                    // Community Avatar
+                    Circle()
+                        .fill(AnyShapeStyle(Color.slingGradient))
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            Text(String(community.name.prefix(1)).uppercased())
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        )
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(community.name)
+                                .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.black)
+            }
+            
+                        // Community stats - greyed out for less importance
+                        HStack(spacing: 12) {
+                HStack(spacing: 4) {
+                                Image(systemName: "person.2.fill")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                                Text("\(community.member_count)")
+                                    .font(.caption)
+                        .foregroundColor(.gray)
+                                Text("members")
+                                    .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                HStack(spacing: 4) {
+                                Image(systemName: "list.bullet.clipboard")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                                Text("\(community.total_bets)")
+                                    .font(.caption)
+                        .foregroundColor(.gray)
+                                Text("bets")
+                                    .font(.caption)
+                        .foregroundColor(.gray)
+            }
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    // Right Arrow
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .frame(width: 24, height: 24)
+                }
+                
+
+            }
+            .padding(20)
+            .background(Color.white)
+            .cornerRadius(20)
+            .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $showingCommunityDetail) {
+            EnhancedCommunityDetailView(
+                community: community, 
+                firestoreService: firestoreService,
+                onChatTap: {
+                    // Navigate to chat for this community
+                    // This will be handled by the parent view
+                }
+            )
+        }
+    }
+}
+
 // MARK: - Community Card
 
 struct CommunityCard: View {
@@ -3992,13 +5186,16 @@ struct CommunityCard: View {
     let isAdmin: Bool
     let firestoreService: FirestoreService
     let onViewCommunity: ((String) -> Void)?
-    @State private var showingSettingsModal = false
+    @State private var showingCommunityDetail = false
     @State private var showingShareSheet = false
-    @State private var showingCopyFeedback = false
+    @State private var showingSettingsModal = false
     
     var body: some View {
+        Button(action: {
+            showingCommunityDetail = true
+        }) {
         VStack(alignment: .leading, spacing: 12) {
-            // Header with Admin Badge
+            // Header with Admin Badge and Three Dots Menu
             HStack {
                 Text(community.name)
                     .font(.title2)
@@ -4026,16 +5223,52 @@ struct CommunityCard: View {
                             .stroke(Color.purple, lineWidth: 1)
                     )
                 }
+                
+                // Three Dots Menu
+                Menu {
+                                            Button(action: {
+                            UIPasteboard.general.string = community.invite_code
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                            impactFeedback.impactOccurred()
+                        }) {
+                            Label("Copy Invite Code", systemImage: "list.bullet.clipboard")
+                        }
+                    
+                    Button(action: {
+                        showingShareSheet = true
+                    }) {
+                        Label("Share Community", systemImage: "square.and.arrow.up")
+                    }
+                    
+                    if isAdmin {
+                    Button(action: {
+                        showingSettingsModal = true
+                    }) {
+                            Label("Settings", systemImage: "gearshape")
+                        }
+                    }
+                    
+                    Button(action: {
+                        onViewCommunity?(community.name)
+                    }) {
+                        Label("View Community", systemImage: "arrow.up.right.square")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .frame(width: 24, height: 24)
+                }
             }
             
             // Statistics
             HStack(spacing: 16) {
-                HStack(spacing: 4) {
+                        HStack(spacing: 4) {
                     Image(systemName: "person.2")
-                        .font(.caption)
+                                .font(.caption)
                         .foregroundColor(.gray)
                     Text("\(community.member_count) members")
-                        .font(.subheadline)
+                                .font(.subheadline)
                         .foregroundColor(.gray)
                 }
                 
@@ -4049,113 +5282,40 @@ struct CommunityCard: View {
                 }
             }
             
-            // Invite Code Section with Gray Background
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Invite Code")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                
-                HStack(alignment: .center) {
-                    Text(community.invite_code)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.black)
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        UIPasteboard.general.string = community.invite_code
-                        // Provide haptic feedback
-                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                        impactFeedback.impactOccurred()
-                        
-                        // Show copy feedback
-                        showingCopyFeedback = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            showingCopyFeedback = false
-                        }
-                    }) {
-                        ZStack {
-                            if showingCopyFeedback {
-                                // Show checkmark when copied
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundColor(.green)
-                            } else {
-                                // Show copy icon
-                                Image(systemName: "doc.on.doc")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.gray)
-                            }
-                        }
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-            }
-            .padding(12)
-            .background(Color(.systemGray6))
-            .cornerRadius(8)
-            
-            // Footer
+            // Footer with creation date
             HStack {
                 Text("Created \(formatDate(community.created_date))")
                     .font(.caption)
                     .foregroundColor(.gray)
                 
                 Spacer()
-                
-                HStack(spacing: 12) {
-                    Button(action: {
-                        showingShareSheet = true
-                    }) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-                    
-                    Button(action: {
-                        showingSettingsModal = true
-                    }) {
-                        Image(systemName: "gearshape")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-                    
-                    Button(action: {
-                        // Navigate to home feed with this community's filter
-                        navigateToHomeWithFilter()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.up.right.square")
-                                .font(.caption)
-                            Text("View")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.slingGradient)
-                        .cornerRadius(6)
-                    }
-                }
             }
         }
         .padding(16)
         .background(Color.white)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-        .sheet(isPresented: $showingSettingsModal) {
-            CommunitySettingsView(community: community, isAdmin: isAdmin, firestoreService: firestoreService)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $showingCommunityDetail) {
+            EnhancedCommunityDetailView(
+                community: community, 
+                firestoreService: firestoreService,
+                onChatTap: {
+                    // Navigate to chat for this community
+                    // This will be handled by the parent view
+                }
+            )
         }
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(activityItems: ["Join my community on Sling! Use invite code: \(community.invite_code)"])
         }
+        .sheet(isPresented: $showingSettingsModal) {
+            CommunitySettingsView(community: community, isAdmin: isAdmin, firestoreService: firestoreService)
+        }
     }
     
-    private func navigateToHomeWithFilter() {
-        onViewCommunity?(community.name)
-    }
+
 }
 
 // MARK: - Create View
@@ -4520,10 +5680,10 @@ struct GeneralSettingsTab: View {
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundColor(.green)
                                     } else {
-                                        // Show copy icon
-                                        Image(systemName: "doc.on.doc")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.gray)
+                                                                        // Show copy icon
+                                Image(systemName: "list.bullet.clipboard")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.gray)
                                     }
                                 }
                             }
@@ -4936,7 +6096,7 @@ struct ProfileView: View {
                                 Image(systemName: "bolt.fill")
                                     .foregroundColor(.slingBlue)
                                     .font(.title3)
-                                Text("+0.00")
+                                Text("0.00")
                                     .font(.title2)
                                     .fontWeight(.bold)
                                     .foregroundColor(.black)
@@ -4974,7 +6134,7 @@ struct ProfileView: View {
                                             Image(systemName: "bolt.fill")
                                                 .foregroundColor(.slingBlue)
                                                 .font(.caption)
-                                            Text("+0.00")
+                                            Text("0.00")
                                                 .font(.subheadline)
                                                 .fontWeight(.medium)
                                                 .foregroundColor(.black)
@@ -5909,16 +7069,20 @@ struct FilterButton: View {
     let isSelected: Bool
     
     var body: some View {
+        Button(action: {}) {
         Text(title)
             .font(.caption)
             .fontWeight(.medium)
-            .foregroundColor(isSelected ? .white : .primary)
+                .foregroundColor(isSelected ? .white : .slingBlue)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? Color.blue : Color(.systemGray5))
+                    isSelected ? 
+                    AnyShapeStyle(Color.slingGradient) : 
+                    AnyShapeStyle(Color.slingBlue.opacity(0.1))
             )
+                .cornerRadius(16)
+        }
     }
 }
 
@@ -8248,6 +9412,7 @@ struct JoinBetView: View {
     @State private var otherBets: [FirestoreBet] = []
     @State private var showingBetDetail = false
     @State private var selectedBetForDetail: FirestoreBet? = nil
+    @State private var showingCommunityDetails = false
     
     private var communityName: String {
         if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
@@ -8321,8 +9486,20 @@ struct JoinBetView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "person.2")
                                         .font(.caption)
-                                        .foregroundColor(.gray)
-                                    Text("\(communityName) • Created by \(creatorName)")
+                                        .foregroundColor(.slingBlue)
+                                    
+                                    // Clickable community name
+                                    Button(action: {
+                                        showingCommunityDetails = true
+                                    }) {
+                                        Text(communityName)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.slingBlue)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    
+                                    Text("• Created by \(creatorName)")
                                         .font(.subheadline)
                                         .foregroundColor(.gray)
                                 }
@@ -9653,6 +10830,7 @@ struct SwipeableBetCard: View {
     @State private var showingBetDetail = false
     @State private var showingBettingInterface = false
     @State private var selectedBettingOption = ""
+    @State private var showingCommunityDetails = false
     @State private var userBets: [BetParticipant] = []
     @State private var hasUserParticipated: Bool = false
     @State private var hasAnyBets: Bool = false
@@ -9959,6 +11137,18 @@ struct SwipeableBetCard: View {
                     bet: bet,
                     selectedOption: selectedBettingOption,
                     firestoreService: firestoreService
+                )
+            }
+        }
+        .sheet(isPresented: $showingCommunityDetails) {
+            if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+                EnhancedCommunityDetailView(
+                    community: community, 
+                    firestoreService: firestoreService,
+                    onChatTap: {
+                        // Navigate to chat for this community
+                        // This will be handled by the parent view
+                    }
                 )
             }
         }
@@ -10681,4 +11871,1614 @@ struct EnhancedBetCard: View {
     }
 }
 
+// MARK: - Enhanced Community Detail View
 
+struct EnhancedCommunityDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    let community: FirestoreCommunity
+    @ObservedObject var firestoreService: FirestoreService
+    let onChatTap: (() -> Void)? // Callback for chat navigation
+    @State private var selectedTab = 0 // 0 = Overview, 1 = Bets, 2 = Members, 3 = Settings
+    @State private var communityBets: [FirestoreBet] = []
+    @State private var isLoadingBets = false
+    @State private var showingCreateBetModal = false
+    @State private var showingInviteModal = false
+    @State private var showingMemberProfile = false
+    @State private var selectedMemberIndex = 0
+    @State private var membersWithPoints: [CommunityMemberWithPoints]?
+    @State private var showingTradingProfile = false
+    @State private var selectedMemberForProfile: CommunityMemberWithPoints?
+    @State private var showingCopyFeedback = false
+
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                headerSection
+                tabSelectorSection
+                tabContentSection
+            }
+            .background(Color.white)
+            .navigationBarHidden(true)
+            .onAppear {
+                loadCommunityBets()
+            }
+            .animation(.easeInOut(duration: 0.3), value: selectedTab)
+            .sheet(isPresented: $showingCreateBetModal) {
+                CreateBetView(firestoreService: firestoreService)
+            }
+            .sheet(isPresented: $showingInviteModal) {
+                ShareCommunityModal(
+                    communityName: community.name,
+                    communityId: community.id ?? "",
+                    onDismiss: { showingInviteModal = false }
+                )
+            }
+            .sheet(isPresented: $showingMemberProfile) {
+                MemberProfileView(
+                    community: community,
+                    memberIndex: selectedMemberIndex,
+                    firestoreService: firestoreService
+                )
+            }
+            .sheet(isPresented: $showingTradingProfile) {
+                if let selectedMember = selectedMemberForProfile {
+                    TradingProfileView(
+                        userId: selectedMember.id,
+                        userName: selectedMember.name,
+                        displayName: nil, // Community members don't have display_name
+                        isCurrentUser: false,
+                        firestoreService: firestoreService
+                    )
+                }
+            }
+            
+        }
+    }
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        ZStack {
+            // Background with gradient
+            Rectangle()
+                .fill(AnyShapeStyle(Color.slingGradient))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(.all, edges: .top)
+            
+            // Content overlay - compact layout
+            VStack(spacing: 8) {
+                // Header Buttons with proper spacing
+                HStack(spacing: 0) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    // Chat Button
+                    Button(action: {
+                        dismiss()
+                        onChatTap?() // Call the callback to navigate to chat
+                    }) {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.title3)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 12)
+                
+                // Community Info - compact layout
+                VStack(spacing: 6) {
+                    // Avatar
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            Text(String(community.name.prefix(1)).uppercased())
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.slingBlue)
+                        )
+                    
+                    // Community Name
+                    Text(community.name)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    // Stats with icons and labels
+                    HStack(spacing: 16) {
+                        // Member Count
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.2.fill")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.9))
+                            Text("\(community.member_count)")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                            Text("members")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        
+                        // Bet Count
+                        HStack(spacing: 4) {
+                            Image(systemName: "list.bullet.clipboard")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.9))
+                            Text("\(community.total_bets)")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                            Text("bets")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 16)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 28)
+            .padding(.bottom, 36)
+        }
+        .frame(height: 200)
+    }
+    
+    // MARK: - Tab Selector Section
+    private var tabSelectorSection: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<4, id: \.self) { index in
+                tabButton(for: index)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white)
+        .overlay(
+            Rectangle()
+                .frame(height: 0.5)
+                .foregroundColor(Color.gray.opacity(0.3)),
+            alignment: .bottom
+        )
+    }
+    
+    private func tabButton(for index: Int) -> some View {
+        Button(action: { selectedTab = index }) {
+            VStack(spacing: 4) {
+                Text(tabTitle(for: index))
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(selectedTab == index ? .slingBlue : .gray)
+                
+                Rectangle()
+                    .fill(selectedTab == index ? Color.slingBlue : Color.clear)
+                    .frame(height: 2)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
+    // MARK: - Tab Content Section
+    private var tabContentSection: some View {
+        TabView(selection: $selectedTab) {
+            overviewTab.tag(0)
+            betsTab.tag(1)
+            membersTab.tag(2)
+            settingsTab.tag(3)
+        }
+        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+        .background(Color.white)
+    }
+    
+    // MARK: - Tab Content Views
+    
+    private var overviewTab: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Invite Code Section - Compact Design
+                VStack(spacing: 12) {
+                    Text("Invite Code")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    // Invite Code Card - Same size as action cards
+                    HStack(spacing: 12) {
+                        // Invite Code Text
+                        Text(community.invite_code)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.black)
+                        
+                        Spacer()
+                        
+                        // Copy Button with feedback
+                        Button(action: {
+                            UIPasteboard.general.string = community.invite_code
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                            impactFeedback.impactOccurred()
+                            
+                            // Show checkmark temporarily
+                            showingCopyFeedback = true
+                            
+                            // Hide checkmark after delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                showingCopyFeedback = false
+                            }
+                        }) {
+                            Image(systemName: showingCopyFeedback ? "checkmark" : "doc.on.clipboard")
+                                .font(.caption)
+                                .foregroundColor(showingCopyFeedback ? .green : .gray)
+                                .frame(width: 24, height: 24)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.gray.opacity(0.06))
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+                }
+                .padding(.horizontal, 16)
+                
+                // Quick actions
+                VStack(spacing: 12) {
+                    Text("Quick Actions")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Button(action: {
+                        showingCreateBetModal = true
+                    }) {
+                        HStack(spacing: 12) {
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Image(systemName: "plus")
+                                        .font(.title3)
+                                        .foregroundColor(.white)
+                                )
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Create New Bet")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.black)
+                                Text("Start a new prediction market")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(16)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    Button(action: {
+                        showingInviteModal = true
+                    }) {
+                        HStack(spacing: 12) {
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Image(systemName: "person.badge.plus")
+                                        .font(.title3)
+                                        .foregroundColor(.white)
+                                )
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Invite Friends")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.black)
+                                Text("Share invite code with others")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(16)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(.horizontal, 16)
+                
+                // Recent activity
+                if !communityBets.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Recent Activity")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        LazyVStack(spacing: 12) {
+                            ForEach(communityBets.prefix(3)) { bet in
+                                RecentBetRow(bet: bet)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+            .padding(.vertical, 20)
+        }
+    }
+    
+    private var betsTab: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                if isLoadingBets {
+                    ForEach(0..<3, id: \.self) { _ in
+                        BetLoadingRow()
+                    }
+                } else if communityBets.isEmpty {
+                    EmptyBetsView(firestoreService: firestoreService)
+                } else {
+                    ForEach(communityBets) { bet in
+                        EnhancedBetCardView(
+                            bet: bet,
+                            currentUserEmail: firestoreService.currentUser?.email,
+                            firestoreService: firestoreService,
+                            isCommunityNameClickable: false
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 20)
+        }
+    }
+    
+        private var membersTab: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                if let membersWithPoints = membersWithPoints {
+                    ForEach(membersWithPoints) { memberWithPoints in
+                        Button(action: {
+                            selectedMemberForProfile = memberWithPoints
+                            showingTradingProfile = true
+                        }) {
+                            HStack(spacing: 12) {
+                                // Profile Picture
+                                Circle()
+                                    .fill(AnyShapeStyle(Color.slingGradient))
+                                    .frame(width: 40, height: 40)
+                                    .overlay(
+                                        Text(String(memberWithPoints.name.prefix(1)).uppercased())
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                    )
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 6) {
+                                        Text(memberWithPoints.name)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.black)
+                                        
+                                        // Admin badge
+                                        if memberWithPoints.isAdmin {
+                                            HStack(spacing: 2) {
+                                                Image(systemName: "crown.fill")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.purple)
+                                                Text("Admin")
+                                                    .font(.caption2)
+                                                    .fontWeight(.medium)
+                                                    .foregroundColor(.purple)
+                                            }
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.purple.opacity(0.1))
+                                            .cornerRadius(6)
+                                        }
+                                    }
+                                }
+                                
+                                Spacer()
+                                
+                                // Net points on the right
+                                HStack(spacing: 4) {
+                                    Image(systemName: "bolt.fill")
+                                        .font(.caption)
+                                        .foregroundColor(memberWithPoints.netPoints >= 0 ? .green : .red)
+                                    
+                                    Text("\(String(format: "%.0f", memberWithPoints.netPoints))")
+                                        .font(.subheadline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(memberWithPoints.netPoints >= 0 ? .green : .red)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    (memberWithPoints.netPoints >= 0 ? Color.green : Color.red).opacity(0.1)
+                                )
+                                .cornerRadius(8)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                } else {
+                    // Fallback to basic member display if advanced loading fails
+                    ForEach(0..<community.member_count, id: \.self) { index in
+                        HStack(spacing: 12) {
+                            HStack(spacing: 12) {
+                                // Profile Picture
+                                Circle()
+                                    .fill(AnyShapeStyle(Color.slingGradient))
+                                    .frame(width: 40, height: 40)
+                                    .overlay(
+                                        Text("M\(index + 1)")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                    )
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Member \(index + 1)")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                }
+                                
+                                Spacer()
+                                
+                                // Placeholder for net points
+                                HStack(spacing: 4) {
+                                    Image(systemName: "bolt.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    
+                                    Text("--")
+                                        .font(.subheadline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(8)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 20)
+        }
+        .onAppear {
+            loadMembersWithPoints()
+        }
+    }
+    
+
+    
+    private var settingsTab: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                // Community settings options
+                VStack(spacing: 0) {
+                    SettingsRow(icon: "bell", title: "Notifications", subtitle: "Manage notification preferences")
+                    SettingsRow(icon: "person.2", title: "Member Management", subtitle: "Add or remove members")
+                    SettingsRow(icon: "gear", title: "Community Settings", subtitle: "Edit community details")
+                    SettingsRow(icon: "trash", title: "Leave Community", subtitle: "Leave this community", isDestructive: true)
+                }
+                .background(Color.white)
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+            }
+            .padding(.vertical, 20)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func tabTitle(for index: Int) -> String {
+        switch index {
+        case 0: return "Overview"
+        case 1: return "Bets"
+        case 2: return "Leaderboard"
+        case 3: return "Settings"
+        default: return ""
+        }
+    }
+    
+    private func loadCommunityBets() {
+        isLoadingBets = true
+        // Filter bets for this community
+        communityBets = firestoreService.bets.filter { $0.community_id == (community.id ?? "") }
+        isLoadingBets = false
+    }
+    
+    private func loadMembersWithPoints() {
+        print("🔄 Loading members with points for community: \(community.id ?? "nil")")
+        
+        // Add a timeout in case the Firestore calls take too long
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+            if self.membersWithPoints == nil {
+                print("⏰ Timeout reached, showing fallback member list")
+                // Force the fallback to show by setting an empty array
+                self.membersWithPoints = []
+            }
+        }
+        
+        firestoreService.getCommunityMembersWithNetPoints(communityId: community.id ?? "") { members in
+            print("✅ Loaded \(members.count) members with points")
+            DispatchQueue.main.async {
+                self.membersWithPoints = members
+            }
+        }
+    }
+    
+    private func formatDateShort(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - Supporting Views
+
+struct StatItem: View {
+    let icon: String
+    let value: String
+    let label: String
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(.slingBlue)
+            
+            Text(value)
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.black)
+            
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.gray)
+        }
+    }
+}
+
+
+
+struct RecentBetRow: View {
+    let bet: FirestoreBet
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Bet Image or Fallback Icon
+            if let imageUrl = bet.image_url, !imageUrl.isEmpty {
+                AsyncImage(url: URL(string: imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        )
+                }
+                .frame(width: 40, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                // Fallback icon based on bet type
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Image(systemName: getBetTypeIcon(bet.bet_type))
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    )
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(bet.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.black)
+                    .lineLimit(1)
+                
+                Text("Deadline: \(formatDate(bet.deadline))")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            Text(bet.status.uppercased())
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(bet.status == "open" ? Color.green : Color.gray)
+                .cornerRadius(8)
+        }
+        .padding(12)
+        .background(Color.white)
+        .cornerRadius(12)
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+    
+    private func getBetTypeIcon(_ betType: String) -> String {
+        switch betType.lowercased() {
+        case "sports":
+            return "sportscourt.fill"
+        case "politics":
+            return "building.columns.fill"
+        case "entertainment":
+            return "tv.fill"
+        case "weather":
+            return "cloud.sun.fill"
+        case "finance":
+            return "chart.line.uptrend.xyaxis"
+        case "technology":
+            return "laptopcomputer"
+        case "health":
+            return "heart.fill"
+        case "education":
+            return "book.fill"
+        default:
+            return "questionmark.circle.fill"
+        }
+    }
+}
+
+struct BetLoadingRow: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 40, height: 40)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 150, height: 16)
+                
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 100, height: 12)
+            }
+            
+            Spacer()
+            
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 60, height: 24)
+        }
+        .padding(12)
+        .background(Color.white)
+        .cornerRadius(12)
+    }
+}
+
+struct SettingsRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let isDestructive: Bool
+    
+    init(icon: String, title: String, subtitle: String, isDestructive: Bool = false) {
+        self.icon = icon
+        self.title = title
+        self.subtitle = subtitle
+        self.isDestructive = isDestructive
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(isDestructive ? .red : .slingBlue)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(isDestructive ? .red : .black)
+                
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.gray)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white)
+        .overlay(
+            Rectangle()
+                .frame(height: 0.5)
+                .foregroundColor(Color.gray.opacity(0.3)),
+            alignment: .bottom
+        )
+    }
+}
+
+// MARK: - Member Profile View
+
+struct MemberProfileView: View {
+    @Environment(\.dismiss) private var dismiss
+    let community: FirestoreCommunity
+    let memberIndex: Int
+    @ObservedObject var firestoreService: FirestoreService
+    @State private var selectedTab = 0 // 0 = Overview, 1 = All Bets, 2 = Head-to-Head
+    @State private var memberBets: [FirestoreBet] = []
+    @State private var isLoadingBets = false
+    
+    // Mock data for demonstration - in real app, fetch from Firestore
+    private var memberName: String {
+        if memberIndex == 0 {
+            return "Admin User"
+        } else {
+            return "Member \(memberIndex + 1)"
+        }
+    }
+    
+    private var memberUsername: String {
+        if memberIndex == 0 {
+            return "@admin"
+        } else {
+            return "@member\(memberIndex + 1)"
+        }
+    }
+    
+    private var memberJoinDate: String {
+        if memberIndex == 0 {
+            return "Member since Jan 2024"
+        } else {
+            return "Member since Feb 2024"
+        }
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                headerSection
+                
+                // Performance Section
+                performanceSection
+                
+                // Tab Selector
+                tabSelectorSection
+                
+                // Tab Content
+                tabContentSection
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+            .onAppear {
+                loadMemberBets()
+            }
+        }
+    }
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "arrow.left")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                }
+                
+                Spacer()
+                
+                Text("Trading Profile")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.black)
+                
+                Spacer()
+                
+                Button(action: {
+                    // Chat action
+                }) {
+                    Image(systemName: "bubble.left")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                }
+            }
+            
+            // Member Info
+            HStack(spacing: 16) {
+                // Avatar
+                Circle()
+                    .fill(Color.yellow)
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Circle()
+                            .fill(Color.black)
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 8, height: 8)
+                            )
+                    )
+                
+                // Member Details
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(memberName)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Text(memberUsername)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                    
+                    Text(memberJoinDate)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                // Settle Button
+                Button(action: {
+                    // Settle action
+                }) {
+                    Text("Settle")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.slingBlue)
+                        .cornerRadius(8)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 20)
+        .background(Color.white)
+    }
+    
+    // MARK: - Performance Section
+    private var performanceSection: some View {
+        VStack(spacing: 16) {
+            Text("Performance")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+                PerformanceCard(icon: "bolt.fill", value: "$608", label: "Net Balance", color: .green)
+                PerformanceCard(icon: "dollarsign.circle", value: "$2,500", label: "Total Volume", color: .black)
+                PerformanceCard(icon: "chart.line.uptrend.xyaxis", value: "$850", label: "Total P&L", color: .green)
+                PerformanceCard(icon: "percent", value: "68%", label: "Win Rate", color: .slingBlue)
+                PerformanceCard(icon: "target", value: "35", label: "Total Bets", color: .black)
+                PerformanceCard(icon: "person.2", value: "12", label: "Bets with You", color: .purple)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 20)
+        .background(Color.white)
+    }
+    
+    // MARK: - Tab Selector Section
+    private var tabSelectorSection: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<3, id: \.self) { index in
+                Button(action: { selectedTab = index }) {
+                    Text(tabTitle(for: index))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(selectedTab == index ? .slingBlue : .gray)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(selectedTab == index ? Color.slingLightBlue : Color.clear)
+                        .cornerRadius(8)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .background(Color.white)
+        .overlay(
+            Rectangle()
+                .frame(height: 0.5)
+                .foregroundColor(Color.gray.opacity(0.3)),
+            alignment: .bottom
+        )
+    }
+    
+    // MARK: - Tab Content Section
+    private var tabContentSection: some View {
+        TabView(selection: $selectedTab) {
+            overviewTab.tag(0)
+            allBetsTab.tag(1)
+            headToHeadTab.tag(2)
+        }
+        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+    }
+    
+    // MARK: - Tab Content Views
+    private var overviewTab: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                VStack(spacing: 12) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 48))
+                        .foregroundColor(.gray.opacity(0.6))
+                    
+                    Text("Recent Activity Summary")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    Text("\(memberName) has been active in 3 communities this week")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 40)
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+    
+    private var allBetsTab: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                if isLoadingBets {
+                    ForEach(0..<3, id: \.self) { _ in
+                        BetLoadingRow()
+                    }
+                } else if memberBets.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "target")
+                            .font(.system(size: 48))
+                            .foregroundColor(.gray.opacity(0.6))
+                        
+                        Text("No Bets Yet")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                        
+                        Text("This member hasn't placed any bets yet")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.top, 60)
+                } else {
+                    ForEach(memberBets) { bet in
+                        EnhancedBetCardView(
+                            bet: bet,
+                            currentUserEmail: firestoreService.currentUser?.email,
+                            firestoreService: firestoreService,
+                            isCommunityNameClickable: true
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 20)
+        }
+    }
+    
+    private var headToHeadTab: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "person.2")
+                .font(.system(size: 48))
+                .foregroundColor(.gray.opacity(0.6))
+            
+            Text("Head-to-Head")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.black)
+            
+            Text("Compare your performance with this member")
+                .font(.subheadline)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .padding(.top, 60)
+    }
+    
+    // MARK: - Helper Methods
+    private func tabTitle(for index: Int) -> String {
+        switch index {
+        case 0: return "Overview"
+        case 1: return "All Bets"
+        case 2: return "Head-to-Head"
+        default: return ""
+        }
+    }
+    
+    private func loadMemberBets() {
+        isLoadingBets = true
+        // Filter bets for this member in this community
+        memberBets = firestoreService.bets.filter { bet in
+            bet.community_id == (community.id ?? "") && 
+            bet.creator_email == "member\(memberIndex + 1)@example.com" // Mock email
+        }
+        isLoadingBets = false
+    }
+}
+
+// MARK: - Performance Card
+
+struct PerformanceCard: View {
+    let icon: String
+    let value: String
+    let label: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(color)
+            
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.gray)
+        }
+        .frame(width: 120, height: 100)
+        .padding(.vertical, 16)
+        .background(Color.white)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Trading Profile View
+
+struct TradingProfileView: View {
+    let userId: String
+    let userName: String
+    let displayName: String?
+    let isCurrentUser: Bool
+    let firestoreService: FirestoreService
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedTab = 0 // 0 = Bets, 1 = Head-to-Head (if not current user), 2 = Settings (if current user)
+    @State private var userBets: [FirestoreBet] = []
+    @State private var isLoadingBets = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                headerSection
+                performanceSection
+                tabSelectorSection
+                tabContentSection
+            }
+            .background(Color.white)
+            .navigationBarHidden(true)
+            .animation(.easeInOut(duration: 0.3), value: selectedTab)
+            .onAppear {
+                loadUserBets()
+            }
+            .onChange(of: selectedTab) { oldValue, newValue in
+                if newValue == 0 { // All Bets tab
+                    loadUserBets()
+                }
+            }
+        }
+    }
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        VStack(spacing: 0) {
+            // Header Buttons with proper spacing
+            HStack(spacing: 0) {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "arrow.left")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                        .frame(width: 44, height: 44)
+                }
+                
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 12)
+            .padding(.horizontal, 16)
+            
+            // Compact Profile Card
+            HStack(spacing: 16) {
+                // Left side: Avatar + User Info
+                HStack(spacing: 12) {
+                    // Avatar
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 48, height: 48)
+                        .overlay(
+                            Text(String(userName.prefix(1)).uppercased())
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.slingBlue)
+                        )
+                    
+                    // User details
+                    VStack(alignment: .leading, spacing: 4) {
+                        // Username
+                        Text(userName)
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        // Handle
+                        if let displayName = displayName, !displayName.isEmpty {
+                            Text("@\(displayName)")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        
+                        // Quick stats row
+                        HStack(spacing: 12) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "person.2.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.white.opacity(0.8))
+                                Text("\(getUserCommunityCount())")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                            
+                            HStack(spacing: 4) {
+                                Image(systemName: "dice.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.white.opacity(0.8))
+                                Text("\(getUserBetCount())")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                            
+                            HStack(spacing: 4) {
+                                Image(systemName: "calendar")
+                                    .font(.caption2)
+                                    .foregroundColor(.white.opacity(0.8))
+                                Text(getAbbreviatedDate())
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                // Right side: Net Balance
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bolt.fill")
+                            .font(.title3)
+                            .foregroundColor(.white)
+                        
+                        Text("$\(getUserNetBalance())")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                    }
+                    
+                    Text("Net Balance")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(AnyShapeStyle(Color.slingGradient))
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+        .frame(height: 140) // Much more compact
+    }
+    
+    // MARK: - Performance Section
+    private var performanceSection: some View {
+        VStack(spacing: 16) {
+            Text("Performance")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+            
+            // Performance Grid - Horizontal scroll for better layout
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    if isCurrentUser {
+                        PerformanceCard(icon: "dollarsign.circle", value: "$2,500", label: "Total Volume", color: .slingBlue)
+                        PerformanceCard(icon: "percent", value: "68%", label: "Win Rate", color: .slingBlue)
+                        PerformanceCard(icon: "target", value: "35", label: "Total Bets", color: .slingBlue)
+                        PerformanceCard(icon: "bolt.fill", value: "$608", label: "Balance", color: .slingBlue)
+                    } else {
+                        PerformanceCard(icon: "percent", value: "68%", label: "Win Rate", color: .slingBlue)
+                        PerformanceCard(icon: "target", value: "35", label: "Total Bets", color: .slingBlue)
+                        PerformanceCard(icon: "person.2", value: "12", label: "Bets with You", color: .slingBlue)
+                        PerformanceCard(icon: "list.bullet.clipboard", value: "23", label: "Bets Created", color: .slingBlue)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+        .padding(.top, 24)
+        .padding(.bottom, 24)
+    }
+    
+    // MARK: - Tab Selector Section
+    private var tabSelectorSection: some View {
+        HStack(spacing: 0) {
+            Button(action: { selectedTab = 0 }) {
+                VStack(spacing: 4) {
+                    Text("All Bets")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(selectedTab == 0 ? .slingBlue : .gray)
+                    
+                    Rectangle()
+                        .fill(selectedTab == 0 ? Color.slingBlue : Color.clear)
+                        .frame(height: 2)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            
+            if !isCurrentUser {
+                Button(action: { selectedTab = 1 }) {
+                    VStack(spacing: 4) {
+                        Text("Head-to-Head")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(selectedTab == 1 ? .slingBlue : .gray)
+                        
+                        Rectangle()
+                            .fill(selectedTab == 1 ? Color.slingBlue : Color.clear)
+                            .frame(height: 2)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            
+            if isCurrentUser {
+                Button(action: { selectedTab = 1 }) {
+                    VStack(spacing: 4) {
+                        Text("Settings")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(selectedTab == 1 ? .slingBlue : .gray)
+                        
+                        Rectangle()
+                            .fill(selectedTab == 1 ? Color.slingBlue : Color.clear)
+                            .frame(height: 2)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white)
+        .overlay(
+            Rectangle()
+                .frame(height: 0.5)
+                .foregroundColor(Color.gray.opacity(0.3)),
+            alignment: .bottom
+        )
+    }
+    
+    // MARK: - Tab Content Section
+    private var tabContentSection: some View {
+        TabView(selection: $selectedTab) {
+            allBetsTab.tag(0)
+            if !isCurrentUser {
+                headToHeadTab.tag(1)
+            }
+            if isCurrentUser {
+                settingsTab.tag(1)
+            }
+        }
+        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+    }
+    
+
+    
+    private var allBetsTab: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                Text("All Bets")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                
+                if isLoadingBets {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                        Text("Loading bets...")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                } else if userBets.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "list.bullet.clipboard")
+                            .font(.system(size: 48))
+                            .foregroundColor(.gray.opacity(0.6))
+                        Text("No bets yet")
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.gray)
+                        Text("When you create bets, they'll appear here")
+                            .font(.subheadline)
+                            .foregroundColor(.gray.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                } else {
+                    // Display actual bets
+                    ForEach(userBets, id: \.id) { bet in
+                        RecentBetRow(bet: bet)
+                    }
+                }
+            }
+            .padding(.vertical, 20)
+        }
+        .refreshable {
+            await refreshBets()
+        }
+    }
+    
+    private var headToHeadTab: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                Text("Head-to-Head")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                
+                Text("Compare your performance with other users")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+            }
+            .padding(.vertical, 20)
+        }
+    }
+    
+    private var settingsTab: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                Text("Settings")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                
+                // Settings Options
+                VStack(spacing: 12) {
+                    SettingsRow(
+                        icon: "person.circle",
+                        title: "Edit Profile",
+                        subtitle: "Update your personal information"
+                    )
+                    
+                    SettingsRow(
+                        icon: "bell",
+                        title: "Notifications",
+                        subtitle: "Manage notification preferences"
+                    )
+                    
+                    SettingsRow(
+                        icon: "lock",
+                        title: "Privacy",
+                        subtitle: "Control your privacy settings"
+                    )
+                    
+                    SettingsRow(
+                        icon: "gear",
+                        title: "Preferences",
+                        subtitle: "Customize your app experience"
+                    )
+                    
+                    SettingsRow(
+                        icon: "questionmark.circle",
+                        title: "Help & Support",
+                        subtitle: "Get help and contact support"
+                    )
+                    
+                    SettingsRow(
+                        icon: "arrow.right.square",
+                        title: "Sign Out",
+                        subtitle: "Sign out of your account",
+                        isDestructive: true
+                    )
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.vertical, 20)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    private func loadUserBets() {
+        isLoadingBets = true
+        
+        // Get bets where the user is either the creator or a participant
+        let userEmail = firestoreService.currentUser?.email ?? ""
+        
+        // Filter bets where user is creator
+        let userCreatedBets = firestoreService.bets.filter { bet in
+            bet.creator_email == userEmail
+        }
+        
+        // For now, we'll focus on bets the user created
+        // In the future, you can expand this to include bets the user participated in
+        // by checking a participants array or similar field in your FirestoreBet model
+        
+        // Sort by creation date (newest first)
+        let sortedBets = userCreatedBets.sorted { $0.created_date > $1.created_date }
+        
+        DispatchQueue.main.async {
+            self.userBets = sortedBets
+            self.isLoadingBets = false
+        }
+    }
+    
+    private func refreshBets() async {
+        // Refresh the bets data
+        await MainActor.run {
+            loadUserBets()
+        }
+    }
+    
+    private func getUserBetCount() -> Int {
+        return userBets.count
+    }
+    
+    private func getUserCommunityCount() -> Int {
+        // Count communities where the user is a member
+        return firestoreService.userCommunities.count
+    }
+    
+    private func getAbbreviatedDate() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM yyyy"
+        return formatter.string(from: Date())
+    }
+    
+    private func getUserNetBalance() -> String {
+        // For now, return a placeholder value
+        // This should be calculated from actual user data
+        return "608"
+    }
+    
+    private func tabTitle(for index: Int) -> String {
+        switch index {
+        case 0: return "All Bets"
+        case 1: return "Head-to-Head"
+        case 2: return "Settings"
+        default: return ""
+        }
+    }
+}
+
+// MARK: - Supporting Views for Trading Profile
+
+struct BetHistoryRow: View {
+    let title: String
+    let amount: String
+    let status: String
+    let date: String
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.black)
+                
+                Text(date)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(amount)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                
+                Text(status)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(status == "Won" ? .green : .red)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+}

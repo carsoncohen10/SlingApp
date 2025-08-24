@@ -71,7 +71,11 @@ struct MainAppView: View {
                 if !isKeyboardActive {
                     HStack(spacing: 0) {
                         // Home Tab
-                    Button(action: { selectedTab = 0 }) {
+                    Button(action: { 
+                        selectedTab = 0
+                        // Reset community filter when home tab is clicked
+                        selectedCommunityFilter = nil
+                    }) {
                         VStack(spacing: 4) {
                             Image(systemName: selectedTab == 0 ? "house.fill" : "house")
                                 .font(.title2)
@@ -281,6 +285,7 @@ struct MainAppView: View {
 struct HomeHeaderView: View {
     @ObservedObject var firestoreService: FirestoreService
     let onNotificationsTap: () -> Void
+    let onProfileTap: () -> Void
     
     private func getUserInitials() -> String {
         let user = firestoreService.currentUser
@@ -366,7 +371,18 @@ struct HomeHeaderView: View {
                 }
             }
             
-            // User Profile - Removed as requested
+            // Profile Avatar
+            Button(action: onProfileTap) {
+                Circle()
+                    .fill(AnyShapeStyle(Color.slingGradient))
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                        Text(getUserInitials())
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                    )
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -425,7 +441,7 @@ struct HomeView: View {
     @Binding var showingCreateCommunityModal: Bool
     @State private var selectedFilter = "All Bets"
     @State private var showingNotifications = false
-
+    @State private var showingUserProfile = false
 
     @State private var showingCreateBet = false
 
@@ -461,7 +477,8 @@ struct HomeView: View {
             // Custom Header
                             HomeHeaderView(
                     firestoreService: firestoreService,
-                    onNotificationsTap: { showingNotifications = true }
+                    onNotificationsTap: { showingNotifications = true },
+                    onProfileTap: { showingUserProfile = true }
                 )
             
 
@@ -485,21 +502,30 @@ struct HomeView: View {
                 .padding(.top, 16)
             }
             .refreshable {
+                // Reset filter to "All Bets" when refreshing
+                selectedFilter = "All Bets"
+                
                 // Refresh data when user pulls down
                 await refreshHomeData()
             }
             .onAppear {
+                // Reset filter to "All Bets" when page appears
+                selectedFilter = "All Bets"
+                
                 firestoreService.fetchUserCommunities()
                 // fetchBets() is now called automatically after communities are loaded
                 firestoreService.fetchNotifications()
                 firestoreService.refreshCurrentUser()
                 
-                // Set initial filter if provided
-                if let filter = initialFilter {
+                // Set initial filter if provided (but only if it's not a refresh)
+                if let filter = initialFilter, !filter.isEmpty {
                     selectedFilter = filter
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                // Reset filter to "All Bets" when app comes to foreground
+                selectedFilter = "All Bets"
+                
                 firestoreService.fetchUserCommunities()
                 // fetchBets() is now called automatically after communities are loaded
                 firestoreService.fetchNotifications()
@@ -778,7 +804,29 @@ struct HomeView: View {
             .sheet(isPresented: $showingCreateCommunityModal) {
                 CreateCommunityPage(firestoreService: firestoreService)
             }
+            .sheet(isPresented: $showingUserProfile) {
+                TradingProfileView(
+                    userId: firestoreService.currentUser?.id ?? "",
+                    userName: getUserFullName(),
+                    displayName: firestoreService.currentUser?.display_name,
+                    isCurrentUser: true,
+                    firestoreService: firestoreService
+                )
+            }
             .overlay(floatingPlusButton)
+    }
+    
+    private func getUserFullName() -> String {
+        let user = firestoreService.currentUser
+        if let firstName = user?.first_name, let lastName = user?.last_name, !firstName.isEmpty, !lastName.isEmpty {
+            return "\(firstName) \(lastName)"
+        } else if let displayName = user?.display_name, !displayName.isEmpty {
+            return displayName
+        } else if let email = user?.email {
+            let components = email.components(separatedBy: "@")
+            return components.first ?? "User"
+        }
+        return "User"
     }
     
     private func refreshHomeData() async {
@@ -828,7 +876,13 @@ struct HomeBetCard: View {
                             Image(systemName: "person.2")
                                 .font(.caption)
                                 .foregroundColor(.gray)
-                            Text("\(communityName) • by \(currentUserEmail == bet.creator_email ? "You" : creatorName)")
+                            
+                            Text(communityName)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.gray)
+                            
+                            Text("• by \(currentUserEmail == bet.creator_email ? "You" : creatorName)")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                         }

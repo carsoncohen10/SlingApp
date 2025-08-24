@@ -29,6 +29,18 @@ struct CommunityMemberInfo: Identifiable, Hashable {
     }
 }
 
+struct CommunityMemberWithPoints: Identifiable {
+    let member: CommunityMemberInfo
+    let netPoints: Double
+    
+    var id: String { member.id }
+    var email: String { member.email }
+    var name: String { member.name }
+    var isActive: Bool { member.isActive }
+    var joinDate: Date { member.joinDate }
+    var isAdmin: Bool { member.isAdmin }
+}
+
 class FirestoreService: ObservableObject {
     @Published var communities: [FirestoreCommunity] = []
     @Published var userCommunities: [FirestoreCommunity] = []
@@ -1638,38 +1650,174 @@ class FirestoreService: ObservableObject {
     }
     
     func fetchCommunityMembers(communityId: String, completion: @escaping ([CommunityMemberInfo]) -> Void) {
+        print("👥 Fetching community members for community: \(communityId)")
+        
+        // First try to fetch by community_id field
         db.collection("CommunityMember")
             .whereField("community_id", isEqualTo: communityId)
             .whereField("is_active", isEqualTo: true)
             .getDocuments { snapshot, error in
                 if let error = error {
-                    print("❌ Error fetching community members: \(error.localizedDescription)")
-                    completion([])
+                    print("❌ Error fetching community members by community_id: \(error.localizedDescription)")
+                    // Fallback: try to fetch by document ID pattern
+                    self.fetchCommunityMembersByDocumentId(communityId: communityId, completion: completion)
                     return
                 }
                 
-                let members = snapshot?.documents.compactMap { document -> CommunityMemberInfo? in
+                let documents = snapshot?.documents ?? []
+                print("📄 Found \(documents.count) community member documents by community_id")
+                
+                if documents.isEmpty {
+                    print("🔄 No documents found by community_id, trying document ID pattern...")
+                    self.fetchCommunityMembersByDocumentId(communityId: communityId, completion: completion)
+                    return
+                }
+                
+                let members = documents.compactMap { document -> CommunityMemberInfo? in
                     let data = document.data()
-                    guard let userEmail = data["user_email"] as? String,
-                          let joinDate = data["joined_date"] as? Date,
-                          let isActive = data["is_active"] as? Bool else {
+                    print("🔍 Document data: \(data)")
+                    print("🔍 Available fields: \(Array(data.keys))")
+                    print("🔍 Looking for full_name field: \(data["full_name"] ?? "NOT FOUND")")
+                    
+                    guard let userEmail = data["user_email"] as? String else {
+                        print("⚠️ Skipping member document \(document.documentID) - missing user_email")
+                        return nil
+                    }
+                    
+                    // Handle different is_active formats
+                    let isActive: Bool
+                    if let activeBool = data["is_active"] as? Bool {
+                        isActive = activeBool
+                    } else if let activeInt = data["is_active"] as? Int {
+                        isActive = activeInt == 1
+                    } else {
+                        print("⚠️ Skipping member document \(document.documentID) - is_active is neither Bool nor Int")
+                        return nil
+                    }
+                    
+                    // Handle different date formats
+                    let joinDate: Date
+                    if let date = data["joined_date"] as? Date {
+                        joinDate = date
+                    } else if let timestamp = data["joined_date"] as? Timestamp {
+                        joinDate = timestamp.dateValue()
+                    } else {
+                        print("⚠️ Skipping member document \(document.documentID) - joined_date is neither Date nor Timestamp")
                         return nil
                     }
                     
                     let isAdmin = data["is_admin"] as? Bool ?? false
                     
-                    return CommunityMemberInfo(
+                    // Use full_name if available, otherwise generate from email
+                    let memberName: String
+                    if let fullName = data["full_name"] as? String, !fullName.isEmpty {
+                        memberName = fullName
+                    } else {
+                        // Fallback: generate a more user-friendly name from email
+                        let userName = userEmail.components(separatedBy: "@").first ?? userEmail
+                        memberName = userName.replacingOccurrences(of: ".", with: " ").capitalized
+                    }
+                    
+                    let member = CommunityMemberInfo(
                         id: document.documentID,
                         email: userEmail,
-                        name: userEmail.components(separatedBy: "@").first ?? userEmail,
+                        name: memberName,
                         isActive: isActive,
                         joinDate: joinDate,
                         isAdmin: isAdmin
                     )
-                } ?? []
+                    
+                    print("✅ Loaded member: \(member.name) (\(member.email)) - Admin: \(member.isAdmin)")
+                    return member
+                }
                 
+                print("🎯 Returning \(members.count) valid community members")
                 completion(members)
             }
+    }
+    
+    private func fetchCommunityMembersByDocumentId(communityId: String, completion: @escaping ([CommunityMemberInfo]) -> Void) {
+        print("🔄 Fetching community members by document ID pattern for community: \(communityId)")
+        
+        // Get all documents and filter by document ID pattern
+        db.collection("CommunityMember").getDocuments { snapshot, error in
+            if let error = error {
+                print("❌ Error fetching all community member documents: \(error.localizedDescription)")
+                completion([])
+                return
+            }
+            
+            let allDocuments = snapshot?.documents ?? []
+            print("📄 Found \(allDocuments.count) total community member documents")
+            
+            // Filter documents by document ID pattern: communityId_userEmail
+            let communityDocuments = allDocuments.filter { document in
+                document.documentID.hasPrefix("\(communityId)_")
+            }
+            
+            print("🎯 Found \(communityDocuments.count) documents matching community ID pattern")
+            
+            let members = communityDocuments.compactMap { document -> CommunityMemberInfo? in
+                let data = document.data()
+                print("🔍 Document data for \(document.documentID): \(data)")
+                print("🔍 Available fields: \(Array(data.keys))")
+                print("🔍 Looking for full_name field: \(data["full_name"] ?? "NOT FOUND")")
+                
+                guard let userEmail = data["user_email"] as? String else {
+                    print("⚠️ Skipping member document \(document.documentID) - missing user_email")
+                    return nil
+                }
+                
+                // Handle different is_active formats
+                let isActive: Bool
+                if let activeBool = data["is_active"] as? Bool {
+                    isActive = activeBool
+                } else if let activeInt = data["is_active"] as? Int {
+                    isActive = activeInt == 1
+                } else {
+                    print("⚠️ Skipping member document \(document.documentID) - is_active is neither Bool nor Int")
+                    return nil
+                }
+                
+                // Handle different date formats
+                let joinDate: Date
+                if let date = data["joined_date"] as? Date {
+                    joinDate = date
+                } else if let timestamp = data["joined_date"] as? Timestamp {
+                    joinDate = timestamp.dateValue()
+                } else {
+                    print("⚠️ Skipping member document \(document.documentID) - joined_date is neither Date nor Timestamp")
+                    return nil
+                }
+                
+                // Use full_name if available, otherwise generate from email
+                let memberName: String
+                if let fullName = data["full_name"] as? String, !fullName.isEmpty {
+                    memberName = fullName
+                } else {
+                    // Fallback: generate a more user-friendly name from email
+                    let userName = userEmail.components(separatedBy: "@").first ?? userEmail
+                    memberName = userName.replacingOccurrences(of: ".", with: " ").capitalized
+                }
+                
+                let isAdmin = data["is_admin"] as? Bool ?? false
+                
+                let member = CommunityMemberInfo(
+                    id: document.documentID,
+                    email: userEmail,
+                    name: memberName,
+                    isActive: isActive,
+                    joinDate: joinDate,
+                    isAdmin: isAdmin
+                )
+                
+                print("✅ Loaded member: \(member.name) (\(member.email)) - Admin: \(member.isAdmin)")
+                return member
+            }
+            
+            print("🎯 Returning \(members.count) valid community members from document ID pattern")
+            completion(members)
+        }
     }
     
     func isUserAdminInCommunity(communityId: String, userEmail: String, completion: @escaping (Bool) -> Void) {
@@ -2035,6 +2183,81 @@ class FirestoreService: ObservableObject {
         // This would calculate payout based on odds and stake amount
         // For now, just return a simple calculation
         return Double(stakeAmount) * 2.0 // Simple 2:1 payout
+    }
+    
+    // MARK: - Member Net Points
+    
+    func getMemberNetPoints(communityId: String, memberEmail: String, completion: @escaping (Double) -> Void) {
+        // Get all bets for this community where the member participated
+        print("🔍 Fetching bet participations for \(memberEmail) in community \(communityId)")
+        db.collection("BetParticipants")
+            .whereField("community_id", isEqualTo: communityId)
+            .whereField("user_email", isEqualTo: memberEmail)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching member bet participations: \(error.localizedDescription)")
+                    completion(0.0)
+                    return
+                }
+                
+                let documents = snapshot?.documents ?? []
+                print("📊 Found \(documents.count) bet participations for \(memberEmail)")
+                
+                var netPoints: Double = 0.0
+                
+                for document in documents {
+                    let data = document.data()
+                    let amount = data["amount"] as? Double ?? 0.0
+                    let isWon = data["is_won"] as? Bool ?? false
+                    let isSettled = data["is_settled"] as? Bool ?? false
+                    
+                    if isSettled {
+                        if isWon {
+                            netPoints += amount * 2.0 // Won - get stake back plus winnings
+                        } else {
+                            netPoints -= amount // Lost - lose stake
+                        }
+                    }
+                }
+                
+                print("💵 \(memberEmail) net points: \(netPoints)")
+                completion(netPoints)
+            }
+    }
+    
+    func getCommunityMembersWithNetPoints(communityId: String, completion: @escaping ([CommunityMemberWithPoints]) -> Void) {
+        print("🔄 Fetching community members with net points for community: \(communityId)")
+        fetchCommunityMembers(communityId: communityId) { members in
+            print("📋 Found \(members.count) members, now calculating net points")
+            var membersWithPoints: [CommunityMemberWithPoints] = []
+            let group = DispatchGroup()
+            
+            for member in members {
+                group.enter()
+                self.getMemberNetPoints(communityId: communityId, memberEmail: member.email) { netPoints in
+                    let memberWithPoints = CommunityMemberWithPoints(
+                        member: member,
+                        netPoints: netPoints
+                    )
+                    membersWithPoints.append(memberWithPoints)
+                    print("💰 Member \(member.name): \(netPoints) points")
+                    group.leave()
+                }
+            }
+            
+            group.notify(queue: .main) {
+                // Sort by admin status first (admins at top), then by net points (highest first)
+                let sortedMembers = membersWithPoints.sorted { first, second in
+                    if first.isAdmin != second.isAdmin {
+                        return first.isAdmin && !second.isAdmin
+                    } else {
+                        return first.netPoints > second.netPoints
+                    }
+                }
+                print("✅ Completed loading \(sortedMembers.count) members with points")
+                completion(sortedMembers)
+            }
+        }
     }
     
 
