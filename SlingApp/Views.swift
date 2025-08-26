@@ -1002,7 +1002,7 @@ struct EnhancedBetCardView: View {
                                 .foregroundColor(.gray)
                             }
                             
-                            Text("• by \(currentUserEmail == bet.creator_email ? "You" : getFirstNameFromEmail(bet.creator_email))")
+                            Text("• by \(currentUserEmail == bet.creator_email ? "You" : getDisplayNameFromEmail(bet.creator_email))")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                         }
@@ -1081,6 +1081,16 @@ struct EnhancedBetCardView: View {
     }
     
     private func getFirstNameFromEmail(_ email: String) -> String {
+        // Extract first name from email (everything before @)
+        let components = email.components(separatedBy: "@")
+        if let username = components.first {
+            // Capitalize first letter and return
+            return username.prefix(1).uppercased() + username.dropFirst()
+        }
+        return email
+    }
+    
+    private func getDisplayNameFromEmail(_ email: String) -> String {
         // Extract first name from email (everything before @)
         let components = email.components(separatedBy: "@")
         if let username = components.first {
@@ -5120,6 +5130,7 @@ struct ModernCommunityCard: View {
     let firestoreService: FirestoreService
     let onViewCommunity: ((String) -> Void)?
     @State private var showingCommunityDetail = false
+    @State private var isAdmin: Bool = false
     
     var body: some View {
         Button(action: {
@@ -5140,12 +5151,19 @@ struct ModernCommunityCard: View {
                         )
                     
                     VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(community.name)
+                        HStack(spacing: 8) {
+                            Text(community.name)
                                 .font(.title3)
-                    .fontWeight(.bold)
-                    .foregroundColor(.black)
-            }
+                                .fontWeight(.bold)
+                                .foregroundColor(.black)
+                            
+                            // Crown icon for admin users
+                            if isAdmin {
+                                Image(systemName: "crown.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.yellow)
+                            }
+                        }
             
                         // Community stats - greyed out for less importance
                         HStack(spacing: 12) {
@@ -5201,6 +5219,18 @@ struct ModernCommunityCard: View {
                     // This will be handled by the parent view
                 }
             )
+        }
+        .onAppear {
+            checkAdminStatus()
+        }
+    }
+    
+    private func checkAdminStatus() {
+        guard let userEmail = firestoreService.currentUser?.email else { return }
+        firestoreService.isUserAdminInCommunity(communityId: community.id ?? "", userEmail: userEmail) { adminStatus in
+            DispatchQueue.main.async {
+                self.isAdmin = adminStatus
+            }
         }
     }
 }
@@ -7268,7 +7298,7 @@ struct EditProfileView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "envelope", title: "Email", subtitle: firestoreService.currentUser?.email ?? "user@example.com", isDestructive: false, showArrow: false)
+                                    SettingsRow(icon: "envelope", title: "Email", subtitle: firestoreService.currentUser?.email ?? "user@example.com", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Image(systemName: "checkmark")
                                         .foregroundColor(.slingBlue)
@@ -9449,7 +9479,13 @@ struct JoinBetView: View {
         if let currentUserEmail = firestoreService.currentUser?.email, creatorEmail == currentUserEmail {
             return "You"
         } else {
-            return String(creatorEmail.split(separator: "@").first ?? "Unknown")
+            // Extract first name from email (everything before @)
+            let components = creatorEmail.components(separatedBy: "@")
+            if let username = components.first {
+                // Capitalize first letter and return
+                return username.prefix(1).uppercased() + username.dropFirst()
+            }
+            return "Unknown"
         }
     }
     
@@ -11505,14 +11541,14 @@ struct EnhancedBetCard: View {
                     .lineLimit(2)
                 
                 // Community Name & Creator
-                HStack(spacing: 4) {
-                    Image(systemName: "person.2")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                    Text("\(communityName) • by \(isCreator ? "You" : extractUsername(from: bet.creator_email))")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
+                                        HStack(spacing: 4) {
+                            Image(systemName: "person.2")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                            Text("\(communityName) • by \(isCreator ? "You" : getDisplayNameFromEmail(bet.creator_email))")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                        }
             }
             
             // Content based on state
@@ -11906,6 +11942,16 @@ struct EnhancedBetCard: View {
     private func extractUsername(from email: String) -> String {
         return String(email.split(separator: "@").first ?? "Unknown")
     }
+    
+    private func getDisplayNameFromEmail(_ email: String) -> String {
+        // Extract first name from email (everything before @)
+        let components = email.components(separatedBy: "@")
+        if let username = components.first {
+            // Capitalize first letter and return
+            return username.prefix(1).uppercased() + username.dropFirst()
+        }
+        return email
+    }
 }
 
 // MARK: - Enhanced Community Detail View
@@ -11926,6 +11972,7 @@ struct EnhancedCommunityDetailView: View {
     @State private var showingTradingProfile = false
     @State private var selectedMemberForProfile: CommunityMemberWithPoints?
     @State private var showingCopyFeedback = false
+    @State private var isAdmin: Bool = false
     
     var body: some View {
         NavigationView {
@@ -11938,6 +11985,7 @@ struct EnhancedCommunityDetailView: View {
             .navigationBarHidden(true)
             .onAppear {
                 loadCommunityBets()
+                checkAdminStatus()
             }
             .animation(.easeInOut(duration: 0.3), value: selectedTab)
             .sheet(isPresented: $showingCreateBetModal) {
@@ -12019,11 +12067,20 @@ struct EnhancedCommunityDetailView: View {
                                 .foregroundColor(.slingBlue)
                         )
                     
-                    // Community Name
+                    // Community Name with Admin Badge
+                    HStack(spacing: 8) {
                         Text(community.name)
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
+                        
+                        // Crown icon for admin users
+                        if isAdmin {
+                            Image(systemName: "crown.fill")
+                                .font(.title3)
+                                .foregroundColor(.yellow)
+                        }
+                    }
                         
                     // Stats with icons and labels
                     HStack(spacing: 16) {
@@ -12388,16 +12445,84 @@ struct EnhancedCommunityDetailView: View {
     private var settingsTab: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Community settings options
-                VStack(spacing: 0) {
-                    SettingsRow(icon: "bell", title: "Notifications", subtitle: "Manage notification preferences")
-                    SettingsRow(icon: "person.2", title: "Member Management", subtitle: "Add or remove members")
-                    SettingsRow(icon: "gear", title: "Community Settings", subtitle: "Edit community details")
-                    SettingsRow(icon: "trash", title: "Leave Community", subtitle: "Leave this community", isDestructive: true)
+                if isAdmin {
+                    // Admin settings
+                    VStack(spacing: 0) {
+                        SettingsRow(
+                            icon: "bell", 
+                            title: "Notifications", 
+                            subtitle: "Manage notification preferences",
+                            action: { selectedTab = 3 }
+                        )
+                        
+                        SettingsRow(
+                            icon: "person.2", 
+                            title: "Member Management", 
+                            subtitle: "Add or remove members",
+                            action: { selectedTab = 3 }
+                        )
+                        
+                        SettingsRow(
+                            icon: "gear", 
+                            title: "Community Settings", 
+                            subtitle: "Edit community details",
+                            action: { selectedTab = 3 }
+                        )
+                        
+                        SettingsRow(
+                            icon: "shield", 
+                            title: "Admin Controls", 
+                            subtitle: "Manage community permissions",
+                            action: { selectedTab = 3 }
+                        )
+                        
+                        SettingsRow(
+                            icon: "trash", 
+                            title: "Delete Community", 
+                            subtitle: "Permanently delete this community", 
+                            isDestructive: true,
+                            action: { selectedTab = 3 }
+                        )
+                    }
+                    .background(Color.white)
+                    .cornerRadius(12)
+                    .padding(.horizontal, 16)
+                } else {
+                    // Regular member settings
+                    VStack(spacing: 0) {
+                        SettingsRow(
+                            icon: "bell", 
+                            title: "Notifications", 
+                            subtitle: "Manage notification preferences",
+                            action: { selectedTab = 3 }
+                        )
+                        
+                        SettingsRow(
+                            icon: "person.2", 
+                            title: "Member Management", 
+                            subtitle: "View community members",
+                            action: { selectedTab = 3 }
+                        )
+                        
+                        SettingsRow(
+                            icon: "gear", 
+                            title: "Community Settings", 
+                            subtitle: "View community details",
+                            action: { selectedTab = 3 }
+                        )
+                        
+                        SettingsRow(
+                            icon: "trash", 
+                            title: "Leave Community", 
+                            subtitle: "Leave this community", 
+                            isDestructive: true,
+                            action: { selectedTab = 3 }
+                        )
+                    }
+                    .background(Color.white)
+                    .cornerRadius(12)
+                    .padding(.horizontal, 16)
                 }
-                .background(Color.white)
-                .cornerRadius(12)
-                .padding(.horizontal, 16)
             }
             .padding(.vertical, 20)
         }
@@ -12481,6 +12606,15 @@ struct EnhancedCommunityDetailView: View {
         let pendingBets = communityBets.filter { $0.status.lowercased() == "open" }
         return "\(pendingBets.count)"
     }
+    
+    private func checkAdminStatus() {
+        guard let userEmail = firestoreService.currentUser?.email else { return }
+        firestoreService.isUserAdminInCommunity(communityId: community.id ?? "", userEmail: userEmail) { adminStatus in
+            DispatchQueue.main.async {
+                self.isAdmin = adminStatus
+            }
+        }
+    }
 }
 
 // MARK: - Supporting Views
@@ -12491,44 +12625,49 @@ struct SettingsRow: View {
     let subtitle: String
     let isDestructive: Bool
     let showArrow: Bool
+    let action: () -> Void
     
-    init(icon: String, title: String, subtitle: String, isDestructive: Bool = false, showArrow: Bool = true) {
+    init(icon: String, title: String, subtitle: String, isDestructive: Bool = false, showArrow: Bool = true, action: @escaping () -> Void) {
         self.icon = icon
         self.title = title
         self.subtitle = subtitle
         self.isDestructive = isDestructive
         self.showArrow = showArrow
+        self.action = action
     }
     
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(isDestructive ? .red : .slingBlue)
-                .frame(width: 24)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(isDestructive ? .red : .black)
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(isDestructive ? .red : .slingBlue)
+                    .frame(width: 24)
                 
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.gray)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(isDestructive ? .red : .black)
+                    
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                if showArrow {
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
             }
-            
-            Spacer()
-            
-            if showArrow {
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.gray)
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.white)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color.white)
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
@@ -13060,38 +13199,45 @@ struct TradingProfileView: View {
     
     // MARK: - Tab Selector Section
     private var tabSelectorSection: some View {
-                HStack(spacing: 0) {
-            Button(action: { selectedTab = 0 }) {
-                            VStack(spacing: 4) {
-                    Text("Overview")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                        .foregroundColor(selectedTab == 0 ? .slingBlue : .gray)
-                                
-                                Rectangle()
-                        .fill(selectedTab == 0 ? Color.slingBlue : Color.clear)
-                                    .frame(height: 2)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-            
-            Button(action: { selectedTab = 1 }) {
-                VStack(spacing: 4) {
-                    Text("Recent Bets")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(selectedTab == 1 ? .slingBlue : .gray)
-                    
-                    Rectangle()
-                        .fill(selectedTab == 1 ? Color.slingBlue : Color.clear)
-                        .frame(height: 2)
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Button(action: { selectedTab = 0 }) {
+                    VStack(spacing: 4) {
+                        Text("Overview")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(selectedTab == 0 ? .slingBlue : .gray)
+                        
+                        Rectangle()
+                            .fill(selectedTab == 0 ? Color.slingBlue : Color.clear)
+                            .frame(height: 2)
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                
+                Button(action: { selectedTab = 1 }) {
+                    VStack(spacing: 4) {
+                        Text("Recent Bets")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(selectedTab == 1 ? .slingBlue : .gray)
+                        
+                        Rectangle()
+                            .fill(selectedTab == 1 ? Color.slingBlue : Color.clear)
+                            .frame(height: 2)
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
-                }
-                .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-                .background(Color.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.white)
+            
+            // Horizontal line under tabs
+            Rectangle()
+                .frame(height: 0.5)
+                .foregroundColor(Color.gray.opacity(0.3))
+        }
     }
                 
     // MARK: - Tab Content Section
@@ -13377,13 +13523,13 @@ struct UserSettingsView: View {
                 Button(action: {
                     showingEditProfile = true
                 }) {
-                    SettingsRow(icon: "person.circle", title: "Edit Profile", subtitle: "Update your personal information", isDestructive: false)
+                    SettingsRow(icon: "person.circle", title: "Edit Profile", subtitle: "Update your personal information", isDestructive: false, action: {})
                 }
                 Divider().padding(.leading, 56)
                 Button(action: {
                     showingChangePassword = true
                 }) {
-                    SettingsRow(icon: "key", title: "Change Password", subtitle: "Update your password", isDestructive: false)
+                    SettingsRow(icon: "key", title: "Change Password", subtitle: "Update your password", isDestructive: false, action: {})
                 }
             }
             .background(Color.white)
@@ -13406,13 +13552,13 @@ struct UserSettingsView: View {
                 Button(action: {
                     showingPushNotifications = true
                 }) {
-                    SettingsRow(icon: "bell", title: "Push Notifications", subtitle: "Bet updates and community alerts", isDestructive: false)
+                    SettingsRow(icon: "bell", title: "Push Notifications", subtitle: "Bet updates and community alerts", isDestructive: false, action: {})
                 }
                 Divider().padding(.leading, 56)
                 Button(action: {
                     showingEmailNotifications = true
                 }) {
-                    SettingsRow(icon: "envelope", title: "Email Notifications", subtitle: "Weekly summaries and updates", isDestructive: false)
+                    SettingsRow(icon: "envelope", title: "Email Notifications", subtitle: "Weekly summaries and updates", isDestructive: false, action: {})
                 }
             }
             .background(Color.white)
@@ -13435,7 +13581,7 @@ struct UserSettingsView: View {
                 Button(action: {
                     showingProfileVisibility = true
                 }) {
-                    SettingsRow(icon: "eye", title: "Profile Visibility", subtitle: "What's displayed on your profile page", isDestructive: false)
+                    SettingsRow(icon: "eye", title: "Profile Visibility", subtitle: "What's displayed on your profile page", isDestructive: false, action: {})
                 }
             }
             .background(Color.white)
@@ -13456,7 +13602,7 @@ struct UserSettingsView: View {
             
             VStack(spacing: 0) {
                 HStack {
-                    SettingsRow(icon: "moon.fill", title: "Dark Mode", subtitle: "Switch to dark theme", isDestructive: false, showArrow: false)
+                    SettingsRow(icon: "moon.fill", title: "Dark Mode", subtitle: "Switch to dark theme", isDestructive: false, showArrow: false, action: {})
                     Spacer()
                     Toggle("", isOn: $darkModeEnabled)
                         .labelsHidden()
@@ -13484,7 +13630,7 @@ struct UserSettingsView: View {
                 Button(action: {
                     showingLanguageSettings = true
                 }) {
-                    SettingsRow(icon: "globe", title: "Language", subtitle: "English", isDestructive: false)
+                    SettingsRow(icon: "globe", title: "Language", subtitle: "English", isDestructive: false, action: {})
                 }
             }
             .background(Color.white)
@@ -13507,19 +13653,19 @@ struct UserSettingsView: View {
                 Button(action: {
                     showingContactSupport = true
                 }) {
-                    SettingsRow(icon: "message", title: "Contact Us", subtitle: "Get help from our team", isDestructive: false)
+                    SettingsRow(icon: "message", title: "Contact Us", subtitle: "Get help from our team", isDestructive: false, action: {})
                 }
                 Divider().padding(.leading, 56)
                 Button(action: {
                     showingTermsOfService = true
                 }) {
-                    SettingsRow(icon: "doc.text", title: "Terms of Service", subtitle: "Read our terms and conditions", isDestructive: false)
+                    SettingsRow(icon: "doc.text", title: "Terms of Service", subtitle: "Read our terms and conditions", isDestructive: false, action: {})
                 }
                 Divider().padding(.leading, 56)
                 Button(action: {
                     showingPrivacyPolicy = true
                 }) {
-                    SettingsRow(icon: "hand.raised", title: "Privacy Policy", subtitle: "Learn about data privacy", isDestructive: false)
+                    SettingsRow(icon: "hand.raised", title: "Privacy Policy", subtitle: "Learn about data privacy", isDestructive: false, action: {})
                 }
             }
             .background(Color.white)
@@ -13542,13 +13688,13 @@ struct UserSettingsView: View {
                 Button(action: {
                     showingSignOut = true
                 }) {
-                    SettingsRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", subtitle: "Sign out of your account", isDestructive: true)
+                    SettingsRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", subtitle: "Sign out of your account", isDestructive: true, action: {})
                 }
                 Divider().padding(.leading, 56)
                 Button(action: {
                     showingDeleteAccount = true
                 }) {
-                    SettingsRow(icon: "trash", title: "Delete Account", subtitle: "Permanently delete your account", isDestructive: true)
+                    SettingsRow(icon: "trash", title: "Delete Account", subtitle: "Permanently delete your account", isDestructive: true, action: {})
                 }
             }
             .background(Color.white)
@@ -13760,7 +13906,7 @@ struct PushNotificationsView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "target", title: "Bet Updates", subtitle: "Get notified about your bets", isDestructive: false)
+                                    SettingsRow(icon: "target", title: "Bet Updates", subtitle: "Get notified about your bets", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $betUpdates)
                                         .labelsHidden()
@@ -13768,7 +13914,7 @@ struct PushNotificationsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "person.3", title: "Community Alerts", subtitle: "New community activities", isDestructive: false)
+                                    SettingsRow(icon: "person.3", title: "Community Alerts", subtitle: "New community activities", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $communityAlerts)
                                         .labelsHidden()
@@ -13776,7 +13922,7 @@ struct PushNotificationsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "message", title: "New Messages", subtitle: "Direct messages and mentions", isDestructive: false)
+                                    SettingsRow(icon: "message", title: "New Messages", subtitle: "Direct messages and mentions", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $newMessages)
                                         .labelsHidden()
@@ -13784,7 +13930,7 @@ struct PushNotificationsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false)
+                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $weeklySummaries)
                                         .labelsHidden()
@@ -13806,7 +13952,7 @@ struct PushNotificationsView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "person.badge.plus", title: "New Members Joined", subtitle: "When someone joins your community", isDestructive: false)
+                                    SettingsRow(icon: "person.badge.plus", title: "New Members Joined", subtitle: "When someone joins your community", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $newMembersJoined)
                                         .labelsHidden()
@@ -13814,7 +13960,7 @@ struct PushNotificationsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "person.badge.minus", title: "Members Left", subtitle: "When someone leaves your community", isDestructive: false)
+                                    SettingsRow(icon: "person.badge.minus", title: "Members Left", subtitle: "When someone leaves your community", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $membersLeft)
                                         .labelsHidden()
@@ -13822,7 +13968,7 @@ struct PushNotificationsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "flame.fill", title: "Hot Bets Trending", subtitle: "Popular bets in your communities", isDestructive: false)
+                                    SettingsRow(icon: "flame.fill", title: "Hot Bets Trending", subtitle: "Popular bets in your communities", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $hotBetsTrending)
                                         .labelsHidden()
@@ -13830,7 +13976,7 @@ struct PushNotificationsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "exclamationmark.triangle", title: "Outstanding Balances", subtitle: "Updates on pending balances", isDestructive: false)
+                                    SettingsRow(icon: "exclamationmark.triangle", title: "Outstanding Balances", subtitle: "Updates on pending balances", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $outstandingBalances)
                                         .labelsHidden()
@@ -13906,7 +14052,7 @@ struct EmailNotificationsView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false)
+                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $weeklySummaries)
                                         .labelsHidden()
@@ -13914,7 +14060,7 @@ struct EmailNotificationsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "target", title: "Bet Results", subtitle: "Final outcomes of your bets", isDestructive: false)
+                                    SettingsRow(icon: "target", title: "Bet Results", subtitle: "Final outcomes of your bets", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $betResults)
                                         .labelsHidden()
@@ -13922,7 +14068,7 @@ struct EmailNotificationsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "person.3", title: "Community Updates", subtitle: "New community activities", isDestructive: false)
+                                    SettingsRow(icon: "person.3", title: "Community Updates", subtitle: "New community activities", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $communityUpdates)
                                         .labelsHidden()
@@ -13930,7 +14076,7 @@ struct EmailNotificationsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "megaphone", title: "Promotional Emails", subtitle: "Special offers and updates", isDestructive: false)
+                                    SettingsRow(icon: "megaphone", title: "Promotional Emails", subtitle: "Special offers and updates", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $promotionalEmails)
                                         .labelsHidden()
@@ -14005,7 +14151,7 @@ struct SoundSettingsView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "speaker.wave.2", title: "Sound", subtitle: "Enable notification sounds", isDestructive: false)
+                                    SettingsRow(icon: "speaker.wave.2", title: "Sound", subtitle: "Enable notification sounds", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $soundEnabled)
                                         .labelsHidden()
@@ -14013,7 +14159,7 @@ struct SoundSettingsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "iphone.radiowaves.left.and.right", title: "Vibration", subtitle: "Enable haptic feedback", isDestructive: false)
+                                    SettingsRow(icon: "iphone.radiowaves.left.and.right", title: "Vibration", subtitle: "Enable haptic feedback", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $vibrationEnabled)
                                         .labelsHidden()
@@ -14106,7 +14252,7 @@ struct ProfileVisibilityView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "bolt.fill", title: "Point Balance", subtitle: "Show your current point balance", isDestructive: false)
+                                    SettingsRow(icon: "bolt.fill", title: "Point Balance", subtitle: "Show your current point balance", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showPointBalance)
                                         .labelsHidden()
@@ -14114,7 +14260,7 @@ struct ProfileVisibilityView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "dollarsign.circle", title: "Total Winnings", subtitle: "Display your total winnings", isDestructive: false)
+                                    SettingsRow(icon: "dollarsign.circle", title: "Total Winnings", subtitle: "Display your total winnings", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showTotalWinnings)
                                         .labelsHidden()
@@ -14122,7 +14268,7 @@ struct ProfileVisibilityView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "target", title: "Total Bets", subtitle: "Show your bet count", isDestructive: false)
+                                    SettingsRow(icon: "target", title: "Total Bets", subtitle: "Show your bet count", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showTotalBets)
                                         .labelsHidden()
@@ -14130,7 +14276,7 @@ struct ProfileVisibilityView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "bolt.fill", title: "Sling Points", subtitle: "Display Sling Points", isDestructive: false)
+                                    SettingsRow(icon: "bolt.fill", title: "Sling Points", subtitle: "Display Sling Points", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showSlingPoints)
                                         .labelsHidden()
@@ -14138,7 +14284,7 @@ struct ProfileVisibilityView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "flame.fill", title: "Blitz Points", subtitle: "Display Blitz Points", isDestructive: false)
+                                    SettingsRow(icon: "flame.fill", title: "Blitz Points", subtitle: "Display Blitz Points", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showBlitzPoints)
                                         .labelsHidden()
@@ -14146,7 +14292,7 @@ struct ProfileVisibilityView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "person.2", title: "Communities", subtitle: "Show your community count", isDestructive: false)
+                                    SettingsRow(icon: "person.2", title: "Communities", subtitle: "Show your community count", isDestructive: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showCommunities)
                                         .labelsHidden()
@@ -14214,11 +14360,11 @@ struct AccountPrivacyView: View {
                             }
                             
                             VStack(spacing: 0) {
-                                SettingsRow(icon: "eye", title: "Show Online Status", subtitle: "Let others see when you're online", isDestructive: false)
+                                SettingsRow(icon: "eye", title: "Show Online Status", subtitle: "Let others see when you're online", isDestructive: false, action: {})
                                 Divider().padding(.leading, 56)
-                                SettingsRow(icon: "location", title: "Location Sharing", subtitle: "Share your location with friends", isDestructive: false)
+                                SettingsRow(icon: "location", title: "Location Sharing", subtitle: "Share your location with friends", isDestructive: false, action: {})
                                 Divider().padding(.leading, 56)
-                                SettingsRow(icon: "chart.bar", title: "Activity Statistics", subtitle: "Show your betting statistics", isDestructive: false)
+                                SettingsRow(icon: "chart.bar", title: "Activity Statistics", subtitle: "Show your betting statistics", isDestructive: false, action: {})
                             }
                             .background(Color.white)
                             .cornerRadius(12)
@@ -14412,11 +14558,11 @@ struct ExportDataView: View {
                             }
                             
                             VStack(spacing: 0) {
-                                SettingsRow(icon: "doc.text", title: "Betting History", subtitle: "Export all your betting data", isDestructive: false)
+                                SettingsRow(icon: "doc.text", title: "Betting History", subtitle: "Export all your betting data", isDestructive: false, action: {})
                                 Divider().padding(.leading, 56)
-                                SettingsRow(icon: "person.3", title: "Community Data", subtitle: "Export community participation", isDestructive: false)
+                                SettingsRow(icon: "person.3", title: "Community Data", subtitle: "Export community participation", isDestructive: false, action: {})
                                 Divider().padding(.leading, 56)
-                                SettingsRow(icon: "chart.bar", title: "Statistics", subtitle: "Export performance analytics", isDestructive: false)
+                                SettingsRow(icon: "chart.bar", title: "Statistics", subtitle: "Export performance analytics", isDestructive: false, action: {})
                             }
         .background(Color.white)
         .cornerRadius(12)
@@ -14484,7 +14630,7 @@ struct LanguageSettingsView: View {
                             VStack(spacing: 0) {
                                 ForEach(languages, id: \.self) { language in
                                     HStack {
-                                        SettingsRow(icon: "globe", title: language, subtitle: "", isDestructive: false)
+                                        SettingsRow(icon: "globe", title: language, subtitle: "", isDestructive: false, action: {})
                                         Spacer()
                                         if selectedLanguage == language {
                                             Image(systemName: "checkmark")
@@ -14969,11 +15115,11 @@ struct AboutAppView: View {
                                 }
                                 
                                 VStack(spacing: 12) {
-                                    SettingsRow(icon: "doc.text", title: "Build Number", subtitle: "2024.1.0", isDestructive: false)
+                                    SettingsRow(icon: "doc.text", title: "Build Number", subtitle: "2024.1.0", isDestructive: false, action: {})
                                     Divider().padding(.leading, 56)
-                                    SettingsRow(icon: "calendar", title: "Release Date", subtitle: "January 2024", isDestructive: false)
+                                    SettingsRow(icon: "calendar", title: "Release Date", subtitle: "January 2024", isDestructive: false, action: {})
                                     Divider().padding(.leading, 56)
-                                    SettingsRow(icon: "person.2", title: "Developer", subtitle: "SlingApp Team", isDestructive: false)
+                                    SettingsRow(icon: "person.2", title: "Developer", subtitle: "SlingApp Team", isDestructive: false, action: {})
                                 }
                                 .background(Color.white)
                                 .cornerRadius(12)

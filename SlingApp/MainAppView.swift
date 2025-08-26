@@ -414,31 +414,39 @@ struct FilterBarView: View {
     }
     
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(categories, id: \.self) { category in
-                    Button(action: {
-                        selectedFilter = category
-                    }) {
-                        Text(category)
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(selectedFilter == category ? .white : .black)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(backgroundForCategory(category))
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: selectedFilter == category ? 0 : 1)
-                            )
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(categories, id: \.self) { category in
+                        Button(action: {
+                            selectedFilter = category
+                        }) {
+                            Text(category)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(selectedFilter == category ? .white : .black)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(backgroundForCategory(category))
+                                .cornerRadius(16)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: selectedFilter == category ? 0 : 1)
+                                )
+                        }
                     }
                 }
             }
             .padding(.horizontal, 16)
         }
-        .padding(.vertical, 8)
+        .padding(.top, 2) // Reduced from 4 to 2
+        .padding(.bottom, 2) // Reduced from 4 to 2
         .background(Color.white)
+        
+        // Horizontal line under community pills
+        Rectangle()
+            .frame(height: 0.5)
+            .foregroundColor(Color.gray.opacity(0.3))
     }
 }
 
@@ -495,7 +503,7 @@ struct HomeView: View {
             
             // Main Content
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 8) { // Reduced from 16 to 8
                     // Filter Bar - only show if user has communities (now scrollable)
                     if !firestoreService.userCommunities.isEmpty {
                         FilterBarView(
@@ -509,7 +517,7 @@ struct HomeView: View {
                     betFeedContent
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 16)
+                .padding(.top, 8) // Reduced from 16 to 8
             }
             .refreshable {
                 // Reset filter to "All Bets" when refreshing
