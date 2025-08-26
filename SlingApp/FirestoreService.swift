@@ -211,6 +211,36 @@ class FirestoreService: ObservableObject {
         }
     }
     
+    // MARK: - Get User by ID
+    func getUser(userId: String) async throws -> FirestoreUser {
+        return try await withCheckedThrowingContinuation { continuation in
+            // Try to get user by the provided ID (could be email or UID)
+            db.collection("Users").document(userId).getDocument { document, error in
+                if let error = error {
+                    print("❌ Error fetching user by ID: \(error)")
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                guard let document = document, document.exists else {
+                    print("❌ User document not found for ID: \(userId)")
+                    let notFoundError = NSError(domain: "FirestoreService", code: 404, userInfo: [NSLocalizedDescriptionKey: "User not found"])
+                    continuation.resume(throwing: notFoundError)
+                    return
+                }
+                
+                do {
+                    let user = try document.data(as: FirestoreUser.self)
+                    print("✅ User loaded: \(user.displayName)")
+                    continuation.resume(returning: user)
+                } catch {
+                    print("❌ Error decoding user: \(error)")
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
     // MARK: - Authentication Methods
     
     func signUp(email: String, password: String, firstName: String, lastName: String, displayName: String, completion: @escaping (Bool, String?) -> Void) {

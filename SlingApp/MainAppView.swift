@@ -219,7 +219,14 @@ struct MainAppView: View {
         }
         .sheet(isPresented: $showingDeepLinkBet) {
             if let bet = deepLinkBet {
-                JoinBetView(bet: bet, firestoreService: firestoreService)
+                JoinBetView(
+                    bet: bet, 
+                    firestoreService: firestoreService,
+                    onCommunityTap: {
+                        // Navigate to community details
+                        // This will be handled by the parent view
+                    }
+                )
             }
         }
         .sheet(isPresented: $showingDeepLinkCommunity) {
@@ -806,7 +813,7 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showingUserProfile) {
                 TradingProfileView(
-                    userId: firestoreService.currentUser?.id ?? "",
+                    userId: firestoreService.currentUser?.email ?? "",
                     userName: getUserFullName(),
                     displayName: firestoreService.currentUser?.display_name,
                     isCurrentUser: true,
@@ -945,7 +952,14 @@ struct HomeBetCard: View {
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
         .sheet(isPresented: $showingJoinBet) {
-            JoinBetView(bet: bet, firestoreService: firestoreService)
+            JoinBetView(
+                bet: bet, 
+                firestoreService: firestoreService,
+                onCommunityTap: {
+                    // Navigate to community details
+                    // This will be handled by the parent view
+                }
+            )
         }
         .sheet(isPresented: $showingBettingInterface) {
             BettingInterfaceView(

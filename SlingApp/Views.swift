@@ -981,7 +981,7 @@ struct EnhancedBetCardView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "person.2")
                                 .font(.caption)
-                                .foregroundColor(.slingBlue)
+                                .foregroundColor(isCommunityNameClickable ? .slingBlue : .gray)
                             
                             // Community name - conditionally clickable
                             if isCommunityNameClickable {
@@ -999,7 +999,7 @@ struct EnhancedBetCardView: View {
                                 Text(communityName)
                                     .font(.subheadline)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.gray)
+                                .foregroundColor(.gray)
                             }
                             
                             Text("• by \(currentUserEmail == bet.creator_email ? "You" : getFirstNameFromEmail(bet.creator_email))")
@@ -1062,7 +1062,14 @@ struct EnhancedBetCardView: View {
         }
         .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showingJoinBet) {
-            JoinBetView(bet: bet, firestoreService: firestoreService)
+            JoinBetView(
+                bet: bet, 
+                firestoreService: firestoreService,
+                onCommunityTap: {
+                    // Navigate to community details
+                    // This will be handled by the parent view
+                }
+            )
         }
         .sheet(isPresented: $showingBettingInterface) {
             BettingInterfaceView(
@@ -1718,7 +1725,14 @@ struct MyBetCard: View {
             case .share:
                 ShareSheet(activityItems: [generateShareText()])
             case .betDetail:
-                JoinBetView(bet: bet, firestoreService: firestoreService)
+                JoinBetView(
+                    bet: bet, 
+                    firestoreService: firestoreService,
+                    onCommunityTap: {
+                        // Navigate to community details
+                        // This will be handled by the parent view
+                    }
+                )
             case .bettingInterface:
                 BettingInterfaceView(
                     bet: bet,
@@ -1971,7 +1985,11 @@ struct ChatMessageBubble: View {
             if let selectedBet = selectedBet {
                 JoinBetView(
                     bet: selectedBet,
-                    firestoreService: firestoreService
+                    firestoreService: firestoreService,
+                    onCommunityTap: {
+                        // Navigate to community details
+                        // This will be handled by the parent view
+                    }
                 )
             }
         }
@@ -2474,7 +2492,14 @@ struct MessagesView: View {
         }
         .sheet(isPresented: $showingBetDetail) {
             if let bet = selectedBet {
-                JoinBetView(bet: bet, firestoreService: firestoreService)
+                JoinBetView(
+                    bet: bet, 
+                    firestoreService: firestoreService,
+                    onCommunityTap: {
+                        // Navigate to community details
+                        // This will be handled by the parent view
+                    }
+                )
             }
         }
 
@@ -3888,6 +3913,7 @@ struct CommunitiesView: View {
                 }
                 .padding(.horizontal, 4)
             }
+            .background(Color.white)
         }
     }
     
@@ -4291,28 +4317,15 @@ struct DetailedBalanceRow: View {
         VStack(spacing: 0) {
             // Main balance row
             HStack(spacing: 16) {
-                // Profile Picture
-                if let profilePicture = balance.profilePicture, !profilePicture.isEmpty {
-                    AsyncImage(url: URL(string: profilePicture)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Circle()
-                            .fill(AnyShapeStyle(Color.slingGradient))
-                            .overlay(
-                                Text(String(balance.name.prefix(1)).uppercased())
-                                    .font(.title3)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                            )
-                    }
-                    .frame(width: 56, height: 56)
-                    .clipShape(Circle())
-                } else {
+            // Profile Picture
+            if let profilePicture = balance.profilePicture, !profilePicture.isEmpty {
+                AsyncImage(url: URL(string: profilePicture)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
                     Circle()
                         .fill(AnyShapeStyle(Color.slingGradient))
-                        .frame(width: 56, height: 56)
                         .overlay(
                             Text(String(balance.name.prefix(1)).uppercased())
                                 .font(.title3)
@@ -4320,33 +4333,46 @@ struct DetailedBalanceRow: View {
                                 .foregroundColor(.white)
                         )
                 }
-                
-                // User Info
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(balance.name)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.black)
-                    
-                    Text(balance.username)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-                
-                Spacer()
-                
-                // Amount
-                VStack(alignment: .trailing, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bolt.fill")
-                            .font(.caption)
-                            .foregroundColor(balance.isOwed ? .red : .green)
-                        
-                        Text("\(String(format: "%.0f", balance.displayAmount))")
+                .frame(width: 56, height: 56)
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(AnyShapeStyle(Color.slingGradient))
+                    .frame(width: 56, height: 56)
+                    .overlay(
+                        Text(String(balance.name.prefix(1)).uppercased())
                             .font(.title3)
                             .fontWeight(.bold)
-                            .foregroundColor(balance.isOwed ? .red : .green)
-                    }
+                            .foregroundColor(.white)
+                    )
+            }
+            
+            // User Info
+            VStack(alignment: .leading, spacing: 6) {
+                Text(balance.name)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                
+                Text(balance.username)
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            // Amount
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "bolt.fill")
+                        .font(.caption)
+                        .foregroundColor(balance.isOwed ? .red : .green)
+                    
+                        Text("\(String(format: "%.0f", balance.displayAmount))")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(balance.isOwed ? .red : .green)
+                }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
@@ -4751,8 +4777,8 @@ struct OutstandingBalanceCard: View {
             
 
             }
-            .frame(width: 100)
-            .padding(.vertical, 16)
+            .frame(width: 80)
+            .padding(16)
             .background(Color.white)
             .cornerRadius(16)
             .overlay(
@@ -5144,8 +5170,8 @@ struct ModernCommunityCard: View {
                         .foregroundColor(.gray)
                                 Text("bets")
                                     .font(.caption)
-                        .foregroundColor(.gray)
-            }
+                                    .foregroundColor(.gray)
+                            }
                         }
                     }
                     
@@ -5153,9 +5179,9 @@ struct ModernCommunityCard: View {
                     
                     // Right Arrow
                     Image(systemName: "chevron.right")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                        .frame(width: 24, height: 24)
+                            .font(.subheadline)
+                                    .foregroundColor(.gray)
+                            .frame(width: 24, height: 24)
                 }
                 
 
@@ -5226,13 +5252,13 @@ struct CommunityCard: View {
                 
                 // Three Dots Menu
                 Menu {
-                                            Button(action: {
-                            UIPasteboard.general.string = community.invite_code
-                            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                            impactFeedback.impactOccurred()
-                        }) {
+                    Button(action: {
+                        UIPasteboard.general.string = community.invite_code
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                        impactFeedback.impactOccurred()
+                    }) {
                             Label("Copy Invite Code", systemImage: "list.bullet.clipboard")
-                        }
+                    }
                     
                     Button(action: {
                         showingShareSheet = true
@@ -5680,10 +5706,10 @@ struct GeneralSettingsTab: View {
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundColor(.green)
                                     } else {
-                                                                        // Show copy icon
+                                        // Show copy icon
                                 Image(systemName: "list.bullet.clipboard")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.gray)
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.gray)
                                     }
                                 }
                             }
@@ -7195,190 +7221,186 @@ struct EditProfileView: View {
         self._lastName = State(initialValue: firestoreService.currentUser?.last_name ?? "")
     }
     
-    private func getUserInitials() -> String {
-        let user = firestoreService.currentUser
-        if let firstName = user?.first_name, let lastName = user?.last_name, !firstName.isEmpty, !lastName.isEmpty {
-            let firstInitial = String(firstName.prefix(1)).uppercased()
-            let lastInitial = String(lastName.prefix(1)).uppercased()
-            return "\(firstInitial)\(lastInitial)"
-        } else if let displayName = user?.display_name, !displayName.isEmpty {
-            let components = displayName.components(separatedBy: " ")
-            if components.count >= 2 {
-                let firstInitial = String(components[0].prefix(1)).uppercased()
-                let lastInitial = String(components[1].prefix(1)).uppercased()
-                return "\(firstInitial)\(lastInitial)"
-            } else if components.count == 1 {
-                return String(components[0].prefix(1)).uppercased()
-            }
-        } else if let email = user?.email {
-            return String(email.prefix(1)).uppercased()
-        }
-        return "U"
-    }
-    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Header
-                VStack(spacing: 16) {
-                    // Back Button
-                    HStack {
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            Image(systemName: "arrow.left")
-                                .font(.title3)
-                                .foregroundColor(.black)
-                                .frame(width: 40, height: 40)
-                                .background(Color(.systemGray5))
-                                .clipShape(Circle())
-                        }
-                        
-                        Spacer()
+                // Modern Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
                     }
                     
-                    // Title
-                    VStack(spacing: 8) {
-                        // Header removed
-                        // Subheader removed
+                    Spacer()
+                    
+                    Text("Edit Profile")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
                 
-                // Profile Information Card
-                VStack(spacing: 24) {
-                    // Profile Summary
-                    HStack(spacing: 16) {
-                        Circle()
-                            .fill(Color.blue)
-                            .frame(width: 48, height: 48)
-                            .overlay(
-                                Text(getUserInitials())
-                                    .font(.title2)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Email Display (Read-only)
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Account Information")
+                                    .font(.headline)
                                     .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                            )
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(displayName.isEmpty ? (firestoreService.currentUser?.displayName ?? "User") : displayName)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.black)
-                            
-                            Text(firestoreService.currentUser?.email ?? "user@example.com")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                        }
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    
-                    // Form Fields
-                    VStack(spacing: 20) {
-                        // Display Name
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Display Name *")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.black)
-                            
-                            TextField("Display Name", text: $displayName)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .font(.subheadline)
-                        }
-                        
-                        // First Name
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("First Name")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.black)
-                            
-                            TextField("First Name", text: $firstName)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .font(.subheadline)
-                        }
-                        
-                        // Last Name
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Last Name")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.black)
-                            
-                            TextField("Last Name", text: $lastName)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .font(.subheadline)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    
-                    // Action Buttons
-                    HStack(spacing: 12) {
-                        Button("Cancel") {
-                            dismiss()
-                        }
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.white)
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                        
-                        Button(action: {
-                            // Validate input
-                            guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                                // You could show an alert here for validation error
-                                return
+                                    .foregroundColor(.black)
+                                Spacer()
                             }
                             
-                            // Save changes action - for now just dismiss
+                            VStack(spacing: 0) {
+                                HStack {
+                                    SettingsRow(icon: "envelope", title: "Email", subtitle: firestoreService.currentUser?.email ?? "user@example.com", isDestructive: false, showArrow: false)
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.slingBlue)
+                                        .font(.caption)
+                                        .scaleEffect(0.8)
+                                }
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    
+                        
+                        // Profile Fields
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Profile Information")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 0) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Display Name *")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 16)
+                                    
+                                    TextField("Enter display name", text: $displayName)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .padding(.horizontal, 16)
+                                        .padding(.bottom, 16)
+                                }
+                                
+                                Divider().padding(.leading, 56)
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("First Name")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 16)
+                                    
+                                    TextField("Enter first name", text: $firstName)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .padding(.horizontal, 16)
+                                        .padding(.bottom, 16)
+                                }
+                                
+                                Divider().padding(.leading, 56)
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Last Name")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 16)
+                                    
+                                    TextField("Enter last name", text: $lastName)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .padding(.horizontal, 16)
+                                        .padding(.bottom, 16)
+                                }
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    
+                        
+                        // Action Buttons
+                        VStack(spacing: 12) {
+                            Button(action: {
+                                // Validate input
+                                guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                                    return
+                                }
+                                
+                                // Save changes action - for now just dismiss
+                                dismiss()
+                            }) {
+                                Text("Save Changes")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(Color.slingBlue)
+                                    .cornerRadius(12)
+                            }
+                            .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .opacity(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.6 : 1.0)
+                            
+                            Button("Cancel") {
+                                dismiss()
+                            }
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                        }
+                    
+                        
+                        // Sign Out Button
+                        Button(action: {
+                            firestoreService.signOut()
                             dismiss()
                         }) {
-                            Text("Save Changes")
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.slingGradient)
-                        .cornerRadius(10)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 12)
-                    
-                    // Sign Out Button
-                    Button(action: {
-                        firestoreService.signOut()
-                        dismiss()
-                    }) {
                             Text("Sign Out")
+                                .font(.headline)
                                 .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(Color.red)
+                                .cornerRadius(12)
                         }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.red)
-                        .cornerRadius(10)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 20)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
                 }
-                .background(Color.white)
-                .cornerRadius(16)
-                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-                .padding(.horizontal, 16)
-                .padding(.top, 20)
-                
-                Spacer()
             }
             .background(Color.white)
             .navigationBarHidden(true)
@@ -9404,6 +9426,7 @@ struct JoinBetView: View {
     @Environment(\.dismiss) private var dismiss
     let bet: FirestoreBet
     @ObservedObject var firestoreService: FirestoreService
+    let onCommunityTap: (() -> Void)? // Callback for community navigation
     @State private var selectedOption = ""
     @State private var showingBettingInterface = false
     @State private var showingShareSheet = false
@@ -9490,7 +9513,7 @@ struct JoinBetView: View {
                                     
                                     // Clickable community name
                                     Button(action: {
-                                        showingCommunityDetails = true
+                                        onCommunityTap?() // Call the callback for community navigation
                                     }) {
                                         Text(communityName)
                                             .font(.subheadline)
@@ -9774,7 +9797,14 @@ struct JoinBetView: View {
             }
             .sheet(isPresented: $showingBetDetail) {
                 if let selectedBet = selectedBetForDetail {
-                    JoinBetView(bet: selectedBet, firestoreService: firestoreService)
+                    JoinBetView(
+                        bet: selectedBet, 
+                        firestoreService: firestoreService,
+                        onCommunityTap: {
+                            // Navigate to community details
+                            // This will be handled by the parent view
+                        }
+                    )
                 }
             }
             .onAppear {
@@ -11129,7 +11159,14 @@ struct SwipeableBetCard: View {
             ShareSheet(activityItems: [generateShareText()])
         }
         .sheet(isPresented: $showingBetDetail) {
-            JoinBetView(bet: bet, firestoreService: firestoreService)
+            JoinBetView(
+                bet: bet, 
+                firestoreService: firestoreService,
+                onCommunityTap: {
+                    // Navigate to community details
+                    // This will be handled by the parent view
+                }
+            )
         }
         .sheet(isPresented: $showingBettingInterface) {
             if !selectedBettingOption.isEmpty {
@@ -11889,7 +11926,6 @@ struct EnhancedCommunityDetailView: View {
     @State private var showingTradingProfile = false
     @State private var selectedMemberForProfile: CommunityMemberWithPoints?
     @State private var showingCopyFeedback = false
-
     
     var body: some View {
         NavigationView {
@@ -11924,7 +11960,7 @@ struct EnhancedCommunityDetailView: View {
             .sheet(isPresented: $showingTradingProfile) {
                 if let selectedMember = selectedMemberForProfile {
                     TradingProfileView(
-                        userId: selectedMember.id,
+                        userId: selectedMember.email,
                         userName: selectedMember.name,
                         displayName: nil, // Community members don't have display_name
                         isCurrentUser: false,
@@ -11932,7 +11968,6 @@ struct EnhancedCommunityDetailView: View {
                     )
                 }
             }
-            
         }
     }
     
@@ -11958,14 +11993,13 @@ struct EnhancedCommunityDetailView: View {
                     
                     Spacer()
                     
-                    // Chat Button
+                    // Share Button
                     Button(action: {
-                        dismiss()
-                        onChatTap?() // Call the callback to navigate to chat
+                        showingInviteModal = true
                     }) {
-                        Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .font(.title3)
-                            .foregroundColor(.white)
+                        Image(systemName: "square.and.arrow.up")
+                                .font(.title3)
+                                .foregroundColor(.white)
                             .frame(width: 44, height: 44)
                     }
                 }
@@ -11986,11 +12020,11 @@ struct EnhancedCommunityDetailView: View {
                         )
                     
                     // Community Name
-                    Text(community.name)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    
+                        Text(community.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
                     // Stats with icons and labels
                     HStack(spacing: 16) {
                         // Member Count
@@ -11999,7 +12033,7 @@ struct EnhancedCommunityDetailView: View {
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.9))
                             Text("\(community.member_count)")
-                                .font(.subheadline)
+                            .font(.subheadline)
                                 .fontWeight(.medium)
                                 .foregroundColor(.white)
                             Text("members")
@@ -12012,7 +12046,7 @@ struct EnhancedCommunityDetailView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "list.bullet.clipboard")
                                 .font(.caption)
-                                .foregroundColor(.white.opacity(0.9))
+                            .foregroundColor(.white.opacity(0.9))
                             Text("\(community.total_bets)")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
@@ -12096,10 +12130,10 @@ struct EnhancedCommunityDetailView: View {
                     // Invite Code Card - Same size as action cards
                     HStack(spacing: 12) {
                         // Invite Code Text
-                        Text(community.invite_code)
+                            Text(community.invite_code)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundColor(.black)
+                                .foregroundColor(.black)
                         
                         Spacer()
                         
@@ -12228,6 +12262,29 @@ struct EnhancedCommunityDetailView: View {
                     }
                     .padding(.horizontal, 16)
                 }
+                
+                // Community Stats Section
+                VStack(spacing: 12) {
+                    Text("Community Stats")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    // Performance Grid - Horizontal scroll
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            CommunityPerformanceCard(icon: "bolt.fill", value: "\(getTotalVolume())", label: "Total Volume", color: .slingBlue)
+                            CommunityPerformanceCard(icon: "chart.line.uptrend.xyaxis", value: getWinRate(), label: "Win Rate", color: .slingBlue)
+                            CommunityPerformanceCard(icon: "target", value: "\(community.total_bets)", label: "Total Bets", color: .slingBlue)
+                            CommunityPerformanceCard(icon: "person.2", value: "\(community.member_count)", label: "Active Members", color: .slingBlue)
+                            CommunityPerformanceCard(icon: "trophy.fill", value: getSettledBetsCount(), label: "Settled Bets", color: .slingBlue)
+                            CommunityPerformanceCard(icon: "clock.fill", value: getPendingBetsCount(), label: "Pending Bets", color: .slingBlue)
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                }
+                .padding(.horizontal, 16)
             }
             .padding(.vertical, 20)
         }
@@ -12262,122 +12319,61 @@ struct EnhancedCommunityDetailView: View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 if let membersWithPoints = membersWithPoints {
-                    ForEach(membersWithPoints) { memberWithPoints in
-                        Button(action: {
-                            selectedMemberForProfile = memberWithPoints
-                            showingTradingProfile = true
-                        }) {
-                            HStack(spacing: 12) {
-                                // Profile Picture
-                                Circle()
-                                    .fill(AnyShapeStyle(Color.slingGradient))
-                                    .frame(width: 40, height: 40)
-                                    .overlay(
-                                        Text(String(memberWithPoints.name.prefix(1)).uppercased())
-                                            .font(.caption)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.white)
-                                    )
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text(memberWithPoints.name)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(.black)
-                                        
-                                        // Admin badge
-                                        if memberWithPoints.isAdmin {
-                                            HStack(spacing: 2) {
-                                                Image(systemName: "crown.fill")
-                                                    .font(.caption2)
-                                                    .foregroundColor(.purple)
-                                                Text("Admin")
-                                                    .font(.caption2)
-                                                    .fontWeight(.medium)
-                                                    .foregroundColor(.purple)
-                                            }
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(Color.purple.opacity(0.1))
-                                            .cornerRadius(6)
-                                        }
-                                    }
-                                }
-                                
-                                Spacer()
-                                
-                                // Net points on the right
-                                HStack(spacing: 4) {
-                                    Image(systemName: "bolt.fill")
-                                        .font(.caption)
-                                        .foregroundColor(memberWithPoints.netPoints >= 0 ? .green : .red)
-                                    
-                                    Text("\(String(format: "%.0f", memberWithPoints.netPoints))")
-                                        .font(.subheadline)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(memberWithPoints.netPoints >= 0 ? .green : .red)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    (memberWithPoints.netPoints >= 0 ? Color.green : Color.red).opacity(0.1)
-                                )
-                                .cornerRadius(8)
+                    let sortedMembers = membersWithPoints.sorted { $0.netPoints > $1.netPoints }
+                    ForEach(Array(sortedMembers.enumerated()), id: \.element.id) { index, memberWithPoints in
+                        MemberRowView(
+                            memberWithPoints: memberWithPoints,
+                            rank: index + 1,
+                            onTap: {
+                                selectedMemberForProfile = memberWithPoints
+                                showingTradingProfile = true
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.white)
-                            .cornerRadius(12)
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                        )
                     }
                 } else {
                     // Fallback to basic member display if advanced loading fails
-                    ForEach(0..<community.member_count, id: \.self) { index in
+                ForEach(0..<community.member_count, id: \.self) { index in
                         HStack(spacing: 12) {
-                            HStack(spacing: 12) {
-                                // Profile Picture
-                                Circle()
-                                    .fill(AnyShapeStyle(Color.slingGradient))
-                                    .frame(width: 40, height: 40)
-                                    .overlay(
-                                        Text("M\(index + 1)")
-                                            .font(.caption)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.white)
-                                    )
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Member \(index + 1)")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.black)
-                                }
-                                
-                                Spacer()
-                                
-                                // Placeholder for net points
-                                HStack(spacing: 4) {
-                                    Image(systemName: "bolt.fill")
+                            // Profile Picture
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Text("M\(index + 1)")
                                         .font(.caption)
-                                        .foregroundColor(.gray)
-                                    
-                                    Text("--")
-                                        .font(.subheadline)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.gray)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(8)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                )
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Member \(index + 1)")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.black)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.white)
-                            .cornerRadius(12)
+                            
+                            Spacer()
+                            
+                            // Placeholder for net points
+                            HStack(spacing: 4) {
+                                Image(systemName: "bolt.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                                
+                                Text("--")
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color.white)
+                        .cornerRadius(12)
                     }
                 }
             }
@@ -12388,8 +12384,6 @@ struct EnhancedCommunityDetailView: View {
             loadMembersWithPoints()
         }
     }
-    
-
     
     private var settingsTab: some View {
         ScrollView {
@@ -12453,9 +12447,90 @@ struct EnhancedCommunityDetailView: View {
         formatter.dateFormat = "MMM d"
         return formatter.string(from: date)
     }
+    
+    // MARK: - Community Stats Helper Methods
+    
+    private func getTotalVolume() -> String {
+        let communityBets = firestoreService.bets.filter { $0.community_id == (community.id ?? "") }
+        let totalVolume = communityBets.reduce(0.0) { total, bet in
+            total + Double(bet.total_pool ?? 0)
+        }
+        return String(format: "%.0f", totalVolume)
+    }
+    
+    private func getWinRate() -> String {
+        let communityBets = firestoreService.bets.filter { $0.community_id == (community.id ?? "") }
+        let settledBets = communityBets.filter { $0.status.lowercased() == "settled" }
+        
+        guard !settledBets.isEmpty else { return "0%" }
+        
+        // TODO: This needs to be updated with actual win/loss logic
+        // For now, using a placeholder - would need to check winner_option vs actual outcome
+        let winRate = 68.0 // Placeholder - would need actual win/loss logic
+        return String(format: "%.0f%%", winRate)
+    }
+    
+    private func getSettledBetsCount() -> String {
+        let communityBets = firestoreService.bets.filter { $0.community_id == (community.id ?? "") }
+        let settledBets = communityBets.filter { $0.status.lowercased() == "settled" }
+        return "\(settledBets.count)"
+    }
+    
+    private func getPendingBetsCount() -> String {
+        let communityBets = firestoreService.bets.filter { $0.community_id == (community.id ?? "") }
+        let pendingBets = communityBets.filter { $0.status.lowercased() == "open" }
+        return "\(pendingBets.count)"
+    }
 }
 
 // MARK: - Supporting Views
+
+struct SettingsRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let isDestructive: Bool
+    let showArrow: Bool
+    
+    init(icon: String, title: String, subtitle: String, isDestructive: Bool = false, showArrow: Bool = true) {
+        self.icon = icon
+        self.title = title
+        self.subtitle = subtitle
+        self.isDestructive = isDestructive
+        self.showArrow = showArrow
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(isDestructive ? .red : .slingBlue)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(isDestructive ? .red : .black)
+                
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            if showArrow {
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.gray)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white)
+    }
+}
 
 struct StatItem: View {
     let icon: String
@@ -12480,173 +12555,34 @@ struct StatItem: View {
     }
 }
 
-
-
-struct RecentBetRow: View {
-    let bet: FirestoreBet
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            // Bet Image or Fallback Icon
-            if let imageUrl = bet.image_url, !imageUrl.isEmpty {
-                AsyncImage(url: URL(string: imageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .overlay(
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        )
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                // Fallback icon based on bet type
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        Image(systemName: getBetTypeIcon(bet.bet_type))
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    )
-            }
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(bet.title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.black)
-                    .lineLimit(1)
-                
-                Text("Deadline: \(formatDate(bet.deadline))")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-            }
-            
-            Spacer()
-            
-            Text(bet.status.uppercased())
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(bet.status == "open" ? Color.green : Color.gray)
-                .cornerRadius(8)
-        }
-        .padding(12)
-        .background(Color.white)
-        .cornerRadius(12)
-    }
-    
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter.string(from: date)
-    }
-    
-    private func getBetTypeIcon(_ betType: String) -> String {
-        switch betType.lowercased() {
-        case "sports":
-            return "sportscourt.fill"
-        case "politics":
-            return "building.columns.fill"
-        case "entertainment":
-            return "tv.fill"
-        case "weather":
-            return "cloud.sun.fill"
-        case "finance":
-            return "chart.line.uptrend.xyaxis"
-        case "technology":
-            return "laptopcomputer"
-        case "health":
-            return "heart.fill"
-        case "education":
-            return "book.fill"
-        default:
-            return "questionmark.circle.fill"
-        }
-    }
-}
-
-struct BetLoadingRow: View {
-    var body: some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 40, height: 40)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 150, height: 16)
-                
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 100, height: 12)
-            }
-            
-            Spacer()
-            
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 60, height: 24)
-        }
-        .padding(12)
-        .background(Color.white)
-        .cornerRadius(12)
-    }
-}
-
-struct SettingsRow: View {
+struct CommunityPerformanceCard: View {
     let icon: String
-    let title: String
-    let subtitle: String
-    let isDestructive: Bool
-    
-    init(icon: String, title: String, subtitle: String, isDestructive: Bool = false) {
-        self.icon = icon
-        self.title = title
-        self.subtitle = subtitle
-        self.isDestructive = isDestructive
-    }
+    let value: String
+    let label: String
+    let color: Color
     
     var body: some View {
-        HStack(spacing: 12) {
+        VStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundColor(isDestructive ? .red : .slingBlue)
-                .frame(width: 24)
+                .foregroundColor(color)
             
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(isDestructive ? .red : .black)
-                
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-            }
+            Text(value)
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(color)
             
-            Spacer()
-            
-            Image(systemName: "chevron.right")
+            Text(label)
                 .font(.caption)
                 .foregroundColor(.gray)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .frame(width: 120, height: 100)
+        .padding(.vertical, 16)
         .background(Color.white)
+        .cornerRadius(12)
         .overlay(
-            Rectangle()
-                .frame(height: 0.5)
-                .foregroundColor(Color.gray.opacity(0.3)),
-            alignment: .bottom
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
     }
 }
@@ -12804,12 +12740,12 @@ struct MemberProfileView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
-                PerformanceCard(icon: "bolt.fill", value: "$608", label: "Net Balance", color: .green)
-                PerformanceCard(icon: "dollarsign.circle", value: "$2,500", label: "Total Volume", color: .black)
-                PerformanceCard(icon: "chart.line.uptrend.xyaxis", value: "$850", label: "Total P&L", color: .green)
+                PerformanceCard(icon: "bolt.fill", value: "$608", label: "Net Balance", color: .slingBlue)
+                PerformanceCard(icon: "bolt.fill", value: "$2,500", label: "Total Volume", color: .slingBlue)
+                PerformanceCard(icon: "chart.line.uptrend.xyaxis", value: "$850", label: "Total P&L", color: .slingBlue)
                 PerformanceCard(icon: "percent", value: "68%", label: "Win Rate", color: .slingBlue)
-                PerformanceCard(icon: "target", value: "35", label: "Total Bets", color: .black)
-                PerformanceCard(icon: "person.2", value: "12", label: "Bets with You", color: .purple)
+                PerformanceCard(icon: "target", value: "35", label: "Total Bets", color: .slingBlue)
+                PerformanceCard(icon: "person.2", value: "12", label: "Bets with You", color: .slingBlue)
             }
         }
         .padding(.horizontal, 16)
@@ -12958,40 +12894,6 @@ struct MemberProfileView: View {
     }
 }
 
-// MARK: - Performance Card
-
-struct PerformanceCard: View {
-    let icon: String
-    let value: String
-    let label: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(color)
-            
-            Text(value)
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(color)
-            
-            Text(label)
-                .font(.caption)
-                .foregroundColor(.gray)
-        }
-        .frame(width: 120, height: 100)
-        .padding(.vertical, 16)
-        .background(Color.white)
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
-    }
-}
-
 // MARK: - Trading Profile View
 
 struct TradingProfileView: View {
@@ -13001,28 +12903,38 @@ struct TradingProfileView: View {
     let isCurrentUser: Bool
     let firestoreService: FirestoreService
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedTab = 0 // 0 = Bets, 1 = Head-to-Head (if not current user), 2 = Settings (if current user)
+    @State private var selectedTab = 0 // 0 = Overview, 1 = Recent Bets
     @State private var userBets: [FirestoreBet] = []
     @State private var isLoadingBets = false
+    @State private var userData: FirestoreUser?
+    @State private var isLoadingUserData = false
+    @State private var showingUserSettings = false
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
                 headerSection
-                performanceSection
+                quickStatsSection
                 tabSelectorSection
                 tabContentSection
             }
-            .background(Color.white)
+        .background(Color.white)
             .navigationBarHidden(true)
             .animation(.easeInOut(duration: 0.3), value: selectedTab)
             .onAppear {
+                loadUserData()
                 loadUserBets()
             }
             .onChange(of: selectedTab) { oldValue, newValue in
-                if newValue == 0 { // All Bets tab
+                if newValue == 0 { // Overview tab
                     loadUserBets()
                 }
+            }
+            .sheet(isPresented: $showingUserSettings) {
+                UserSettingsView(
+                    userData: userData,
+                    firestoreService: firestoreService
+                )
             }
         }
     }
@@ -13030,268 +12942,209 @@ struct TradingProfileView: View {
     // MARK: - Header Section
     private var headerSection: some View {
         VStack(spacing: 0) {
-            // Header Buttons with proper spacing
-            HStack(spacing: 0) {
+            // Navigation Header
+            HStack {
                 Button(action: { dismiss() }) {
                     Image(systemName: "arrow.left")
                         .font(.title2)
-                        .foregroundColor(.slingBlue)
+                        .foregroundColor(.black)
                         .frame(width: 44, height: 44)
                 }
                 
                 Spacer()
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 12)
-            .padding(.horizontal, 16)
-            
-            // Compact Profile Card
-            HStack(spacing: 16) {
-                // Left side: Avatar + User Info
-                HStack(spacing: 12) {
-                    // Avatar
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            Text(String(userName.prefix(1)).uppercased())
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundColor(.slingBlue)
-                        )
-                    
-                    // User details
-                    VStack(alignment: .leading, spacing: 4) {
-                        // Username
-                        Text(userName)
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        
-                        // Handle
-                        if let displayName = displayName, !displayName.isEmpty {
-                            Text("@\(displayName)")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                        
-                        // Quick stats row
-                        HStack(spacing: 12) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "person.2.fill")
-                                    .font(.caption2)
-                                    .foregroundColor(.white.opacity(0.8))
-                                Text("\(getUserCommunityCount())")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "dice.fill")
-                                    .font(.caption2)
-                                    .foregroundColor(.white.opacity(0.8))
-                                Text("\(getUserBetCount())")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "calendar")
-                                    .font(.caption2)
-                                    .foregroundColor(.white.opacity(0.8))
-                                Text(getAbbreviatedDate())
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                        }
-                    }
-                }
+                
+                Text("Profile")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.black)
                 
                 Spacer()
                 
-                // Right side: Net Balance
-                VStack(alignment: .trailing, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bolt.fill")
+                if isCurrentUser {
+                    Button(action: {
+                        showingUserSettings = true
+                    }) {
+                        Image(systemName: "gearshape")
                             .font(.title3)
-                            .foregroundColor(.white)
-                        
-                        Text("$\(getUserNetBalance())")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
+                            .foregroundColor(.black)
+                            .frame(width: 44, height: 44)
                     }
-                    
-                    Text("Net Balance")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.8))
+                } else {
+                    Button(action: {
+                        // Share functionality for member profiles
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.title3)
+                            .foregroundColor(.black)
+                            .frame(width: 44, height: 44)
+                    }
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
+            .background(Color.white)
+            
+            // User Info Card
+                    VStack(spacing: 16) {
+                HStack(spacing: 16) {
+                    // Avatar
+                            Circle()
+                                .fill(Color.white)
+                        .frame(width: 56, height: 56)
+                                .overlay(
+                                    Text(String(userName.prefix(1)).uppercased())
+                                .font(.title2)
+                                        .fontWeight(.bold)
+                                .foregroundColor(.slingBlue)
+                                )
+                            
+                    VStack(alignment: .leading, spacing: 4) {
+                        // User Name
+                        Text(userData?.full_name ?? userName)
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                
+                        // Display Name
+                        Text("@\(userData?.display_name ?? displayName ?? "user")")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.9))
+                                
+                        // Member since date
+                        Text("Member since \(getAbbreviatedDate())")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                    
+                    Spacer()
+                    
+
+                }
+            }
+            .padding(20)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 16)
                     .fill(AnyShapeStyle(Color.slingGradient))
             )
             .padding(.horizontal, 16)
-            .padding(.bottom, 16)
         }
-        .frame(height: 140) // Much more compact
+        .background(Color.white)
     }
     
-    // MARK: - Performance Section
-    private var performanceSection: some View {
-        VStack(spacing: 16) {
-            Text("Performance")
+        // MARK: - Quick Stats Section
+    private var quickStatsSection: some View {
+        VStack(spacing: 12) {
+            Text("Quick Stats")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(.black)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
+                .padding(.vertical, 20)
             
-            // Performance Grid - Horizontal scroll for better layout
+            // Performance Grid - Horizontal scroll
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    if isCurrentUser {
-                        PerformanceCard(icon: "dollarsign.circle", value: "$2,500", label: "Total Volume", color: .slingBlue)
-                        PerformanceCard(icon: "percent", value: "68%", label: "Win Rate", color: .slingBlue)
-                        PerformanceCard(icon: "target", value: "35", label: "Total Bets", color: .slingBlue)
-                        PerformanceCard(icon: "bolt.fill", value: "$608", label: "Balance", color: .slingBlue)
-                    } else {
-                        PerformanceCard(icon: "percent", value: "68%", label: "Win Rate", color: .slingBlue)
-                        PerformanceCard(icon: "target", value: "35", label: "Total Bets", color: .slingBlue)
-                        PerformanceCard(icon: "person.2", value: "12", label: "Bets with You", color: .slingBlue)
-                        PerformanceCard(icon: "list.bullet.clipboard", value: "23", label: "Bets Created", color: .slingBlue)
-                    }
+                    CommunityPerformanceCard(icon: "person.2", value: "\(getUserCommunityCount())", label: "Communities", color: .slingBlue)
+                    CommunityPerformanceCard(icon: "target", value: "\(userData?.total_bets ?? 0)", label: "Total Bets", color: .slingBlue)
+                    CommunityPerformanceCard(icon: "bolt.fill", value: "$\(userData?.total_winnings ?? 0)", label: "Total Winnings", color: .slingBlue)
+                    CommunityPerformanceCard(icon: "bolt.fill", value: "\(userData?.sling_points ?? 0)", label: "Sling Points", color: .slingBlue)
+                    CommunityPerformanceCard(icon: "flame.fill", value: "\(userData?.blitz_points ?? 0)", label: "Blitz Points", color: .slingBlue)
                 }
                 .padding(.horizontal, 16)
             }
         }
-        .padding(.top, 24)
-        .padding(.bottom, 24)
+        .padding(.horizontal, 16)
     }
     
     // MARK: - Tab Selector Section
     private var tabSelectorSection: some View {
-        HStack(spacing: 0) {
+                HStack(spacing: 0) {
             Button(action: { selectedTab = 0 }) {
+                            VStack(spacing: 4) {
+                    Text("Overview")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                        .foregroundColor(selectedTab == 0 ? .slingBlue : .gray)
+                                
+                                Rectangle()
+                        .fill(selectedTab == 0 ? Color.slingBlue : Color.clear)
+                                    .frame(height: 2)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+            
+            Button(action: { selectedTab = 1 }) {
                 VStack(spacing: 4) {
-                    Text("All Bets")
+                    Text("Recent Bets")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(selectedTab == 0 ? .slingBlue : .gray)
+                        .foregroundColor(selectedTab == 1 ? .slingBlue : .gray)
                     
                     Rectangle()
-                        .fill(selectedTab == 0 ? Color.slingBlue : Color.clear)
+                        .fill(selectedTab == 1 ? Color.slingBlue : Color.clear)
                         .frame(height: 2)
                 }
             }
             .frame(maxWidth: .infinity)
-            
-            if !isCurrentUser {
-                Button(action: { selectedTab = 1 }) {
-                    VStack(spacing: 4) {
-                        Text("Head-to-Head")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(selectedTab == 1 ? .slingBlue : .gray)
-                        
-                        Rectangle()
-                            .fill(selectedTab == 1 ? Color.slingBlue : Color.clear)
-                            .frame(height: 2)
-                    }
                 }
-                .frame(maxWidth: .infinity)
-            }
-            
-            if isCurrentUser {
-                Button(action: { selectedTab = 1 }) {
-                    VStack(spacing: 4) {
-                        Text("Settings")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(selectedTab == 1 ? .slingBlue : .gray)
-                        
-                        Rectangle()
-                            .fill(selectedTab == 1 ? Color.slingBlue : Color.clear)
-                            .frame(height: 2)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.horizontal, 16)
+                .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color.white)
-        .overlay(
-            Rectangle()
-                .frame(height: 0.5)
-                .foregroundColor(Color.gray.opacity(0.3)),
-            alignment: .bottom
-        )
+                .background(Color.white)
     }
-    
+                
     // MARK: - Tab Content Section
     private var tabContentSection: some View {
-        TabView(selection: $selectedTab) {
-            allBetsTab.tag(0)
-            if !isCurrentUser {
-                headToHeadTab.tag(1)
+                TabView(selection: $selectedTab) {
+            overviewTab.tag(0)
+            recentBetsTab.tag(1)
+                }
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
             }
-            if isCurrentUser {
-                settingsTab.tag(1)
+    
+    // MARK: - Tab Content Views
+    private var overviewTab: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Overview content can be added here
+                VStack(spacing: 16) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 48))
+                        .foregroundColor(.gray.opacity(0.6))
+                    
+                    Text("Profile Overview")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    Text("Your trading performance and community activity")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 60)
+                .padding(.horizontal, 16)
             }
         }
-        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
     }
     
-
-    
-    private var allBetsTab: some View {
+    private var recentBetsTab: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                Text("All Bets")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                
+            LazyVStack(spacing: 16) {
                 if isLoadingBets {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .scaleEffect(1.2)
-                        Text("Loading bets...")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
+                    ForEach(0..<3, id: \.self) { _ in
+                        BetLoadingRow()
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
                 } else if userBets.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "list.bullet.clipboard")
-                            .font(.system(size: 48))
-                            .foregroundColor(.gray.opacity(0.6))
-                        Text("No bets yet")
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.gray)
-                        Text("When you create bets, they'll appear here")
-                            .font(.subheadline)
-                            .foregroundColor(.gray.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
+                    EmptyActiveBetsView(firestoreService: firestoreService)
                 } else {
-                    // Display actual bets
-                    ForEach(userBets, id: \.id) { bet in
+                    ForEach(userBets.prefix(5), id: \.id) { bet in
                         RecentBetRow(bet: bet)
                     }
                 }
             }
+            .padding(.horizontal, 16)
             .padding(.vertical, 20)
         }
         .refreshable {
@@ -13299,80 +13152,7 @@ struct TradingProfileView: View {
         }
     }
     
-    private var headToHeadTab: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                Text("Head-to-Head")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                
-                Text("Compare your performance with other users")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-            }
-            .padding(.vertical, 20)
-        }
-    }
-    
-    private var settingsTab: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                Text("Settings")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                
-                // Settings Options
-                VStack(spacing: 12) {
-                    SettingsRow(
-                        icon: "person.circle",
-                        title: "Edit Profile",
-                        subtitle: "Update your personal information"
-                    )
-                    
-                    SettingsRow(
-                        icon: "bell",
-                        title: "Notifications",
-                        subtitle: "Manage notification preferences"
-                    )
-                    
-                    SettingsRow(
-                        icon: "lock",
-                        title: "Privacy",
-                        subtitle: "Control your privacy settings"
-                    )
-                    
-                    SettingsRow(
-                        icon: "gear",
-                        title: "Preferences",
-                        subtitle: "Customize your app experience"
-                    )
-                    
-                    SettingsRow(
-                        icon: "questionmark.circle",
-                        title: "Help & Support",
-                        subtitle: "Get help and contact support"
-                    )
-                    
-                    SettingsRow(
-                        icon: "arrow.right.square",
-                        title: "Sign Out",
-                        subtitle: "Sign out of your account",
-                        isDestructive: true
-                    )
-                }
-                .padding(.horizontal, 16)
-            }
-            .padding(.vertical, 20)
-        }
-    }
+
     
     // MARK: - Helper Methods
     private func loadUserBets() {
@@ -13386,10 +13166,6 @@ struct TradingProfileView: View {
             bet.creator_email == userEmail
         }
         
-        // For now, we'll focus on bets the user created
-        // In the future, you can expand this to include bets the user participated in
-        // by checking a participants array or similar field in your FirestoreBet model
-        
         // Sort by creation date (newest first)
         let sortedBets = userCreatedBets.sorted { $0.created_date > $1.created_date }
         
@@ -13400,7 +13176,6 @@ struct TradingProfileView: View {
     }
     
     private func refreshBets() async {
-        // Refresh the bets data
         await MainActor.run {
             loadUserBets()
         }
@@ -13411,7 +13186,6 @@ struct TradingProfileView: View {
     }
     
     private func getUserCommunityCount() -> Int {
-        // Count communities where the user is a member
         return firestoreService.userCommunities.count
     }
     
@@ -13421,23 +13195,2073 @@ struct TradingProfileView: View {
         return formatter.string(from: Date())
     }
     
-    private func getUserNetBalance() -> String {
-        // For now, return a placeholder value
-        // This should be calculated from actual user data
-        return "608"
-    }
-    
-    private func tabTitle(for index: Int) -> String {
-        switch index {
-        case 0: return "All Bets"
-        case 1: return "Head-to-Head"
-        case 2: return "Settings"
-        default: return ""
+    private func loadUserData() {
+        isLoadingUserData = true
+        
+        Task {
+            do {
+                let user = try await firestoreService.getUser(userId: userId)
+                await MainActor.run {
+                    self.userData = user
+                    self.isLoadingUserData = false
+                    
+                    // Log all user data from Firestore
+                    print("📱 User Profile Data Loaded:")
+                    print("   User ID: \(user.id ?? "nil")")
+                    print("   UID: \(user.uid ?? "nil")")
+                    print("   Email: \(user.email)")
+                    print("   First Name: \(user.first_name ?? "nil")")
+                    print("   Last Name: \(user.last_name ?? "nil")")
+                    print("   Full Name: \(user.full_name ?? "nil")")
+                    print("   Display Name: \(user.display_name ?? "nil")")
+                    print("   Sling Points: \(user.sling_points ?? 0)")
+                    print("   Blitz Points: \(user.blitz_points ?? 0)")
+                    print("   Total Bets: \(user.total_bets ?? 0)")
+                    print("   Total Winnings: \(user.total_winnings ?? 0)")
+                    print("   Document ID: \(user.documentId ?? "nil")")
+                    
+                    // Log computed properties
+                    print("   Computed Display Name: \(user.displayName)")
+                    print("   Computed First Name: \(user.firstName ?? "nil")")
+                    print("   Computed Last Name: \(user.lastName ?? "nil")")
+                }
+            } catch {
+                print("❌ Error loading user data: \(error)")
+                await MainActor.run {
+                    self.isLoadingUserData = false
+                }
+            }
         }
     }
 }
 
 // MARK: - Supporting Views for Trading Profile
+
+struct UserSettingsView: View {
+    let userData: FirestoreUser?
+    let firestoreService: FirestoreService
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingEditProfile = false
+    @State private var showingDeleteAccount = false
+    @State private var showingSignOut = false
+    @State private var darkModeEnabled = false
+    @State private var showingPushNotifications = false
+    @State private var showingEmailNotifications = false
+    @State private var showingProfileVisibility = false
+    @State private var showingChangePassword = false
+    @State private var showingLanguageSettings = false
+    @State private var showingContactSupport = false
+    @State private var showingTermsOfService = false
+    @State private var showingPrivacyPolicy = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                headerSection
+                
+                // Settings Content
+        ScrollView {
+                    VStack(spacing: 24) {
+                        // Profile Section
+                        profileSection
+                        
+                        // Notifications Section
+                        notificationsSection
+                        
+                        // Privacy & Security Section
+                        privacySecuritySection
+                        
+                        // App Preferences Section
+                        appPreferencesSection
+                        
+                        // Account Management Section
+                        accountManagementSection
+                        
+                        // Support Section
+                        supportSection
+                        
+                        // Danger Zone
+                        dangerZoneSection
+                }
+                .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+            .sheet(isPresented: $showingEditProfile) {
+                EditProfileView(firestoreService: firestoreService)
+            }
+
+            .sheet(isPresented: $showingPushNotifications) {
+                PushNotificationsView()
+            }
+            .sheet(isPresented: $showingEmailNotifications) {
+                EmailNotificationsView()
+            }
+
+            .sheet(isPresented: $showingProfileVisibility) {
+                ProfileVisibilityView()
+            }
+            .sheet(isPresented: $showingChangePassword) {
+                ChangePasswordView()
+            }
+            .sheet(isPresented: $showingLanguageSettings) {
+                LanguageSettingsView()
+            }
+            .sheet(isPresented: $showingContactSupport) {
+                ContactSupportView()
+            }
+
+            .sheet(isPresented: $showingTermsOfService) {
+                TermsOfServiceView()
+            }
+            .sheet(isPresented: $showingPrivacyPolicy) {
+                PrivacyPolicyView()
+            }
+
+            .sheet(isPresented: $showingDeleteAccount) {
+                DeleteAccountView()
+            }
+            .sheet(isPresented: $showingSignOut) {
+                SignOutView()
+            }
+        }
+    }
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        HStack {
+            Button(action: { dismiss() }) {
+                Image(systemName: "arrow.left")
+                    .font(.title2)
+                    .foregroundColor(.slingBlue)
+                    .frame(width: 44, height: 44)
+            }
+            
+            Spacer()
+            
+            Text("Settings")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.black)
+            
+            Spacer()
+            
+            Button(action: { dismiss() }) {
+                Image(systemName: "xmark")
+                    .font(.title2)
+                    .foregroundColor(.gray)
+                    .frame(width: 44, height: 44)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 20)
+        .background(Color.white)
+    }
+    
+    // MARK: - Profile Section
+    private var profileSection: some View {
+                VStack(spacing: 16) {
+            HStack {
+                Text("Profile")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                Spacer()
+            }
+            
+            VStack(spacing: 0) {
+                Button(action: {
+                    showingEditProfile = true
+                }) {
+                    SettingsRow(icon: "person.circle", title: "Edit Profile", subtitle: "Update your personal information", isDestructive: false)
+                }
+                Divider().padding(.leading, 56)
+                Button(action: {
+                    showingChangePassword = true
+                }) {
+                    SettingsRow(icon: "key", title: "Change Password", subtitle: "Update your password", isDestructive: false)
+                }
+            }
+            .background(Color.white)
+            .cornerRadius(12)
+        }
+    }
+    
+    // MARK: - Notifications Section
+    private var notificationsSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Notifications")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                Spacer()
+            }
+            
+            VStack(spacing: 0) {
+                Button(action: {
+                    showingPushNotifications = true
+                }) {
+                    SettingsRow(icon: "bell", title: "Push Notifications", subtitle: "Bet updates and community alerts", isDestructive: false)
+                }
+                Divider().padding(.leading, 56)
+                Button(action: {
+                    showingEmailNotifications = true
+                }) {
+                    SettingsRow(icon: "envelope", title: "Email Notifications", subtitle: "Weekly summaries and updates", isDestructive: false)
+                }
+            }
+            .background(Color.white)
+            .cornerRadius(12)
+        }
+    }
+    
+    // MARK: - Privacy & Security Section
+    private var privacySecuritySection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Privacy & Security")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                Spacer()
+            }
+            
+            VStack(spacing: 0) {
+                Button(action: {
+                    showingProfileVisibility = true
+                }) {
+                    SettingsRow(icon: "eye", title: "Profile Visibility", subtitle: "What's displayed on your profile page", isDestructive: false)
+                }
+            }
+            .background(Color.white)
+            .cornerRadius(12)
+        }
+    }
+    
+    // MARK: - App Preferences Section
+    private var appPreferencesSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("App Preferences")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                Spacer()
+            }
+            
+            VStack(spacing: 0) {
+                HStack {
+                    SettingsRow(icon: "moon.fill", title: "Dark Mode", subtitle: "Switch to dark theme", isDestructive: false, showArrow: false)
+                    Spacer()
+                    Toggle("", isOn: $darkModeEnabled)
+                        .labelsHidden()
+                        .scaleEffect(0.8)
+                        .tint(.slingBlue)
+                }
+            }
+            .background(Color.white)
+            .cornerRadius(12)
+        }
+    }
+    
+    // MARK: - Account Management Section
+    private var accountManagementSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Account Management")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                Spacer()
+            }
+            
+            VStack(spacing: 0) {
+                Button(action: {
+                    showingLanguageSettings = true
+                }) {
+                    SettingsRow(icon: "globe", title: "Language", subtitle: "English", isDestructive: false)
+                }
+            }
+            .background(Color.white)
+            .cornerRadius(12)
+        }
+    }
+    
+    // MARK: - Support Section
+    private var supportSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Help & Support")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                Spacer()
+            }
+            
+            VStack(spacing: 0) {
+                Button(action: {
+                    showingContactSupport = true
+                }) {
+                    SettingsRow(icon: "message", title: "Contact Us", subtitle: "Get help from our team", isDestructive: false)
+                }
+                Divider().padding(.leading, 56)
+                Button(action: {
+                    showingTermsOfService = true
+                }) {
+                    SettingsRow(icon: "doc.text", title: "Terms of Service", subtitle: "Read our terms and conditions", isDestructive: false)
+                }
+                Divider().padding(.leading, 56)
+                Button(action: {
+                    showingPrivacyPolicy = true
+                }) {
+                    SettingsRow(icon: "hand.raised", title: "Privacy Policy", subtitle: "Learn about data privacy", isDestructive: false)
+                }
+            }
+            .background(Color.white)
+            .cornerRadius(12)
+        }
+    }
+    
+    // MARK: - Danger Zone Section
+    private var dangerZoneSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Danger Zone")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.red)
+                Spacer()
+            }
+            
+            VStack(spacing: 0) {
+                Button(action: {
+                    showingSignOut = true
+                }) {
+                    SettingsRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", subtitle: "Sign out of your account", isDestructive: true)
+                }
+                Divider().padding(.leading, 56)
+                Button(action: {
+                    showingDeleteAccount = true
+                }) {
+                    SettingsRow(icon: "trash", title: "Delete Account", subtitle: "Permanently delete your account", isDestructive: true)
+                }
+            }
+            .background(Color.white)
+            .cornerRadius(12)
+        }
+    }
+}
+
+
+
+// MARK: - Profile Picture View
+struct ProfilePictureView: View {
+    let userData: FirestoreUser?
+    let firestoreService: FirestoreService
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Profile Picture")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                // Content
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Current Picture
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Current Picture")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 120, height: 120)
+                                .overlay(
+                                    Text(String(userData?.full_name?.prefix(1) ?? "U").uppercased())
+                                        .font(.largeTitle)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.slingBlue)
+                                )
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.slingBlue, lineWidth: 3)
+                                )
+                        }
+                        .padding(20)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        
+                        // Upload Options
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Upload New Picture")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 12) {
+                                Button(action: {
+                                    // TODO: Implement camera capture
+                                    print("Camera tapped")
+                                }) {
+                                    HStack {
+                                        Image(systemName: "camera")
+                                            .font(.title2)
+                                            .foregroundColor(.slingBlue)
+                                        Text("Take Photo")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.black)
+                                        Spacer()
+                                    }
+                                    .padding(16)
+                                    .background(Color.white)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                }
+                                
+                                Button(action: {
+                                    // TODO: Implement photo library
+                                    print("Photo library tapped")
+                                }) {
+                                    HStack {
+                                        Image(systemName: "photo.on.rectangle")
+                                            .font(.title2)
+                                            .foregroundColor(.slingBlue)
+                                        Text("Choose from Library")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.black)
+                                        Spacer()
+                                    }
+                                    .padding(16)
+                                    .background(Color.white)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                }
+                            }
+                        }
+                        .padding(20)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal, 16)
+            .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// MARK: - Push Notifications View
+struct PushNotificationsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var betUpdates = true
+    @State private var communityAlerts = true
+    @State private var newMessages = true
+    @State private var weeklySummaries = false
+    @State private var newMembersJoined = true
+    @State private var membersLeft = true
+    @State private var hotBetsTrending = true
+    @State private var outstandingBalances = true
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Push Notifications")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                // Content
+        ScrollView {
+                    VStack(spacing: 24) {
+            VStack(spacing: 16) {
+                            HStack {
+                                Text("Bet & Community")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 0) {
+                                HStack {
+                                    SettingsRow(icon: "target", title: "Bet Updates", subtitle: "Get notified about your bets", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $betUpdates)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "person.3", title: "Community Alerts", subtitle: "New community activities", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $communityAlerts)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "message", title: "New Messages", subtitle: "Direct messages and mentions", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $newMessages)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $weeklySummaries)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                        
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Community Updates")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 0) {
+                                HStack {
+                                    SettingsRow(icon: "person.badge.plus", title: "New Members Joined", subtitle: "When someone joins your community", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $newMembersJoined)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "person.badge.minus", title: "Members Left", subtitle: "When someone leaves your community", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $membersLeft)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "flame.fill", title: "Hot Bets Trending", subtitle: "Popular bets in your communities", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $hotBetsTrending)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "exclamationmark.triangle", title: "Outstanding Balances", subtitle: "Updates on pending balances", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $outstandingBalances)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// MARK: - Email Notifications View
+struct EmailNotificationsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var weeklySummaries = true
+    @State private var betResults = true
+    @State private var communityUpdates = false
+    @State private var promotionalEmails = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Email Notifications")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                // Content
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Email Preferences")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 0) {
+                                HStack {
+                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $weeklySummaries)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "target", title: "Bet Results", subtitle: "Final outcomes of your bets", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $betResults)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "person.3", title: "Community Updates", subtitle: "New community activities", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $communityUpdates)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "megaphone", title: "Promotional Emails", subtitle: "Special offers and updates", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $promotionalEmails)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+            .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// MARK: - Sound Settings View
+struct SoundSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var soundEnabled = true
+    @State private var vibrationEnabled = true
+    @State private var soundVolume: Double = 0.7
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Sound & Vibration")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                // Content
+        ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Sound Settings")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 0) {
+                                HStack {
+                                    SettingsRow(icon: "speaker.wave.2", title: "Sound", subtitle: "Enable notification sounds", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $soundEnabled)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "iphone.radiowaves.left.and.right", title: "Vibration", subtitle: "Enable haptic feedback", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $vibrationEnabled)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("Volume")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.black)
+                                        Spacer()
+                                        Text("\(Int(soundVolume * 100))%")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                    Slider(value: $soundVolume, in: 0...1)
+                                        .accentColor(.slingBlue)
+                                }
+                    .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// MARK: - Simple Placeholder Views for Other Settings
+struct ProfileVisibilityView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var showPointBalance = true
+    @State private var showTotalWinnings = true
+    @State private var showTotalBets = true
+    @State private var showSlingPoints = true
+    @State private var showBlitzPoints = true
+    @State private var showCommunities = true
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Profile Visibility")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Profile Content Display")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 0) {
+                                HStack {
+                                    SettingsRow(icon: "bolt.fill", title: "Point Balance", subtitle: "Show your current point balance", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $showPointBalance)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "dollarsign.circle", title: "Total Winnings", subtitle: "Display your total winnings", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $showTotalWinnings)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "target", title: "Total Bets", subtitle: "Show your bet count", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $showTotalBets)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "bolt.fill", title: "Sling Points", subtitle: "Display Sling Points", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $showSlingPoints)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "flame.fill", title: "Blitz Points", subtitle: "Display Blitz Points", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $showBlitzPoints)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                                Divider().padding(.leading, 56)
+                                HStack {
+                                    SettingsRow(icon: "person.2", title: "Communities", subtitle: "Show your community count", isDestructive: false)
+                                    Spacer()
+                                    Toggle("", isOn: $showCommunities)
+                                        .labelsHidden()
+                                        .tint(.slingBlue)
+                                }
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                            .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct AccountPrivacyView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Account Privacy")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Privacy Settings")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 0) {
+                                SettingsRow(icon: "eye", title: "Show Online Status", subtitle: "Let others see when you're online", isDestructive: false)
+                                Divider().padding(.leading, 56)
+                                SettingsRow(icon: "location", title: "Location Sharing", subtitle: "Share your location with friends", isDestructive: false)
+                                Divider().padding(.leading, 56)
+                                SettingsRow(icon: "chart.bar", title: "Activity Statistics", subtitle: "Show your betting statistics", isDestructive: false)
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct ChangePasswordView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var currentPassword = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+    @State private var isChanging = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Change Password")
+                .font(.title2)
+                .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Password Change")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 16) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Current Password")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                    
+                                    SecureField("Enter current password", text: $currentPassword)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .font(.body)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("New Password")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                    
+                                    SecureField("Enter new password", text: $newPassword)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .font(.body)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Confirm New Password")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                    
+                                    SecureField("Confirm new password", text: $confirmPassword)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .font(.body)
+                                }
+                            }
+                            .padding(20)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                            
+                            Button(action: changePassword) {
+                                HStack {
+                                    if isChanging {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Text("Change Password")
+                                            .font(.headline)
+                                            .fontWeight(.semibold)
+                                    }
+                                }
+                                .foregroundColor(.white)
+        .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Color.slingBlue)
+                                .cornerRadius(12)
+                            }
+                            .disabled(isChanging)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+    
+    private func changePassword() {
+        isChanging = true
+        // TODO: Implement password change
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            isChanging = false
+            dismiss()
+        }
+    }
+}
+
+// MARK: - Remaining Placeholder Views
+
+
+struct ExportDataView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Export Data")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Data Export Options")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 0) {
+                                SettingsRow(icon: "doc.text", title: "Betting History", subtitle: "Export all your betting data", isDestructive: false)
+                                Divider().padding(.leading, 56)
+                                SettingsRow(icon: "person.3", title: "Community Data", subtitle: "Export community participation", isDestructive: false)
+                                Divider().padding(.leading, 56)
+                                SettingsRow(icon: "chart.bar", title: "Statistics", subtitle: "Export performance analytics", isDestructive: false)
+                            }
+        .background(Color.white)
+        .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct LanguageSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedLanguage = "English"
+    
+    let languages = ["English", "Spanish", "French", "German", "Chinese", "Japanese"]
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+        HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Language")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Select Language")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 0) {
+                                ForEach(languages, id: \.self) { language in
+                                    HStack {
+                                        SettingsRow(icon: "globe", title: language, subtitle: "", isDestructive: false)
+                                        Spacer()
+                                        if selectedLanguage == language {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.slingBlue)
+                                                .font(.caption)
+                                                .scaleEffect(0.8)
+                                        }
+                                    }
+                                    if language != languages.last {
+                                        Divider().padding(.leading, 56)
+                                    }
+                                }
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// MARK: - Contact Us View
+struct ContactSupportView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var messageText = ""
+    @State private var subject = ""
+    @State private var isSubmitting = false
+    @State private var showSuccessAlert = false
+    @State private var showErrorAlert = false
+    @State private var errorMessage = ""
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Contact Us")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Send us a message")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 16) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Subject")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                    
+                                    TextField("Enter subject", text: $subject)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 12)
+                                        .background(Color.white)
+                                        .cornerRadius(8)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Message")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                    
+                                    TextEditor(text: $messageText)
+                                        .frame(minHeight: 120)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 12)
+                                        .background(Color.white)
+                                        .cornerRadius(8)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                        )
+                                }
+                                
+                                Button(action: submitContactRequest) {
+                                    HStack {
+                                        if isSubmitting {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                                .scaleEffect(0.8)
+                                        } else {
+                                            Text("Submit Request")
+                                                .font(.headline)
+                                                .fontWeight(.semibold)
+                                        }
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(Color.slingBlue)
+                                    .cornerRadius(12)
+                                }
+                                .disabled(messageText.isEmpty || subject.isEmpty || isSubmitting)
+                                .opacity(messageText.isEmpty || subject.isEmpty ? 0.6 : 1.0)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 20)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+            .alert("Success", isPresented: $showSuccessAlert) {
+                Button("OK") {
+                    dismiss()
+                }
+            } message: {
+                Text("Your message has been sent successfully. We'll get back to you soon!")
+            }
+            .alert("Error", isPresented: $showErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text(errorMessage)
+            }
+        }
+    }
+    
+    private func submitContactRequest() {
+        guard !messageText.isEmpty && !subject.isEmpty else { return }
+        
+        isSubmitting = true
+        
+        // Create contact request data
+        let contactData: [String: Any] = [
+            "subject": subject,
+            "message": messageText,
+            "timestamp": Date(),
+            "status": "pending",
+            "deviceInfo": getDeviceInfo(),
+            "consoleLogs": getConsoleLogs()
+        ]
+        
+        // Here you would save to Firestore "Contact" collection
+        // For now, we'll simulate the submission
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            isSubmitting = false
+            showSuccessAlert = true
+        }
+    }
+    
+    private func getDeviceInfo() -> String {
+        let device = UIDevice.current
+        return "\(device.model) - \(device.systemName) \(device.systemVersion)"
+    }
+    
+    private func getConsoleLogs() -> String {
+        // In a real app, you might want to capture console logs
+        // For now, return a placeholder
+        return "Console logs captured at \(Date())"
+    }
+}
+
+struct RateAppView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Rate App")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Rate SlingApp")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 16) {
+                                HStack {
+                                    Spacer()
+                                    VStack(spacing: 8) {
+                                        Image(systemName: "star.fill")
+                                            .font(.largeTitle)
+                                            .foregroundColor(.yellow)
+                                        Text("Rate us on the App Store")
+                                            .font(.headline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.black)
+                                        Text("Your feedback helps us improve")
+                .font(.subheadline)
+                                            .foregroundColor(.gray)
+                                    }
+                                    Spacer()
+                                }
+                                
+                                Button(action: {
+                                    // TODO: Open App Store rating
+                                    print("Open App Store rating")
+                                }) {
+                                    Text("Rate Now")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 50)
+                                        .background(Color.slingBlue)
+                                        .cornerRadius(12)
+                                }
+                            }
+                            .padding(20)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct TermsOfServiceView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Terms of Service")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                .foregroundColor(.black)
+            
+            Spacer()
+            
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Terms & Conditions")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            Text("By using SlingApp, you agree to our terms of service...")
+                                .font(.body)
+                                .foregroundColor(.black)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct PrivacyPolicyView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Privacy Policy")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Privacy Information")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            Text("SlingApp is committed to protecting your privacy...")
+                                .font(.body)
+                                .foregroundColor(.black)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct AboutAppView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("About SlingApp")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("App Information")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 16) {
+                                HStack {
+                                    Spacer()
+                                    VStack(spacing: 8) {
+                                        Image(systemName: "bolt.fill")
+                                            .font(.largeTitle)
+                                            .foregroundColor(.slingBlue)
+                                        Text("SlingApp")
+                                            .font(.title)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.black)
+                                        Text("Version 1.0.0")
+                .font(.subheadline)
+                                            .foregroundColor(.gray)
+                                    }
+                                    Spacer()
+                                }
+                                
+                                VStack(spacing: 12) {
+                                    SettingsRow(icon: "doc.text", title: "Build Number", subtitle: "2024.1.0", isDestructive: false)
+                                    Divider().padding(.leading, 56)
+                                    SettingsRow(icon: "calendar", title: "Release Date", subtitle: "January 2024", isDestructive: false)
+                                    Divider().padding(.leading, 56)
+                                    SettingsRow(icon: "person.2", title: "Developer", subtitle: "SlingApp Team", isDestructive: false)
+                                }
+                                .background(Color.white)
+                                .cornerRadius(12)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct DeleteAccountView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Delete Account")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.red)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("⚠️ Warning")
+                                    .font(.headline)
+                .fontWeight(.semibold)
+                                    .foregroundColor(.red)
+                                Spacer()
+                            }
+                            
+                            Text("This action cannot be undone. All your data, bets, and community memberships will be permanently deleted.")
+                                .font(.body)
+                .foregroundColor(.black)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                            
+                            Button(action: {
+                                // TODO: Implement account deletion
+                                print("Delete account")
+                            }) {
+                                Text("Delete Account")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 50)
+                                    .background(Color.red)
+                                    .cornerRadius(12)
+                            }
+                        }
+        }
+        .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct SignOutView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Sign Out")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+                .background(Color.white)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Sign Out Confirmation")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            Text("Are you sure you want to sign out? You'll need to sign in again to access your account.")
+                                .font(.body)
+                                .foregroundColor(.black)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white)
+        .cornerRadius(12)
+                            
+                            Button(action: {
+                                // TODO: Implement sign out
+                                print("Sign out")
+                                dismiss()
+                            }) {
+                                Text("Sign Out")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 50)
+                                    .background(Color.slingBlue)
+                                    .cornerRadius(12)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct MemberRowView: View {
+    let memberWithPoints: CommunityMemberWithPoints
+    let rank: Int
+    let onTap: () -> Void
+    @State private var userFullName: String?
+    @State private var isLoadingUserData = false
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                // Ranking number
+                Text("\(rank)")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.gray)
+                    .frame(width: 16, alignment: .center)
+                
+                // Profile Picture
+                Circle()
+                    .fill(AnyShapeStyle(Color.slingGradient))
+                    .frame(width: 40, height: 40)
+        .overlay(
+                        Text(String(memberWithPoints.name.prefix(1)).uppercased())
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    )
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        if isLoadingUserData {
+                            Text("Loading...")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.gray)
+                        } else {
+                            Text(userFullName ?? memberWithPoints.name)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.black)
+                        }
+                        
+                        // Admin badge
+                        if memberWithPoints.isAdmin {
+                            HStack(spacing: 2) {
+                                Image(systemName: "crown.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.purple)
+                                Text("Admin")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.purple)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.purple.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                // Net points on the right
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.fill")
+                        .font(.caption)
+                        .foregroundColor(memberWithPoints.netPoints >= 0 ? .green : .red)
+                    
+                    Text("\(String(format: "%.0f", memberWithPoints.netPoints))")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(memberWithPoints.netPoints >= 0 ? .green : .red)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    (memberWithPoints.netPoints >= 0 ? Color.green : Color.red).opacity(0.1)
+                )
+                .cornerRadius(8)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.white)
+            .cornerRadius(12)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .onAppear {
+            loadUserFullName()
+        }
+    }
+    
+    private func loadUserFullName() {
+        guard userFullName == nil && !isLoadingUserData else { return }
+        
+        isLoadingUserData = true
+        
+        Task {
+            do {
+                let user = try await FirestoreService().getUser(userId: memberWithPoints.email)
+                await MainActor.run {
+                    self.userFullName = user.full_name
+                    self.isLoadingUserData = false
+                }
+            } catch {
+                print("❌ Error loading user full name for \(memberWithPoints.email): \(error)")
+                await MainActor.run {
+                    self.isLoadingUserData = false
+                }
+            }
+        }
+    }
+}
 
 struct BetHistoryRow: View {
     let title: String
@@ -13480,5 +15304,157 @@ struct BetHistoryRow: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
+    }
+}
+
+struct BetLoadingRow: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 40, height: 40)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 150, height: 16)
+                
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 100, height: 12)
+            }
+            
+            Spacer()
+            
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 60, height: 24)
+        }
+        .padding(12)
+        .background(Color.white)
+        .cornerRadius(12)
+    }
+}
+
+struct PerformanceCard: View {
+    let icon: String
+    let value: String
+    let label: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(color)
+            
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.gray)
+        }
+        .frame(width: 120, height: 100)
+        .padding(.vertical, 16)
+        .background(Color.white)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+struct RecentBetRow: View {
+    let bet: FirestoreBet
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Bet Image or Fallback Icon
+            if let imageUrl = bet.image_url, !imageUrl.isEmpty {
+                AsyncImage(url: URL(string: imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        )
+                }
+                .frame(width: 40, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                // Fallback icon based on bet type
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Image(systemName: getBetTypeIcon(bet.bet_type))
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    )
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(bet.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.black)
+                    .lineLimit(1)
+                
+                Text("Deadline: \(formatDate(bet.deadline))")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            Text(bet.status.uppercased())
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(bet.status == "open" ? Color.green : Color.gray)
+                .cornerRadius(8)
+        }
+        .padding(12)
+        .background(Color.white)
+        .cornerRadius(12)
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+    
+    private func getBetTypeIcon(_ betType: String) -> String {
+        switch betType.lowercased() {
+        case "sports":
+            return "sportscourt.fill"
+        case "politics":
+            return "building.columns.fill"
+        case "entertainment":
+            return "tv.fill"
+        case "weather":
+            return "cloud.sun.fill"
+        case "finance":
+            return "chart.line.uptrend.xyaxis"
+        case "technology":
+            return "laptopcomputer"
+        case "health":
+            return "heart.fill"
+        case "education":
+            return "book.fill"
+        default:
+            return "questionmark.circle.fill"
+        }
     }
 }
