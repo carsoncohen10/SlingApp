@@ -2,6 +2,8 @@ import SwiftUI
 import Firebase
 import FirebaseCore
 
+
+
 struct ContentView: View {
     @StateObject var firestoreService = FirestoreService()
     @State private var hasShownLoading = false

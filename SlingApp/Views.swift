@@ -9,7 +9,7 @@ extension Color {
     static let slingPurple = Color(uiColor: UIColor(red: 0x4E/255, green: 0x46/255, blue: 0xE5/255, alpha: 1.0))
     static let slingGradient: LinearGradient = LinearGradient(
         colors: [Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)), 
-                 Color(uiColor: UIColor(red: 0x4E/255, green: 0x46/255, blue: 0xE5/255, alpha: 1.0))],
+                 Color(uiColor: UIColor(red: 0x4E/255, green: 0x46/255, blue: 0xEB/255, alpha: 1.0))],
         startPoint: .leading,
         endPoint: .trailing
     )
@@ -10157,7 +10157,7 @@ struct BettingInterfaceView: View {
     
     // Computed properties for validation
     private var currentBalance: Int {
-        firestoreService.currentUser?.sling_points ?? 0
+        firestoreService.currentUser?.blitz_points ?? 0
     }
     
     private var betAmountDouble: Double {
