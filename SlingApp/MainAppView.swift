@@ -2,7 +2,7 @@ import SwiftUI
 
 struct MainAppView: View {
     @ObservedObject var firestoreService: FirestoreService
-    @State private var selectedTab = 0 // 0 = Home, 1 = Chat, 2 = My Bets, 3 = Communities, 4 = Profile
+    @State private var selectedTab = 0 // 0 = Home, 1 = Chat, 2 = My Bets, 3 = Communities
     @State private var shouldNavigateToCommunities = false
     @State private var showingCreateBetModal = false
     @State private var showingJoinCommunityModal = false
@@ -59,9 +59,6 @@ struct MainAppView: View {
                         CommunitiesView(firestoreService: firestoreService, onNavigateToHome: { communityName in
                             navigateToHomeWithFilter(communityName)
                         })
-                    case 4:
-                        // Profile View
-                        ProfileView(firestoreService: firestoreService, showingEditProfile: $showingEditProfile)
                     default:
                         EmptyView()
                     }
@@ -157,18 +154,6 @@ struct MainAppView: View {
                             .font(.caption)
                         }
                         .foregroundColor(selectedTab == 3 ? Color.slingBlue : .gray)
-                        .frame(maxWidth: .infinity)
-                    }
-                    
-                    // Profile Tab
-                    Button(action: { selectedTab = 4 }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: selectedTab == 4 ? "person.circle.fill" : "person.circle")
-                                .font(.title2)
-                                                    // Text removed
-                            .font(.caption)
-                        }
-                        .foregroundColor(selectedTab == 4 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
                     }
                 }
