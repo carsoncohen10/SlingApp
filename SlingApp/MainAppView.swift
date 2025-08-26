@@ -121,6 +121,24 @@ struct MainAppView: View {
                         .frame(maxWidth: .infinity)
                     }
                     
+                    // Create Bet Button (Plus Sign)
+                    Button(action: {
+                        showingCreateBetModal = true
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .frame(width: 56, height: 56)
+                                .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                            
+                            Image(systemName: "plus")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(width: 56, height: 56)
+                    
                     // My Bets Tab
                     Button(action: { selectedTab = 2 }) {
                         VStack(spacing: 4) {
@@ -683,17 +701,14 @@ struct HomeView: View {
         print("-" + String(repeating: "-", count: 80))
         
         // Analyze all bets
-        for (index, bet) in firestoreService.bets.enumerated() {
+        for bet in firestoreService.bets {
             let isOpen = bet.status.lowercased() == "open"
             let notExpired = bet.deadline > currentTime
-            let timeDiff = bet.deadline.timeIntervalSince(currentTime)
-            let hoursDiff = timeDiff / 3600
-        
             
             // Check community filter
             if selectedFilter != "All Bets" {
                 if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
-                    let nameMatches = community.name == selectedFilter
+                    _ = community.name == selectedFilter
                 } else {
                     print("    - Community: NOT FOUND")
                 }
@@ -749,37 +764,9 @@ struct HomeView: View {
     
 
     
-    // MARK: - Floating Plus Button
-    
-    private var floatingPlusButton: some View {
-        VStack {
-            Spacer()
-            HStack {
-                Spacer()
-                Button(action: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        showingCreateBet = true
-                    }
-                }) {
-                    Image(systemName: "plus")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .frame(width: 56, height: 56)
-                        .background(Color.slingGradient)
-                        .clipShape(Circle())
-                        .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-                }
-                .padding(.trailing, 24)
-                .padding(.bottom, 20) // Positioned right on top of tab bar
-            }
-        }
-    }
-    
 
     
 
-    
     var body: some View {
         mainContent
             .background(Color.white)
@@ -805,7 +792,6 @@ struct HomeView: View {
                     firestoreService: firestoreService
                 )
             }
-            .overlay(floatingPlusButton)
     }
     
     private func getUserFullName() -> String {
