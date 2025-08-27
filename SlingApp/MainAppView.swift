@@ -863,12 +863,7 @@ struct HomeBetCard: View {
                                 .font(.caption)
                                 .foregroundColor(.gray)
                             
-                            Text(communityName)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.gray)
-                            
-                            Text("• by \(currentUserEmail == bet.creator_email ? "You" : creatorName)")
+                            Text("\(communityName) • by \(currentUserEmail == bet.creator_email ? "You" : formatCreatorName(creatorName))")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                         }
@@ -980,6 +975,20 @@ struct HomeBetCard: View {
                     self.creatorName = bet.creator_email.components(separatedBy: "@").first ?? bet.creator_email
                 }
             }
+        }
+    }
+    
+    private func formatCreatorName(_ fullName: String) -> String {
+        let components = fullName.components(separatedBy: " ")
+        if components.count >= 2 {
+            let firstName = components[0]
+            let lastName = components[1]
+            let lastInitial = String(lastName.prefix(1))
+            return "\(firstName) \(lastInitial)."
+        } else if components.count == 1 {
+            return components[0]
+        } else {
+            return fullName
         }
     }
     

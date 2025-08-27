@@ -1244,69 +1244,48 @@ struct MyBetsView: View {
             VStack(spacing: 24) {
                 // Header removed
                 
-                // Statistics Cards
-                HStack(spacing: 12) {
-                    // Active
-                    StatCard(
-                        icon: "clock.arrow.circlepath",
-                        iconColor: Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)),
-                        value: "\(activeBets.count)",
-                        label: "Active"
-                    )
-                    
-                    // Won  
-                    StatCard(
-                        icon: "trophy.fill",
-                        iconColor: .green,
-                        value: "\(wonBets.count)",
-                        label: "Won"
-                    )
-                    
-                    // Past Bets
-                    StatCard(
-                        icon: "checkmark.circle.fill",
-                        iconColor: .purple,
-                        value: "\(pastBets.count)",
-                        label: "Past Bets"
-                    )
-                    
-                    // Total Bets
-                    StatCard(
-                        icon: "bolt.fill",
-                        iconColor: .orange,
-                        value: "\(totalBets)",
-                        label: "Total Bets"
-                    )
-                }
-                .padding(.horizontal, 16)
+
                 
-                // Filter Buttons - Blue and White styling
-                HStack(spacing: 0) {
-                    Button(action: { selectedFilter = 0 }) {
-                        Text("Active")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(selectedFilter == 0 ? .white : Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(selectedFilter == 0 ? AnyShapeStyle(Color.slingGradient) : AnyShapeStyle(Color.white))
-                            .cornerRadius(8, corners: [.topLeft, .bottomLeft])
+                // Clean Tab Selector - matches TradingProfileView style
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        Button(action: { selectedFilter = 0 }) {
+                            VStack(spacing: 4) {
+                                Text("Active")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(selectedFilter == 0 ? .slingBlue : .gray)
+                                
+                                Rectangle()
+                                    .fill(selectedFilter == 0 ? Color.slingBlue : Color.clear)
+                                    .frame(height: 2)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        
+                        Button(action: { selectedFilter = 1 }) {
+                            VStack(spacing: 4) {
+                                Text("Past Bets")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(selectedFilter == 1 ? .slingBlue : .gray)
+                                
+                                Rectangle()
+                                    .fill(selectedFilter == 1 ? Color.slingBlue : Color.clear)
+                                    .frame(height: 2)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.white)
                     
-                    Button(action: { selectedFilter = 1 }) {
-                        Text("Past Bets")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(selectedFilter == 1 ? .white : Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(selectedFilter == 1 ? AnyShapeStyle(Color.slingGradient) : AnyShapeStyle(Color.white))
-                            .cornerRadius(8, corners: [.topRight, .bottomRight])
-                    }
+                    // Horizontal line under tabs
+                    Rectangle()
+                        .frame(height: 0.5)
+                        .foregroundColor(Color.gray.opacity(0.3))
                 }
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(8)
-                .padding(.horizontal, 16)
                 
                 // Bet Cards
                 if selectedFilter == 0 {
@@ -1315,7 +1294,7 @@ struct MyBetsView: View {
                     } else {
                         LazyVStack(spacing: 16) {
                             ForEach(activeBets) { bet in
-                                MyBetCard(bet: bet, currentUserEmail: firestoreService.currentUser?.email, firestoreService: firestoreService)
+                                CondensedBetCard(bet: bet, currentUserEmail: firestoreService.currentUser?.email, firestoreService: firestoreService)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -1327,7 +1306,7 @@ struct MyBetsView: View {
                     } else {
                         LazyVStack(spacing: 16) {
                             ForEach(pastBets) { bet in
-                                MyBetCard(bet: bet, currentUserEmail: firestoreService.currentUser?.email, firestoreService: firestoreService)
+                                CondensedBetCard(bet: bet, currentUserEmail: firestoreService.currentUser?.email, firestoreService: firestoreService)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -1806,6 +1785,365 @@ struct MyBetCard: View {
     
     private func generateShareText() -> String {
         return "Check out this prediction on Sling: \(bet.title)"
+    }
+}
+
+// MARK: - Condensed Bet Card Component (matches image format)
+struct CondensedBetCard: View {
+    let bet: FirestoreBet
+    let currentUserEmail: String?
+    @ObservedObject var firestoreService: FirestoreService
+    
+    // MARK: - State
+    @State private var showingCancelAlert = false
+    @State private var showingDeleteAlert = false
+    @State private var selectedBettingOption = ""
+    @State private var offset: CGFloat = 0
+    
+    // MARK: - Constants
+    private let swipeThreshold: CGFloat = 80
+    private let maxSwipeDistance: CGFloat = 240
+    
+    // MARK: - Sheet Management
+    private enum ActiveSheet: Identifiable {
+        case chooseWinner, placeBet, share, betDetail, bettingInterface
+        var id: Int { hashValue }
+    }
+    @State private var activeSheet: ActiveSheet?
+    
+    // MARK: - Computed Properties
+    private var communityName: String {
+        let communityId = bet.community_id
+        if let community = firestoreService.userCommunities.first(where: { $0.id == communityId }) {
+            return community.name
+        }
+        return "Unknown Community"
+    }
+    
+    private var creatorDisplayName: String {
+        if bet.creator_email == currentUserEmail {
+            return "You"
+        }
+        return bet.creator_email.components(separatedBy: "@").first ?? "Unknown"
+    }
+    
+    private var userParticipation: BetParticipant? {
+        guard let currentUserEmail = currentUserEmail else { return nil }
+        let participation = firestoreService.userBetParticipations.first { participation in
+            participation.bet_id == bet.id && participation.user_email == currentUserEmail
+        }
+        return participation
+    }
+    
+    private var isCreator: Bool {
+        return bet.creator_email == currentUserEmail
+    }
+    
+    private var hasWager: Bool {
+        return userParticipation != nil
+    }
+    
+    private var userChoice: String {
+        return userParticipation?.chosen_option ?? ""
+    }
+    
+    private var userWager: Int {
+        return userParticipation?.stake_amount ?? 0
+    }
+    
+    private var statusColor: Color {
+        switch bet.status.lowercased() {
+        case "open":
+            return .green
+        case "pending":
+            return .orange
+        case "settled":
+            return .blue
+        case "cancelled":
+            return .red
+        default:
+            return .gray
+        }
+    }
+    
+    // Action buttons for swipe
+    private var actionButtonsView: some View {
+        HStack(spacing: 12) {
+            if isCreator {
+                // Cancel/Delete button for creators
+                Button(action: {
+                    if bet.status == "open" {
+                        showingCancelAlert = true
+                    } else {
+                        showingDeleteAlert = true
+                    }
+                }) {
+                    Image(systemName: bet.status == "open" ? "xmark.circle.fill" : "trash.fill")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .frame(width: 50, height: 50)
+                        .background(Color.red)
+                        .clipShape(Circle())
+                }
+                
+                if bet.status == "open" {
+                    // Choose winner button
+                    Button(action: {
+                        activeSheet = .chooseWinner
+                    }) {
+                        Image(systemName: "trophy.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 50, height: 50)
+                            .background(Color.green)
+                            .clipShape(Circle())
+                    }
+                }
+            }
+            
+            // Share button (for everyone)
+            Button(action: {
+                activeSheet = .share
+            }) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                    .frame(width: 50, height: 50)
+                    .background(AnyShapeStyle(Color.slingGradient))
+                    .clipShape(Circle())
+            }
+        }
+        .padding(.trailing, 16)
+    }
+    
+    private var getCreatorInitials: String {
+        if bet.creator_email == currentUserEmail {
+            // Use current user initials if this user is the creator
+            let user = firestoreService.currentUser
+            if let firstName = user?.first_name, let lastName = user?.last_name, !firstName.isEmpty, !lastName.isEmpty {
+                let firstInitial = String(firstName.prefix(1)).uppercased()
+                let lastInitial = String(lastName.prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else if let displayName = user?.display_name, !displayName.isEmpty {
+                let components = displayName.components(separatedBy: " ")
+                if components.count >= 2 {
+                    let firstInitial = String(components[0].prefix(1)).uppercased()
+                    let lastInitial = String(components[1].prefix(1)).uppercased()
+                    return "\(firstInitial)\(lastInitial)"
+                } else if components.count == 1 {
+                    return String(components[0].prefix(1)).uppercased()
+                }
+            }
+            // Fallback to email initial
+            return String(bet.creator_email.prefix(1)).uppercased()
+        } else {
+            // For other users, use the first letter of their display name or email
+            return String(bet.creator_email.prefix(1)).uppercased()
+        }
+    }
+    
+    var body: some View {
+        ZStack {
+            // Background action buttons - only show when swiped
+            if offset < 0 {
+                HStack {
+                    Spacer()
+                    actionButtonsView
+                }
+            }
+            
+            // Main card content
+            Button(action: {
+                activeSheet = .betDetail
+            }) {
+            HStack(alignment: .top, spacing: 12) {
+                // Bet image (40x40 like Community Details)
+                if let imageURL = bet.image_url, !imageURL.isEmpty {
+                    AsyncImage(url: URL(string: imageURL)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 40, height: 40)
+                                .clipped()
+                                .cornerRadius(8)
+                        case .failure(_), .empty:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Text(getCreatorInitials)
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.gray)
+                                )
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            Text(getCreatorInitials)
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.gray)
+                        )
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    // Bet title (subheadline, semibold, line limit 2)
+                    Text(bet.title)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    
+                    // Community • Created by Creator (caption, gray)
+                    Text("\(communityName) • Created by \(creatorDisplayName)")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.leading)
+                    
+                    // Deadline info (caption, blue)
+                    Text("Ends \(formatDeadline(bet.deadline))")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+                
+                Spacer()
+                
+                // Navigation chevron (caption, gray)
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.white)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .offset(x: offset)
+        .onTapGesture {
+            // Only handle tap if card is not swiped
+            if offset != 0 {
+                // Reset swipe when tapping on the card
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    offset = 0
+                }
+            } else {
+                activeSheet = .betDetail
+            }
+        }
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    let translation = value.translation.width
+                    if translation < 0 { // Only allow left swipe
+                        offset = max(translation, -maxSwipeDistance)
+                    } else if offset < 0 { // Allow right swipe only if already swiped left
+                        offset = min(offset + translation, 0)
+                    }
+                }
+                .onEnded { value in
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        if offset < -swipeThreshold {
+                            offset = -240 // Show all actions
+                        } else {
+                            offset = 0 // Hide actions
+                        }
+                    }
+                }
+        )
+        }
+        .clipped()
+        .alert("Cancel Bet", isPresented: $showingCancelAlert) {
+            Button("Cancel Bet", role: .destructive) {
+                cancelBet()
+            }
+            Button("Keep Bet", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to cancel this bet? This action cannot be undone.")
+        }
+        .alert("Delete Bet", isPresented: $showingDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                deleteBet()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to delete this bet? This action cannot be undone.")
+        }
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .chooseWinner:
+                ChooseWinnerView(bet: bet, firestoreService: firestoreService)
+            case .placeBet:
+                PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService)
+            case .share:
+                ShareSheet(activityItems: [generateShareText()])
+            case .betDetail:
+                JoinBetView(
+                    bet: bet, 
+                    firestoreService: firestoreService,
+                    onCommunityTap: {
+                        // Navigate to community details
+                        // This will be handled by the parent view
+                    }
+                )
+            case .bettingInterface:
+                BettingInterfaceView(
+                    bet: bet,
+                    selectedOption: selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption,
+                    firestoreService: firestoreService)
+            }
+        }
+        .onAppear {
+            // Ensure user bet participations are loaded
+            firestoreService.fetchUserBetParticipations()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Refresh when app comes to foreground
+            firestoreService.fetchUserBetParticipations()
+        }
+    }
+    
+    private func generateShareText() -> String {
+        return "Check out this bet: \(bet.title) - \(communityName)"
+    }
+    
+    private func cancelBet() {
+        firestoreService.cancelMarket(betId: bet.id ?? "") { success in
+            if success {
+                print("✅ Bet cancelled successfully")
+            } else {
+                print("❌ Error cancelling bet")
+            }
+        }
+    }
+    
+    private func formatDeadline(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
+    }
+    
+    private func deleteBet() {
+        firestoreService.deleteBet(betId: bet.id ?? "") { success in
+            if success {
+                print("✅ Bet deleted successfully")
+            } else {
+                print("❌ Error deleting bet")
+            }
+        }
     }
 }
 
@@ -14798,7 +15136,7 @@ struct ContactSupportView: View {
         isSubmitting = true
         
         // Create contact request data
-        let contactData: [String: Any] = [
+        let _: [String: Any] = [
             "subject": subject,
             "message": messageText,
             "timestamp": Date(),
