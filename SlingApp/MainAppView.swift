@@ -874,7 +874,7 @@ struct HomeBetCard: View {
 
                 }
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(.plain)
             
             // Betting Options - each option is clickable to go to betting modal
             VStack(spacing: 8) {
@@ -900,10 +900,10 @@ struct HomeBetCard: View {
                         .padding(.vertical, 12)
                         .background(Color.slingLightPurple.opacity(0.75))
                         .cornerRadius(10)
+                                            }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(PlainButtonStyle())
                 }
-            }
             
             // Footer - clickable to go to bet details
             Button(action: {
@@ -919,7 +919,7 @@ struct HomeBetCard: View {
                     Spacer()
                 }
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(.plain)
         }
         .padding(16)
         .background(Color.white)
@@ -938,7 +938,7 @@ struct HomeBetCard: View {
         .sheet(isPresented: $showingBettingInterface) {
             BettingInterfaceView(
                 bet: bet,
-                selectedOption: "",
+                selectedOption: selectedBettingOption,
                 firestoreService: firestoreService
             )
         }

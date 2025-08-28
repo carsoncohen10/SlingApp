@@ -665,7 +665,7 @@ class FirestoreService: ObservableObject {
                         
                             
                             // Log all bets with full metadata
-                            for (index, doc) in betDocuments.enumerated() {
+                            for (_, doc) in betDocuments.enumerated() {
                                 let data = doc.data()
                                 let title = data["title"] as? String ?? "unknown"
                                 let communityId = data["community_id"] as? String ?? "unknown"
@@ -1467,6 +1467,9 @@ class FirestoreService: ObservableObject {
             return
         }
         
+        print("🎯 joinBet: Starting bet placement for user \(userEmail) on bet \(betId)")
+        print("🎯 joinBet: Chosen option: \(chosenOption), Stake amount: \(stakeAmount)")
+        
         let participantData = BetParticipant(
             documentId: nil,
             id: UUID().uuidString,
@@ -1486,6 +1489,7 @@ class FirestoreService: ObservableObject {
         // First get the bet to get community_id
         db.collection("Bet").document(betId).getDocument { [weak self] document, error in
             if let error = error {
+                print("❌ joinBet: Error fetching bet document: \(error.localizedDescription)")
                 completion(false, error.localizedDescription)
                 return
             }
@@ -1493,18 +1497,33 @@ class FirestoreService: ObservableObject {
             guard let document = document, document.exists,
                   let data = document.data(),
                   let communityId = data["community_id"] as? String else {
+                print("❌ joinBet: Bet not found or missing community ID")
                 completion(false, "Bet not found or missing community ID")
                 return
             }
+            
+            print("✅ joinBet: Found bet with community ID: \(communityId)")
             
             // Update participant with community_id
             var updatedParticipant = participantData
             updatedParticipant.community_id = communityId
             
+            // Use a custom document ID to ensure consistency
+            let documentId = "\(betId)_\(userEmail)"
+            
             do {
-                try self?.db.collection("BetParticipant").addDocument(from: updatedParticipant)
+                // Use setData with merge: true to handle potential duplicates
+                try self?.db.collection("BetParticipant").document(documentId).setData(from: updatedParticipant, merge: true)
+                print("✅ joinBet: Successfully created/updated BetParticipant document: \(documentId)")
+                
+                // Refresh user participations to ensure UI is up to date
+                DispatchQueue.main.async {
+                    self?.fetchUserBetParticipations()
+                }
+                
                 completion(true, nil)
             } catch {
+                print("❌ joinBet: Error creating BetParticipant document: \(error.localizedDescription)")
                 completion(false, error.localizedDescription)
             }
         }
@@ -2290,5 +2309,252 @@ class FirestoreService: ObservableObject {
         }
     }
     
+    // MARK: - Outstanding Balances
+    
+    func fetchOutstandingBalances(completion: @escaping ([OutstandingBalance]) -> Void) {
+        guard let currentUserEmail = currentUser?.email else {
+            print("❌ No current user email available")
+            completion([])
+            return
+        }
+        
+        print("🔍 Fetching outstanding balances for user: \(currentUserEmail)")
+        
+        // First, get all communities the user is a member of
+        let userCommunities = self.userCommunities
+        if userCommunities.isEmpty {
+            print("📋 No communities found for user")
+            completion([])
+            return
+        }
+        
+        var allBalances: [OutstandingBalance] = []
+        let group = DispatchGroup()
+        
+        for community in userCommunities {
+            guard let communityId = community.id else { continue }
+            
+            group.enter()
+            calculateOutstandingBalancesForCommunity(communityId: communityId, userEmail: currentUserEmail) { balances in
+                allBalances.append(contentsOf: balances)
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            // Group balances by counterparty and calculate net amounts
+            let groupedBalances = self.groupBalancesByCounterparty(allBalances)
+            
+            // Sort by most green to least green, then least red to most red
+            let sortedBalances = groupedBalances.sorted { first, second in
+                if first.isOwed == second.isOwed {
+                    if first.isOwed {
+                        // Both are red (you owe them) - sort by least to most
+                        return first.displayAmount < second.displayAmount
+                    } else {
+                        // Both are green (they owe you) - sort by most to least
+                        return first.displayAmount > second.displayAmount
+                    }
+                } else {
+                    // Different types - green (they owe you) comes before red (you owe them)
+                    return !first.isOwed && second.isOwed
+                }
+            }
+            
+            print("✅ Fetched \(sortedBalances.count) outstanding balances")
+            completion(sortedBalances)
+        }
+    }
+    
+    private func calculateOutstandingBalancesForCommunity(communityId: String, userEmail: String, completion: @escaping ([OutstandingBalance]) -> Void) {
+        print("🔍 Calculating balances for community: \(communityId)")
+        
+        // Get all bet participations in this community
+        db.collection("BetParticipant")
+            .whereField("community_id", isEqualTo: communityId)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching bet participations: \(error.localizedDescription)")
+                    completion([])
+                    return
+                }
+                
+                let participations = snapshot?.documents.compactMap { document in
+                    try? document.data(as: BetParticipant.self)
+                } ?? []
+                
+                print("📊 Found \(participations.count) bet participations in community \(communityId)")
+                
+                // Get bet details for all participations
+                self.getBetDetailsForParticipations(participations) { betDetails in
+                    // Group participations by user to calculate balances
+                    var userBalances: [String: [BetParticipant]] = [:]
+                    for participation in participations {
+                        if userBalances[participation.user_email] == nil {
+                            userBalances[participation.user_email] = []
+                        }
+                        userBalances[participation.user_email]?.append(participation)
+                    }
+                    
+                    var balances: [OutstandingBalance] = []
+                    
+                    // Calculate balance for each user
+                    for (otherUserEmail, userParticipations) in userBalances {
+                        if otherUserEmail == userEmail { continue } // Skip current user
+                        
+                        let netBalance = self.calculateNetBalanceBetweenUsers(
+                            userParticipations: userParticipations,
+                            otherUserParticipations: participations.filter { $0.user_email == userEmail }
+                        )
+                        
+                        if netBalance != 0 {
+                            // Create balance transaction objects with bet details
+                            let transactions = self.createBalanceTransactions(from: userParticipations, otherUserEmail: otherUserEmail, betDetails: betDetails)
+                            
+                            // Get user details
+                            self.getUserDetails(email: otherUserEmail) { userName, username in
+                                let balance = OutstandingBalance(
+                                    id: "\(communityId)_\(otherUserEmail)",
+                                    profilePicture: nil,
+                                    username: username,
+                                    name: userName,
+                                    netAmount: netBalance,
+                                    transactions: transactions,
+                                    counterpartyId: otherUserEmail
+                                )
+                                balances.append(balance)
+                            }
+                        }
+                    }
+                    
+                    completion(balances)
+                }
+            }
+    }
+    
+    private func calculateNetBalanceBetweenUsers(userParticipations: [BetParticipant], otherUserParticipations: [BetParticipant]) -> Double {
+        var netBalance: Double = 0.0
+        
+        // Calculate balance from current user's perspective
+        for participation in otherUserParticipations {
+            var amount = -Double(participation.stake_amount) // Initial bet cost
+            if let payout = participation.final_payout {
+                amount += Double(payout) // Add winnings if any
+            }
+            netBalance += amount
+        }
+        
+        // Subtract balance from other user's perspective (this becomes the net amount owed)
+        for participation in userParticipations {
+            var amount = Double(participation.stake_amount) // Other user's bet cost
+            if let payout = participation.final_payout {
+                amount -= Double(payout) // Subtract winnings if any
+            }
+            netBalance -= amount
+        }
+        
+        return netBalance
+    }
+    
+    private func createBalanceTransactions(from participations: [BetParticipant], otherUserEmail: String, betDetails: [String: String]) -> [BalanceTransaction] {
+        return participations.compactMap { participation in
+            // Get bet details to create transaction
+            guard let betId = participation.documentId else { return nil }
+            
+            // Get community name from user communities
+            let communityName = self.userCommunities.first { $0.id == participation.community_id }?.name ?? "Community"
+            
+            // Get actual bet title from bet details
+            let betTitle = betDetails[participation.bet_id] ?? "Bet #\(participation.bet_id.prefix(8))"
+            
+            return BalanceTransaction(
+                id: betId,
+                betId: participation.bet_id,
+                betTitle: betTitle,
+                amount: Double(participation.stake_amount),
+                isOwed: participation.final_payout == nil, // If no payout, bet is still outstanding
+                date: participation.created_date,
+                communityName: communityName
+            )
+        }
+    }
+    
+    private func groupBalancesByCounterparty(_ balances: [OutstandingBalance]) -> [OutstandingBalance] {
+        var groupedBalances: [String: OutstandingBalance] = [:]
+        
+        for balance in balances {
+            if let existing = groupedBalances[balance.counterpartyId] {
+                // Combine balances for the same counterparty
+                let combinedTransactions = existing.transactions + balance.transactions
+                let combinedNetAmount = existing.netAmount + balance.netAmount
+                
+                let combinedBalance = OutstandingBalance(
+                    id: existing.id,
+                    profilePicture: existing.profilePicture,
+                    username: existing.username,
+                    name: existing.name,
+                    netAmount: combinedNetAmount,
+                    transactions: combinedTransactions,
+                    counterpartyId: existing.counterpartyId
+                )
+                
+                groupedBalances[balance.counterpartyId] = combinedBalance
+            } else {
+                groupedBalances[balance.counterpartyId] = balance
+            }
+        }
+        
+        return Array(groupedBalances.values)
+    }
+    
+    private func getUserDetails(email: String, completion: @escaping (String, String) -> Void) {
+        db.collection("Users").document(email).getDocument { document, error in
+            if let document = document, document.exists,
+               let data = document.data() {
+                let firstName = data["first_name"] as? String ?? ""
+                let lastName = data["last_name"] as? String ?? ""
+                let displayName = data["display_name"] as? String ?? ""
+                
+                let userName: String
+                if !firstName.isEmpty && !lastName.isEmpty {
+                    userName = "\(firstName) \(lastName)"
+                } else if !displayName.isEmpty {
+                    userName = displayName
+                } else {
+                    userName = email.components(separatedBy: "@").first ?? email
+                }
+                
+                let username = "@\(email.components(separatedBy: "@").first ?? email)"
+                completion(userName, username)
+            } else {
+                let username = "@\(email.components(separatedBy: "@").first ?? email)"
+                completion(email, username)
+            }
+        }
+    }
+    
+    private func getBetDetailsForParticipations(_ participations: [BetParticipant], completion: @escaping ([String: String]) -> Void) {
+        let uniqueBetIds = Set(participations.map { $0.bet_id })
+        var betDetails: [String: String] = [:]
+        let group = DispatchGroup()
+        
+        for betId in uniqueBetIds {
+            group.enter()
+            db.collection("Bet").document(betId).getDocument { document, error in
+                if let document = document, document.exists,
+                   let data = document.data(),
+                   let title = data["title"] as? String {
+                    betDetails[betId] = title
+                } else {
+                    betDetails[betId] = "Bet #\(betId.prefix(8))"
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            completion(betDetails)
+        }
+    }
 
 }
