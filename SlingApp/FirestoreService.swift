@@ -1470,6 +1470,14 @@ class FirestoreService: ObservableObject {
         print("🎯 joinBet: Starting bet placement for user \(userEmail) on bet \(betId)")
         print("🎯 joinBet: Chosen option: \(chosenOption), Stake amount: \(stakeAmount)")
         
+        // Check if user has enough points
+        guard let currentUser = currentUser,
+              let currentPoints = currentUser.blitz_points,
+              currentPoints >= stakeAmount else {
+            completion(false, "Insufficient points. You have \(currentUser?.blitz_points ?? 0) points but need \(stakeAmount)")
+            return
+        }
+        
         let participantData = BetParticipant(
             documentId: nil,
             id: UUID().uuidString,
@@ -1511,19 +1519,37 @@ class FirestoreService: ObservableObject {
             // Use a custom document ID to ensure consistency
             let documentId = "\(betId)_\(userEmail)"
             
+            // Use a batch write to ensure both operations succeed or fail together
+            let batch = self?.db.batch()
+            
             do {
-                // Use setData with merge: true to handle potential duplicates
-                try self?.db.collection("BetParticipant").document(documentId).setData(from: updatedParticipant, merge: true)
-                print("✅ joinBet: Successfully created/updated BetParticipant document: \(documentId)")
+                // Create the participant document
+                let participantRef = self?.db.collection("BetParticipant").document(documentId)
+                try batch?.setData(from: updatedParticipant, forDocument: participantRef!)
                 
-                // Refresh user participations to ensure UI is up to date
-                DispatchQueue.main.async {
-                    self?.fetchUserBetParticipations()
+                // Deduct points from user
+                let userRef = self?.db.collection("Users").document(userEmail)
+                batch?.updateData(["blitz_points": currentPoints - stakeAmount], forDocument: userRef!)
+                
+                // Commit the batch
+                batch?.commit { error in
+                    if let error = error {
+                        print("❌ joinBet: Error in batch write: \(error.localizedDescription)")
+                        completion(false, error.localizedDescription)
+                    } else {
+                        print("✅ joinBet: Successfully created BetParticipant and deducted \(stakeAmount) points")
+                        
+                        // Refresh user data and participations
+                        DispatchQueue.main.async {
+                            self?.refreshCurrentUser()
+                            self?.fetchUserBetParticipations()
+                        }
+                        
+                        completion(true, nil)
+                    }
                 }
-                
-                completion(true, nil)
             } catch {
-                print("❌ joinBet: Error creating BetParticipant document: \(error.localizedDescription)")
+                print("❌ joinBet: Error preparing batch write: \(error.localizedDescription)")
                 completion(false, error.localizedDescription)
             }
         }
@@ -1535,20 +1561,152 @@ class FirestoreService: ObservableObject {
             return
         }
         
-        let updateData: [String: Any] = [
-            "status": "settled",
-            "winner_option": winnerOption,
-            "updated_date": Date()
-        ]
+        print("🎯 settleBet: Starting settlement for bet \(betId) with winner: \(winnerOption)")
         
-        db.collection("Bet").document(betId).updateData(updateData) { error in
+        // First get all participants for this bet
+        db.collection("BetParticipant").whereField("bet_id", isEqualTo: betId).getDocuments { [weak self] snapshot, error in
             if let error = error {
-                print("❌ Error settling bet: \(error.localizedDescription)")
+                print("❌ settleBet: Error fetching participants: \(error.localizedDescription)")
                 completion(false)
-            } else {
-                print("✅ Successfully settled bet: \(betId)")
-                completion(true)
+                return
             }
+            
+            guard let documents = snapshot?.documents else {
+                print("❌ settleBet: No participants found for bet")
+                completion(false)
+                return
+            }
+            
+            print("✅ settleBet: Found \(documents.count) participants")
+            
+            // Update bet status first
+            let updateData: [String: Any] = [
+                "status": "settled",
+                "winner_option": winnerOption,
+                "updated_date": Date()
+            ]
+            
+            self?.db.collection("Bet").document(betId).updateData(updateData) { error in
+                if let error = error {
+                    print("❌ settleBet: Error updating bet status: \(error.localizedDescription)")
+                    completion(false)
+                    return
+                }
+                
+                print("✅ settleBet: Bet status updated to settled")
+                
+                // Process payouts for all participants
+                self?.processBetPayouts(betId: betId, winnerOption: winnerOption, participants: documents) { success in
+                    if success {
+                        print("✅ settleBet: All payouts processed successfully")
+                        completion(true)
+                    } else {
+                        print("❌ settleBet: Error processing payouts")
+                        completion(false)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Bet Payout Processing
+    
+    private func processBetPayouts(betId: String, winnerOption: String, participants: [QueryDocumentSnapshot], completion: @escaping (Bool) -> Void) {
+        print("🎯 processBetPayouts: Processing payouts for \(participants.count) participants")
+        
+        // Get bet details to calculate odds
+        db.collection("Bet").document(betId).getDocument { [weak self] document, error in
+            if let error = error {
+                print("❌ processBetPayouts: Error fetching bet details: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            guard let document = document, document.exists,
+                  let data = document.data(),
+                  let odds = data["odds"] as? [String: String] else {
+                print("❌ processBetPayouts: Bet not found or missing odds")
+                completion(false)
+                return
+            }
+            
+            print("✅ processBetPayouts: Bet odds loaded: \(odds)")
+            
+            // Process each participant
+            var processedCount = 0
+            var totalParticipants = participants.count
+            
+            for participantDoc in participants {
+                guard let participantData = participantDoc.data() as [String: Any]?,
+                      let userEmail = participantData["user_email"] as? String,
+                      let chosenOption = participantData["chosen_option"] as? String,
+                      let stakeAmount = participantData["stake_amount"] as? Int else {
+                    print("❌ processBetPayouts: Invalid participant data for \(participantDoc.documentID)")
+                    processedCount += 1
+                    if processedCount == totalParticipants {
+                        completion(false)
+                    }
+                    continue
+                }
+                
+                let isWinner = chosenOption == winnerOption
+                let payout = self?.calculatePayout(amount: Double(stakeAmount), odds: odds[chosenOption] ?? "-110") ?? Double(stakeAmount)
+                
+                print("🎯 processBetPayouts: \(userEmail) chose '\(chosenOption)', stake: \(stakeAmount), isWinner: \(isWinner), payout: \(payout)")
+                
+                // Update participant with result
+                let participantRef = self?.db.collection("BetParticipant").document(participantDoc.documentID)
+                let participantUpdate: [String: Any] = [
+                    "is_winner": isWinner,
+                    "final_payout": Int(payout),
+                    "updated_date": Date()
+                ]
+                
+                participantRef?.updateData(participantUpdate) { error in
+                    if let error = error {
+                        print("❌ processBetPayouts: Error updating participant \(userEmail): \(error.localizedDescription)")
+                    } else {
+                        print("✅ processBetPayouts: Participant \(userEmail) updated successfully")
+                    }
+                    
+                    // Process payout for user
+                    if isWinner {
+                        // Winner gets their stake back + winnings
+                        let pointsToAdd = Int(payout)
+                        self?.updateUserBlitzPoints(userId: userEmail, pointsToAdd: pointsToAdd) { success, error in
+                            if success {
+                                print("✅ processBetPayouts: \(userEmail) received \(pointsToAdd) points (stake + winnings)")
+                            } else {
+                                print("❌ processBetPayouts: Error adding points to \(userEmail): \(error ?? "Unknown error")")
+                            }
+                        }
+                    } else {
+                        // Loser gets nothing (points already deducted when bet was placed)
+                        print("ℹ️ processBetPayouts: \(userEmail) lost, no points returned (already deducted)")
+                    }
+                    
+                    processedCount += 1
+                    if processedCount == totalParticipants {
+                        print("✅ processBetPayouts: All participants processed")
+                        completion(true)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Payout Calculation
+    
+    private func calculatePayout(amount: Double, odds: String) -> Double {
+        // Simple payout calculation based on American odds
+        if odds.hasPrefix("-") {
+            // Negative odds (favorite) - e.g., -110 means bet $110 to win $100
+            let oddsValue = Double(odds.dropFirst()) ?? 110
+            return amount * (100 / oddsValue) + amount
+        } else {
+            // Positive odds (underdog) - e.g., +150 means bet $100 to win $150
+            let oddsValue = Double(odds) ?? 110
+            return amount * (oddsValue / 100) + amount
         }
     }
     

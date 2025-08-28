@@ -1242,19 +1242,51 @@ struct MyBetsView: View {
                 
 
                 
-                // Active Bets Horizontal Scroll
-                if !activeBets.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Active Bets")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.black)
-                            
-                            Spacer()
+                // Active Bets Section - Always show
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Active Bets")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    
+                    if activeBets.isEmpty {
+                        // No active bets - show full width Create Bet card
+                        Button(action: {
+                            showingCreateBetModal = true
+                        }) {
+                            VStack(spacing: 12) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(.slingBlue)
+                                
+                                Text("Create Bet")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.slingBlue)
+                                
+                                Text("Start a new bet")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 140)
+                            .background(Color.white)
+                            .cornerRadius(16)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
+                            )
+                            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
                         }
                         .padding(.horizontal, 16)
-                        
+                        .padding(.vertical, 8)
+                    } else {
+                        // Has active bets - show horizontal scroll with Create Bet card
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 16) {
                                 ForEach(activeBets) { bet in
@@ -1271,8 +1303,8 @@ struct MyBetsView: View {
                                             .foregroundColor(.slingBlue)
                                         
                                         Text("Create Bet")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
                                             .foregroundColor(.slingBlue)
                                         
                                         Text("Start a new bet")
@@ -1288,15 +1320,15 @@ struct MyBetsView: View {
                                     )
                                     .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
                                 }
-                    }
-                    .padding(.horizontal, 16)
-                            .padding(.vertical, 8) // Added vertical padding for shadow
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
                         }
                     }
                 }
                 
                 // Past Bets Section
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
                                 Text("Past Bets")
                             .font(.headline)
@@ -1385,10 +1417,20 @@ struct MyBetsView: View {
                                     )
                             }
                             
+                            // Add extra spacing to push "Lost" off-screen and require scrolling
+                            Spacer()
+                                .frame(width: 300)
+                            
                         }
                         .padding(.horizontal, 16)
-                        .padding(.vertical, 8) // Added vertical padding for filter buttons
+                        .padding(.vertical, 8)
                     }
+                    
+                    // Horizontal line under filter row
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 1)
+                        .padding(.horizontal, 16)
                     
                     // Filter the past bets based on selected filter
                     let filteredPastBets = filterPastBets(pastBets, filter: selectedPastBetFilter)
@@ -1551,6 +1593,12 @@ struct ActiveBetCard: View {
         return bet.creator_email == currentUserEmail && userWagerAmount == 0
     }
     
+    // Computed property to check if user is creator and has placed a wager
+    private var isCreatorWithWager: Bool {
+        guard let currentUserEmail = firestoreService.currentUser?.email else { return false }
+        return bet.creator_email == currentUserEmail && userWagerAmount > 0
+    }
+    
     // Helper function to format deadline
     private func formatDeadline(_ date: Date) -> String {
         let formatter = DateFormatter()
@@ -1571,6 +1619,21 @@ struct ActiveBetCard: View {
                         .fontWeight(.bold)
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    // Settle Bet button for creators who have wagered
+                    if isCreatorWithWager {
+                        Button(action: {
+                            showingSettleBetModal = true
+                        }) {
+                            Image(systemName: "trophy.fill")
+                                .font(.caption)
+                                .foregroundColor(.slingBlue)
+                                .padding(4)
+                                .background(Color.slingBlue.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.bottom, 4)
                 
@@ -1589,7 +1652,7 @@ struct ActiveBetCard: View {
                     .padding(.bottom, 8)
                 
                 // Wager or Settle Bet line
-                if bet.creator_email == firestoreService.currentUser?.email && isCreatorWithoutWager {
+                if isCreatorWithoutWager {
                     // Show Settle Bet for creators who haven't wagered
                     Button(action: {
                         showingSettleBetModal = true
@@ -1605,7 +1668,22 @@ struct ActiveBetCard: View {
                                 .foregroundColor(.slingBlue)
                         }
                     }
-                    .buttonStyle(PlainButtonStyle())
+                    .buttonStyle(.plain)
+                } else if isCreatorWithWager {
+                    // Show wager amount for creators who have wagered
+                    HStack(spacing: 4) {
+                        Text("Wager:")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        
+                        Image(systemName: "bolt.fill")
+                            .font(.caption2)
+                            .foregroundColor(.slingBlue)
+                        
+                        Text("\(userWagerAmount)")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
                 } else {
                     // Show wager amount for participants
                     HStack(spacing: 4) {
@@ -1633,7 +1711,7 @@ struct ActiveBetCard: View {
             )
             .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
         .sheet(isPresented: $showingSettleBetModal) {
             SettleBetModal(bet: bet, firestoreService: firestoreService)
         }
@@ -1652,6 +1730,9 @@ struct ActiveBetCard: View {
             print("  - User Participations: \(firestoreService.userBetParticipations.count)")
             print("  - User Choice: \(userChoice)")
             print("  - User Wager: \(userWagerAmount)")
+            print("  - Is Creator: \(bet.creator_email == firestoreService.currentUser?.email)")
+            print("  - Is Creator With Wager: \(isCreatorWithWager)")
+            print("  - Is Creator Without Wager: \(isCreatorWithoutWager)")
         }
     }
 }
@@ -2637,17 +2718,17 @@ struct CondensedBetCard: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(getStatusColor())
+                            .background(getStatusBadgeBackgroundColor())
                             .cornerRadius(8)
                     }
                     
                     // User's choice
                     HStack {
                         Text("Your Choice:")
-                            .font(.subheadline)
+                            .font(.caption2)
                         .foregroundColor(.gray)
                         Text(userChoice.isEmpty ? "No choice made" : userChoice)
-                            .font(.subheadline)
+                            .font(.caption2)
                             .fontWeight(.medium)
                             .foregroundColor(.slingBlue)
                         Spacer()
@@ -2849,12 +2930,27 @@ struct CondensedBetCard: View {
     private func getStatusColor() -> Color {
         switch getStatusText() {
         case "Won":
-            return .green
+            return Color.green.opacity(0.8)
         case "Lost":
-            return .red
+            return Color.red.opacity(0.8)
         case "Cancelled":
-            return .orange
-            case "Active":
+            return Color.orange.opacity(0.8)
+        case "Active":
+            return .blue
+        default:
+            return .gray
+        }
+    }
+    
+    private func getStatusBadgeBackgroundColor() -> Color {
+        switch getStatusText() {
+        case "Won":
+            return Color.green.opacity(0.8)
+        case "Lost":
+            return Color.red.opacity(0.8)
+        case "Cancelled":
+            return Color.orange.opacity(0.8)
+        case "Active":
             return .blue
         default:
             return .gray
@@ -4799,26 +4895,33 @@ struct CommunitiesView: View {
             }
             
             if outstandingBalances.isEmpty {
-                // No outstanding balances message
+                // No outstanding balances message - styled like Create Bet card
                 VStack(spacing: 12) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 32))
-                        .foregroundColor(.white)
+                        .foregroundColor(.slingBlue)
                     
                     Text("All caught up!")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(.white)
+                        .foregroundColor(.slingBlue)
                     
                     Text("No outstanding balances at the moment.")
                         .font(.caption)
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .background(Color.slingBlue)
+                .frame(height: 140)
+                .background(Color.white)
                 .cornerRadius(16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             } else {
                 // Outstanding balances cards
             ScrollView(.horizontal, showsIndicators: false) {
@@ -4930,6 +5033,11 @@ struct CommunitiesView: View {
                         .font(.subheadline)
                         .foregroundColor(.gray)
                     }
+                
+                // Horizontal line under Your Communities section
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(height: 1)
                 
                 LazyVStack(spacing: 16) {
                     ForEach(filteredCommunities) { community in
