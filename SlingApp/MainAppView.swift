@@ -631,16 +631,111 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 // Feed of Bets from user's joined communities
-                ForEach(filteredBets) { bet in
-                    HomeBetCard(
-                        bet: bet,
-                        currentUserEmail: firestoreService.currentUser?.email,
-                        firestoreService: firestoreService
-                    )
+                let currentTime = Date()
+                let primaryBets = selectedFilter == "All Bets" 
+                    ? filteredBets
+                    : firestoreService.bets.filter { bet in
+                        // Only show open bets that haven't expired from the selected community
+                        let isOpen = bet.status.lowercased() == "open"
+                        let notExpired = bet.deadline > currentTime
+                        if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+                            let nameMatches = community.name == selectedFilter
+                            return nameMatches && isOpen && notExpired
+                        }
+                        return false
+                    }
+                
+                let otherCommunityBets = selectedFilter == "All Bets" 
+                    ? []
+                    : firestoreService.bets.filter { bet in
+                        // Only show open bets that haven't expired from other communities
+                        let isOpen = bet.status.lowercased() == "open"
+                        let notExpired = bet.deadline > currentTime
+                        if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+                            let isDifferentCommunity = community.name != selectedFilter
+                            return isOpen && notExpired && isDifferentCommunity
+                        }
+                        return false
+                    }
+                
+                // Show primary bets (selected community or all bets)
+                if primaryBets.isEmpty && selectedFilter != "All Bets" {
+                    // No bets in selected community
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.2")
+                            .font(.system(size: 48))
+                            .foregroundColor(.gray.opacity(0.6))
+                        
+                        Text("No bets in \(selectedFilter)")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                        
+                        Text("This community doesn't have any active bets yet.")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 32)
+                } else {
+                    ForEach(primaryBets) { bet in
+                        HomeBetCard(
+                            bet: bet,
+                            currentUserEmail: firestoreService.currentUser?.email,
+                            firestoreService: firestoreService
+                        )
+                    }
                 }
                 
-                // Show empty state if no bets
-                if filteredBets.isEmpty {
+                // Show separator and other community bets if filtering by a specific community
+                if selectedFilter != "All Bets" {
+                    // Separator
+                    VStack(spacing: 12) {
+                        HStack {
+                            Rectangle()
+                                .frame(height: 1)
+                                .foregroundColor(Color.gray.opacity(0.3))
+                            Text("Other Communities")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.gray)
+                                .padding(.horizontal, 8)
+                            Rectangle()
+                                .frame(height: 1)
+                                .foregroundColor(Color.gray.opacity(0.3))
+                        }
+                        .padding(.vertical, 16)
+                        
+                        // Other community bets
+                        ForEach(otherCommunityBets) { bet in
+                            HomeBetCard(
+                                bet: bet,
+                                currentUserEmail: firestoreService.currentUser?.email,
+                                firestoreService: firestoreService
+                            )
+                        }
+                        
+                        // Show message if no other community bets exist
+                        if otherCommunityBets.isEmpty {
+                            VStack(spacing: 8) {
+                                Image(systemName: "person.2")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.gray.opacity(0.6))
+                                
+                                Text("No bets in other communities")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 24)
+                        }
+                    }
+                }
+                
+                // Show empty state if no bets at all
+                if primaryBets.isEmpty && otherCommunityBets.isEmpty && selectedFilter == "All Bets" {
                     EmptyBetsView(firestoreService: firestoreService)
                 }
             }
@@ -653,19 +748,14 @@ struct HomeView: View {
     // MARK: - Computed Properties
     
     private var filteredBets: [FirestoreBet] {
+        let currentTime = Date()
+        
         // Filter bets based on selected community and exclude expired bets
         let filtered = selectedFilter == "All Bets" 
             ? firestoreService.bets.filter { bet in
                 // Only show open bets that haven't expired
                 let isOpen = bet.status.lowercased() == "open"
-                let notExpired = bet.deadline > Date()
-                let currentDate = Date()
-                
-                // Debug logging for your specific bet
-                if bet.title == "Will Netflix stock get passed?" {
-                    print("🔍 HomeView Filter: Bet '\(bet.title)' - Status: \(bet.status), Deadline: \(bet.deadline), Current: \(currentDate), IsOpen: \(isOpen), NotExpired: \(notExpired)")
-                }
-                
+                let notExpired = bet.deadline > currentTime
                 return isOpen && notExpired
             }
             : firestoreService.bets.filter { bet in
@@ -673,100 +763,32 @@ struct HomeView: View {
                 if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
                     let nameMatches = community.name == selectedFilter
                     let isOpen = bet.status.lowercased() == "open"
-                    let notExpired = bet.deadline > Date()
-                    let currentDate = Date()
-                    
-                    // Debug logging for your specific bet
-                    if bet.title == "Will Netflix stock get passed?" {
-                        print("🔍 HomeView Filter: Bet '\(bet.title)' - Status: \(bet.status), Deadline: \(bet.deadline), Current: \(currentDate), IsOpen: \(isOpen), NotExpired: \(notExpired), NameMatches: \(nameMatches)")
-                    }
-                    
-                    // Debug logging for community matching
-                    if bet.title == "Will SpongeBob be on tonight?" {
-                        print("🔍 HomeView Filter: Bet '\(bet.title)' - Community ID: \(bet.community_id), Community Name: \(community.name), Selected Filter: \(selectedFilter), NameMatches: \(nameMatches)")
-                    }
-                    
+                    let notExpired = bet.deadline > currentTime
                     return nameMatches && isOpen && notExpired
                 } else {
-                    print("🔍 HomeView Filter: Bet '\(bet.title)' - No community found for ID: \(bet.community_id)")
                     return false
                 }
             }
         
-        // Comprehensive HomeView filtering analysis
-        let currentTime = Date()
-        let formatter = DateFormatter()
-        formatter.dateStyle = .full
-        formatter.timeStyle = .full
-        
-        print("=" + String(repeating: "=", count: 80))
-        print("🏠 HOMEVIEW FILTERING ANALYSIS")
-        print("=" + String(repeating: "=", count: 80))
-        print("⏰ Current Time: \(formatter.string(from: currentTime))")
-        print("🏷️ Selected Filter: \(selectedFilter)")
-        print("📊 Total Bets Available: \(firestoreService.bets.count)")
-        print("✅ Filtered Bets: \(filtered.count)")
-        print("-" + String(repeating: "-", count: 80))
-        
-        // Analyze all bets
-        for bet in firestoreService.bets {
-            let isOpen = bet.status.lowercased() == "open"
-            let notExpired = bet.deadline > currentTime
-            
-            // Check community filter
-            if selectedFilter != "All Bets" {
+        // If filtering by a specific community, add other community bets at the end
+        if selectedFilter != "All Bets" {
+            let otherCommunityBets = firestoreService.bets.filter { bet in
+                // Only show open bets that haven't expired
+                let isOpen = bet.status.lowercased() == "open"
+                let notExpired = bet.deadline > currentTime
+                
+                // Check if bet is from a different community
                 if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
-                    _ = community.name == selectedFilter
-                } else {
-                    print("    - Community: NOT FOUND")
+                    let isDifferentCommunity = community.name != selectedFilter
+                    return isOpen && notExpired && isDifferentCommunity
                 }
+                return false
             }
             
-            let wouldShow = isOpen && notExpired
-            print("    - Would Show: \(wouldShow)")
-            print("")
+            // Combine filtered bets with other community bets
+            return filtered + otherCommunityBets
         }
         
-        print("-" + String(repeating: "-", count: 80))
-        
-        // Show why bets are filtered out
-        if filtered.isEmpty && !firestoreService.bets.isEmpty {
-            
-            let closedBets = firestoreService.bets.filter { $0.status.lowercased() != "open" }
-            let expiredBets = firestoreService.bets.filter { $0.status.lowercased() == "open" && $0.deadline <= currentTime }
-            let communityMismatchBets = selectedFilter != "All Bets" ? firestoreService.bets.filter { bet in
-                if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
-                    return community.name != selectedFilter
-                }
-                return true
-            } : []
-            
-            if !closedBets.isEmpty {
-                print("  🔒 Closed/Cancelled Bets (\(closedBets.count)):")
-                for bet in closedBets {
-                    print("    • '\(bet.title)' - Status: \(bet.status)")
-                }
-            }
-            
-            if !expiredBets.isEmpty {
-                print("  ⏰ Expired Bets (\(expiredBets.count)):")
-                for bet in expiredBets {
-                    let timeDiff = bet.deadline.timeIntervalSince(currentTime)
-                    print("    • '\(bet.title)' - Expired by \(abs(timeDiff)) seconds")
-                }
-            }
-            
-            if !communityMismatchBets.isEmpty {
-                print("  🏘️ Community Mismatch Bets (\(communityMismatchBets.count)):")
-                for bet in communityMismatchBets {
-                    if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
-                        print("    • '\(bet.title)' - Community: \(community.name), Filter: \(selectedFilter)")
-                    }
-                }
-            }
-        }
-        
-        print("=" + String(repeating: "=", count: 80))
         return filtered
     }
     

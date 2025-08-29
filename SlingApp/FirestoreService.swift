@@ -264,9 +264,13 @@ class FirestoreService: ObservableObject {
                 first_name: firstName,
                 full_name: "\(firstName) \(lastName)",
                 last_name: lastName,
+                gender: nil, // Email sign-up doesn't collect gender
+                profile_picture_url: nil, // Email sign-up doesn't provide profile picture
                 total_bets: 0,
                 total_winnings: 0,
-                id: user.uid
+                id: user.uid,
+                uid: user.uid,
+                sling_points: nil
             )
             
             do {
@@ -794,8 +798,8 @@ class FirestoreService: ObservableObject {
                             // Check for expired bets and update their status
                             self?.checkAndUpdateExpiredBets(fetchedBets)
                             
-                            // Sort bets by deadline (most recent first) to ensure settled bets appear
-                            let sortedBets = fetchedBets.sorted { $0.deadline > $1.deadline }
+                            // Sort bets by creation date (most recent first) to show newest bets at the top
+                            let sortedBets = fetchedBets.sorted { $0.created_date > $1.created_date }
                             
                             print("🔍 fetchBets: Successfully processed \(sortedBets.count) bets")
                             if !sortedBets.isEmpty {

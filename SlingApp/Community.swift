@@ -234,6 +234,8 @@ struct FirestoreUser: Identifiable, Codable {
     var first_name: String?
     var full_name: String? // Made optional
     var last_name: String?
+    var gender: String? // User's gender (optional)
+    var profile_picture_url: String? // URL to user's profile picture (optional)
     var total_bets: Int?
     var total_winnings: Int?
     var id: String? // 24-character alphanumeric user ID
