@@ -86,7 +86,7 @@ struct MainAppView: View {
                     // Chat Tab
                     Button(action: { 
                         selectedTab = 1
-                        // Refresh chat data when switching to chat tab
+                        // Refresh chat data when switching to chat tab (no loading state needed)
                         firestoreService.fetchUserCommunities()
                         firestoreService.fetchLastMessagesForUserCommunities()
                     }) {

@@ -3551,13 +3551,8 @@ struct MessagesView: View {
     private func loadMessages(for community: FirestoreCommunity) {
         guard let communityId = community.id else { return }
 
-        isLoadingMessages = true
+        // Fetch messages without blocking the UI
         firestoreService.fetchMessages(for: communityId)
-        
-        // Set loading to false after a short delay to ensure messages are loaded
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            isLoadingMessages = false
-        }
     }
     
     private var chatListView: some View {
@@ -3567,8 +3562,6 @@ struct MessagesView: View {
             
             if firestoreService.userCommunities.isEmpty {
                 emptyStateView
-            } else if isLoadingMessages {
-                loadingStateView
             } else {
                 chatListScrollView
             }
@@ -3576,8 +3569,17 @@ struct MessagesView: View {
     }
     
     private var chatHeaderView: some View {
-        // Empty view - header removed
-        EmptyView()
+        HStack {
+            Text("Messages")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.black)
+            
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white)
     }
     
     private var searchBarView: some View {
@@ -3590,6 +3592,8 @@ struct MessagesView: View {
                 .font(.subheadline)
             
             Spacer()
+            
+
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -3625,22 +3629,6 @@ struct MessagesView: View {
         }
     }
     
-    private var loadingStateView: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            
-            ProgressView()
-                .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
-                .scaleEffect(1.2)
-            
-            Text("Loading messages...")
-                .font(.subheadline)
-                .foregroundColor(.gray)
-            
-            Spacer()
-        }
-    }
-    
     private var chatListScrollView: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -3663,11 +3651,35 @@ struct MessagesView: View {
             // Refresh unread counts and last messages
             firestoreService.fetchLastMessagesForUserCommunities()
             
-            // Set loading to false after refresh
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            // Set loading to false after refresh completes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 isLoadingMessages = false
             }
         }
+        .overlay(
+            // Subtle loading indicator overlay when refreshing
+            Group {
+                if isLoadingMessages {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
+                                .scaleEffect(0.8)
+                            Text("Refreshing...")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.9))
+                        .cornerRadius(20)
+                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                        .padding(.bottom, 20)
+                    }
+                }
+            }
+        )
 
     }
     
@@ -3783,21 +3795,39 @@ struct MessagesView: View {
         .animation(.easeInOut(duration: 0.3), value: selectedCommunity)
         .onAppear {
             // Refresh communities when view appears
+            isLoadingMessages = true
             firestoreService.fetchUserCommunities()
             // Fetch last messages for all communities to reduce lag
             firestoreService.fetchLastMessagesForUserCommunities()
             // Initialize unread counts immediately
             initializeUnreadCounts()
+            
+            // Set loading to false after initial load
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isLoadingMessages = false
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             // Refresh data when app becomes active
+            isLoadingMessages = true
             firestoreService.fetchUserCommunities()
             firestoreService.fetchLastMessagesForUserCommunities()
+            
+            // Set loading to false after refresh
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isLoadingMessages = false
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             // Refresh data when app comes to foreground
+            isLoadingMessages = true
             firestoreService.fetchUserCommunities()
             firestoreService.fetchLastMessagesForUserCommunities()
+            
+            // Set loading to false after refresh
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isLoadingMessages = false
+            }
         }
 
         .onChange(of: firestoreService.messages) { _, newMessages in
@@ -3905,6 +3935,8 @@ struct MessagesView: View {
                     .font(.headline)
                     .fontWeight(.bold)
                     .foregroundColor(.black)
+                
+
             }
             
             Spacer()
@@ -3968,6 +4000,8 @@ struct MessagesView: View {
                         }
                     }
                 }
+                
+
                 
                 // Auto-scroll indicator when new messages arrive
                 Color.clear
