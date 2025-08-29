@@ -53,7 +53,7 @@ struct MainAppView: View {
                         MessagesView(firestoreService: firestoreService)
                     case 2:
                         // My Bets View
-                        MyBetsView(firestoreService: firestoreService)
+                        MyBetsView(firestoreService: firestoreService, selectedTab: $selectedTab)
                     case 3:
                         // Communities View
                         CommunitiesView(firestoreService: firestoreService, onNavigateToHome: { communityName in

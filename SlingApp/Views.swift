@@ -731,12 +731,12 @@ struct EmptyBetsView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.gray.opacity(0.6))
             
-            Text("No active bets found")
+            Text("No pending bets found")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(.black)
             
-            Text("You don't have any active bets right now.")
+            Text("You don't have any pending bets right now.")
                 .font(.subheadline)
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
@@ -776,12 +776,12 @@ struct EmptyActiveBetsView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.gray.opacity(0.6))
             
-            Text("No active bets found")
+            Text("No pending bets found")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(.black)
             
-            Text("You don't have any active bets right now.")
+            Text("You don't have any pending bets right now.")
                 .font(.subheadline)
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
@@ -1176,6 +1176,7 @@ struct OutcomePill: View {
 
 struct MyBetsView: View {
     @ObservedObject var firestoreService: FirestoreService
+    @Binding var selectedTab: Int
     @State private var selectedPastBetFilter = "All"
     @State private var showingCreateBetModal = false
     
@@ -1242,10 +1243,10 @@ struct MyBetsView: View {
                 
 
                 
-                // Active Bets Section - Always show
+                // Markets to Bet On Section - Always show
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Text("Active Bets")
+                        Text("Markets to Bet On")
                             .font(.headline)
                             .fontWeight(.semibold)
                             .foregroundColor(.black)
@@ -1255,36 +1256,49 @@ struct MyBetsView: View {
                     .padding(.horizontal, 16)
                     
                     if activeBets.isEmpty {
-                        // No active bets - show full width Create Bet card
-                        Button(action: {
-                            showingCreateBetModal = true
-                        }) {
-                            VStack(spacing: 12) {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(.slingBlue)
+                        // No active bets - show Markets to Bet On section
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 16) {
+                                // Show available bets from user's communities
+                                ForEach(getAvailableBetsToBetOn(), id: \.id) { bet in
+                                    AvailableBetCard(bet: bet, firestoreService: firestoreService)
+                                }
                                 
-                                Text("Create Bet")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.slingBlue)
-                                
-                                Text("Start a new bet")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                // View More Markets Card
+                                Button(action: {
+                                    // Navigate to home page by changing the selected tab
+                                    selectedTab = 0
+                                }) {
+                                    VStack(spacing: 8) {
+                                        Text("View More Active Markets")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.slingBlue)
+                                            .multilineTextAlignment(.center)
+                                        
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.slingBlue)
+                                                .frame(width: 32, height: 32)
+                                            
+                                            Image(systemName: "arrow.right")
+                                                .font(.system(size: 16))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    .frame(width: 160, height: 160)
+                                    .background(Color.white)
+                                    .cornerRadius(16)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                                }
                             }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 140)
-                            .background(Color.white)
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
-                            )
-                            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
                     } else {
                         // Has active bets - show horizontal scroll with Create Bet card
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -1311,7 +1325,7 @@ struct MyBetsView: View {
                                             .font(.caption)
                                             .foregroundColor(.gray)
                                     }
-                                    .frame(width: 160, height: 140)
+                                    .frame(width: 160, height: 160)
                                     .background(Color.white)
                                     .cornerRadius(16)
                                     .overlay(
@@ -1506,6 +1520,25 @@ struct MyBetsView: View {
         firestoreService.fetchUserCommunities()
         firestoreService.fetchUserBets { _ in }
         firestoreService.fetchUserBetParticipations()
+    }
+    
+    // MARK: - Helper Functions
+    
+    private func getAvailableBetsToBetOn() -> [FirestoreBet] {
+        // Get available bets from user's communities that are open and not expired
+        let currentDate = Date()
+        return firestoreService.bets.filter { bet in
+            let isOpen = bet.status.lowercased() == "open"
+            let notExpired = bet.deadline > currentDate
+            let isUserCommunity = firestoreService.userCommunities.contains { community in
+                community.id == bet.community_id
+            }
+            let userNotParticipated = !firestoreService.userBetParticipations.contains { participation in
+                participation.bet_id == bet.id
+            }
+            
+            return isOpen && notExpired && isUserCommunity && userNotParticipated
+        }
     }
     
     private func filterPastBets(_ bets: [FirestoreBet], filter: String) -> [FirestoreBet] {
@@ -2983,6 +3016,113 @@ struct CondensedBetCard: View {
             } else {
                 print("❌ Error deleting bet")
             }
+        }
+    }
+}
+
+// MARK: - Available Bet Card Component
+
+struct AvailableBetCard: View {
+    let bet: FirestoreBet
+    @ObservedObject var firestoreService: FirestoreService
+    @State private var showingBetDetail = false
+    
+    private var communityName: String {
+        let communityId = bet.community_id
+        if let community = firestoreService.userCommunities.first(where: { $0.id == communityId }) {
+            return community.name
+        }
+        return "Unknown Community"
+    }
+    
+    private func getOddsForOption(_ option: String) -> String {
+        return bet.odds[option] ?? "-110"
+    }
+    
+    var body: some View {
+        Button(action: {
+            showingBetDetail = true
+        }) {
+            VStack(alignment: .leading, spacing: 8) {
+                // Padding above bet title
+                Spacer()
+                    .frame(height: 8)
+                
+                // Bet title - larger font with proper wrapping
+                Text(bet.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                // Community name with icon right under the title
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "person.2")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                        .frame(width: 12, height: 12)
+                    
+                    Text(communityName)
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                
+                // Bet options - styled like main page with odds
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(bet.options, id: \.self) { option in
+                        let odds = getOddsForOption(option)
+                        HStack(alignment: .top, spacing: 8) {
+                            Text(option)
+                                .font(.subheadline)
+                                .foregroundColor(.black)
+                                .fontWeight(.medium)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            
+                            Spacer()
+                            
+                            Text(odds)
+                                .font(.subheadline)
+                                .foregroundColor(.black)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.slingBlue.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(width: 160, height: 160)
+            .background(Color.white)
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showingBetDetail) {
+            JoinBetView(
+                bet: bet,
+                firestoreService: firestoreService,
+                onCommunityTap: {
+                    // Navigate to community details
+                }
+            )
         }
     }
 }
@@ -8324,7 +8464,7 @@ struct EditProfileView: View {
                         // Sign Out Button
                         Button(action: {
                             firestoreService.signOut()
-                            dismiss()
+                            // Let the authentication state change handle navigation
                         }) {
                             Text("Sign Out")
                                 .font(.headline)
@@ -14381,7 +14521,7 @@ struct UserSettingsView: View {
                 DeleteAccountView()
             }
             .sheet(isPresented: $showingSignOut) {
-                SignOutView()
+                SignOutView(firestoreService: firestoreService)
             }
         }
     }
@@ -14595,17 +14735,13 @@ struct UserSettingsView: View {
             }
             
             VStack(spacing: 0) {
-                Button(action: {
+                SettingsRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", subtitle: "Sign out of your account", isDestructive: true, action: {
                     showingSignOut = true
-                }) {
-                    SettingsRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", subtitle: "Sign out of your account", isDestructive: true, action: {})
-                }
+                })
                 Divider().padding(.leading, 56)
-                Button(action: {
+                SettingsRow(icon: "trash", title: "Delete Account", subtitle: "Permanently delete your account", isDestructive: true, action: {
                     showingDeleteAccount = true
-                }) {
-                    SettingsRow(icon: "trash", title: "Delete Account", subtitle: "Permanently delete your account", isDestructive: true, action: {})
-                }
+                })
             }
             .background(Color.white)
             .cornerRadius(12)
@@ -16127,6 +16263,8 @@ struct DeleteAccountView: View {
 
 struct SignOutView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var firestoreService: FirestoreService
+    @State private var isSigningOut = false
     
     var body: some View {
         NavigationView {
@@ -16180,19 +16318,36 @@ struct SignOutView: View {
         .cornerRadius(12)
                             
                             Button(action: {
-                                // TODO: Implement sign out
-                                print("Sign out")
-                                dismiss()
+                                // Implement actual sign out
+                                isSigningOut = true
+                                firestoreService.signOut()
+                                
+                                // Add a small delay to ensure auth state change propagates
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                    // The auth state change should have already triggered navigation
+                                    // If for some reason it hasn't, we can manually dismiss
+                                    if firestoreService.isAuthenticated {
+                                        dismiss()
+                                    }
+                                }
                             }) {
-                                Text("Sign Out")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 50)
-                                    .background(Color.slingBlue)
-                                    .cornerRadius(12)
+                                HStack {
+                                    if isSigningOut {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    }
+                                    Text(isSigningOut ? "Signing Out..." : "Sign Out")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(isSigningOut ? Color.gray : Color.slingBlue)
+                                .cornerRadius(12)
                             }
+                            .disabled(isSigningOut)
                         }
                     }
                     .padding(.horizontal, 16)

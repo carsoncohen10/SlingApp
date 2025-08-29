@@ -318,10 +318,46 @@ class FirestoreService: ObservableObject {
     }
     
     func signOut() {
+        print("🔄 Starting sign out process...")
+        
         do {
+            // First, manually set authentication state to false to ensure immediate UI update
+            DispatchQueue.main.async {
+                self.isAuthenticated = false
+                self.currentUser = nil
+            }
+            
+            // Then sign out from Firebase
             try Auth.auth().signOut()
+            
+            // Clean up local state
+            DispatchQueue.main.async {
+                self.communities = []
+                self.userCommunities = []
+                self.bets = []
+                self.userBetParticipations = []
+                self.notifications = []
+                self.messages = []
+                self.communityLastMessages = [:]
+                self.mutedCommunities = []
+                self.totalUnreadCount = 0
+                
+                // Stop any active listeners
+                self.stopListeningToMessages()
+            }
+            
+            print("✅ User signed out successfully and local state cleaned up")
         } catch {
             print("❌ Error signing out: \(error.localizedDescription)")
+            
+            // If there was an error, restore the authentication state
+            DispatchQueue.main.async {
+                self.isAuthenticated = true
+                // Re-fetch current user to restore state
+                if let user = Auth.auth().currentUser {
+                    self.fetchCurrentUser(userId: user.uid)
+                }
+            }
         }
     }
     
