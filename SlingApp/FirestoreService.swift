@@ -2754,5 +2754,277 @@ class FirestoreService: ObservableObject {
             completion(betDetails)
         }
     }
+    
+    // MARK: - Community Management Methods
+    
+    func leaveCommunity(communityId: String, userEmail: String, completion: @escaping (Bool) -> Void) {
+        // Remove user from community members array
+        db.collection("community").document(communityId).getDocument { [weak self] snapshot, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ Error fetching community: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            guard let document = snapshot, document.exists,
+                  let data = document.data(),
+                  var members = data["members"] as? [String] else {
+                print("❌ Community document not found or invalid")
+                completion(false)
+                return
+            }
+            
+            // Remove user from members array
+            members.removeAll { $0 == userEmail }
+            
+            // Update community document
+            let updateData: [String: Any] = [
+                "members": members,
+                "member_count": members.count,
+                "updated_date": Date()
+            ]
+            
+            self.db.collection("community").document(communityId).updateData(updateData) { error in
+                if let error = error {
+                    print("❌ Error updating community members: \(error.localizedDescription)")
+                    completion(false)
+                } else {
+                    // Also remove from CommunityMember collection
+                    self.removeUserFromCommunity(communityId: communityId, userEmail: userEmail) { success in
+                        if success {
+                            print("✅ Successfully left community \(communityId)")
+                            // Refresh user communities
+                            self.fetchUserCommunities()
+                        }
+                        completion(success)
+                    }
+                }
+            }
+        }
+    }
+    
+    func kickMemberFromCommunity(communityId: String, memberEmail: String, completion: @escaping (Bool) -> Void) {
+        // Only admins can kick members
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false)
+            return
+        }
+        
+        isUserAdminInCommunity(communityId: communityId, userEmail: currentUserEmail) { [weak self] isAdmin in
+            guard let self = self else { return }
+            
+            if !isAdmin {
+                print("❌ User is not admin, cannot kick members")
+                completion(false)
+                return
+            }
+            
+            // Remove member from community
+            self.leaveCommunity(communityId: communityId, userEmail: memberEmail) { success in
+                if success {
+                    print("✅ Successfully kicked member \(memberEmail) from community \(communityId)")
+                }
+                completion(success)
+            }
+        }
+    }
+    
+    func promoteMemberToAdmin(communityId: String, memberEmail: String, completion: @escaping (Bool) -> Void) {
+        // Only admins can promote members
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false)
+            return
+        }
+        
+        isUserAdminInCommunity(communityId: communityId, userEmail: currentUserEmail) { [weak self] isAdmin in
+            guard let self = self else { return }
+            
+            if !isAdmin {
+                print("❌ User is not admin, cannot promote members")
+                completion(false)
+                return
+            }
+            
+            // Update member to admin status
+            self.updateUserMembershipStatus(communityId: communityId, userEmail: memberEmail, isAdmin: true) { success in
+                if success {
+                    print("✅ Successfully promoted \(memberEmail) to admin in community \(communityId)")
+                }
+                completion(success)
+            }
+        }
+    }
+    
+    func demoteAdminToMember(communityId: String, memberEmail: String, completion: @escaping (Bool) -> Void) {
+        // Only admins can demote other admins
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false)
+            return
+        }
+        
+        isUserAdminInCommunity(communityId: communityId, userEmail: currentUserEmail) { [weak self] isAdmin in
+            guard let self = self else { return }
+            
+            if !isAdmin {
+                print("❌ User is not admin, cannot demote members")
+                completion(false)
+                return
+            }
+            
+            // Prevent demoting yourself if you're the only admin
+            if memberEmail == currentUserEmail {
+                print("❌ Cannot demote yourself if you're the only admin")
+                completion(false)
+                return
+            }
+            
+            // Update member to regular member status
+            self.updateUserMembershipStatus(communityId: communityId, userEmail: memberEmail, isAdmin: false) { success in
+                if success {
+                    print("✅ Successfully demoted \(memberEmail) to member in community \(communityId)")
+                }
+                completion(success)
+            }
+        }
+    }
+    
+    func deleteCommunity(communityId: String, completion: @escaping (Bool) -> Void) {
+        // Only admins can delete communities
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false)
+            return
+        }
+        
+        isUserAdminInCommunity(communityId: communityId, userEmail: currentUserEmail) { [weak self] isAdmin in
+            guard let self = self else { return }
+            
+            if !isAdmin {
+                print("❌ User is not admin, cannot delete community")
+                completion(false)
+                return
+            }
+            
+            // Delete community document
+            self.db.collection("community").document(communityId).delete { error in
+                if let error = error {
+                    print("❌ Error deleting community: \(error.localizedDescription)")
+                    completion(false)
+                } else {
+                    print("✅ Successfully deleted community \(communityId)")
+                    // Refresh user communities
+                    self.fetchUserCommunities()
+                    completion(true)
+                }
+            }
+        }
+    }
+    
+    func updateCommunityDescription(communityId: String, newDescription: String, completion: @escaping (Bool) -> Void) {
+        // Only admins can update community description
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false)
+            return
+        }
+        
+        isUserAdminInCommunity(communityId: communityId, userEmail: currentUserEmail) { [weak self] isAdmin in
+            guard let self = self else { return }
+            
+            if !isAdmin {
+                print("❌ User is not admin, cannot update community description")
+                completion(false)
+                return
+            }
+            
+            let updateData: [String: Any] = [
+                "description": newDescription,
+                "updated_date": Date()
+            ]
+            
+            self.db.collection("community").document(communityId).updateData(updateData) { error in
+                if let error = error {
+                    print("❌ Error updating community description: \(error.localizedDescription)")
+                    completion(false)
+                } else {
+                    print("✅ Successfully updated community description")
+                    completion(true)
+                }
+            }
+        }
+    }
+    
+    func toggleCommunityPrivacy(communityId: String, isPrivate: Bool, completion: @escaping (Bool) -> Void) {
+        // Only admins can toggle community privacy
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false)
+            return
+        }
+        
+        isUserAdminInCommunity(communityId: communityId, userEmail: currentUserEmail) { [weak self] isAdmin in
+            guard let self = self else { return }
+            
+            if !isAdmin {
+                print("❌ User is not admin, cannot toggle community privacy")
+                completion(false)
+                return
+            }
+            
+            let updateData: [String: Any] = [
+                "is_private": isPrivate,
+                "updated_date": Date()
+            ]
+            
+            self.db.collection("community").document(communityId).updateData(updateData) { error in
+                if let error = error {
+                    print("❌ Error updating community privacy: \(error.localizedDescription)")
+                    completion(false)
+                } else {
+                    print("✅ Successfully updated community privacy to \(isPrivate ? "private" : "public")")
+                    completion(true)
+                }
+            }
+        }
+    }
+    
+    func updateNotificationPreferences(communityId: String, userEmail: String, isMuted: Bool, completion: @escaping (Bool) -> Void) {
+        let documentId = "\(communityId)_\(userEmail)"
+        
+        let updateData: [String: Any] = [
+            "notifications_muted": isMuted,
+            "updated_date": Date()
+        ]
+        
+        db.collection("CommunityMember").document(documentId).updateData(updateData) { error in
+            if let error = error {
+                print("❌ Error updating notification preferences: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                print("✅ Successfully updated notification preferences for \(userEmail) in community \(communityId)")
+                completion(true)
+            }
+        }
+    }
+    
+    func getNotificationPreferences(communityId: String, userEmail: String, completion: @escaping (Bool) -> Void) {
+        let documentId = "\(communityId)_\(userEmail)"
+        
+        db.collection("CommunityMember").document(documentId).getDocument { snapshot, error in
+            if let error = error {
+                print("❌ Error fetching notification preferences: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            guard let document = snapshot, document.exists,
+                  let data = document.data() else {
+                completion(false)
+                return
+            }
+            
+            let isMuted = data["notifications_muted"] as? Bool ?? false
+            completion(isMuted)
+        }
+    }
 
 }

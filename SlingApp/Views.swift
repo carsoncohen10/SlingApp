@@ -13058,6 +13058,16 @@ struct EnhancedCommunityDetailView: View {
     @State private var showingCopyFeedback = false
     @State private var isAdmin: Bool = false
     
+    // Settings sheet states
+    @State private var showingNotificationSettings = false
+    @State private var showingMemberManagement = false
+    @State private var showingCommunitySettings = false
+    @State private var showingAdminControls = false
+    
+    // Alert states
+    @State private var showingLeaveAlert = false
+    @State private var showingDeleteAlert = false
+    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -13200,7 +13210,7 @@ struct EnhancedCommunityDetailView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.bottom, 16)
+                .padding(.bottom, 24)
             }
             .padding(.horizontal, 16)
             .padding(.top, 28)
@@ -13536,28 +13546,28 @@ struct EnhancedCommunityDetailView: View {
                             icon: "bell", 
                             title: "Notifications", 
                             subtitle: "Manage notification preferences",
-                            action: { selectedTab = 3 }
+                            action: { showNotificationSettings() }
                         )
                         
                         SettingsRow(
                             icon: "person.2", 
                             title: "Member Management", 
                             subtitle: "Add or remove members",
-                            action: { selectedTab = 3 }
+                            action: { showMemberManagement() }
                         )
                         
                         SettingsRow(
                             icon: "gear", 
                             title: "Community Settings", 
                             subtitle: "Edit community details",
-                            action: { selectedTab = 3 }
+                            action: { showCommunitySettings() }
                         )
                         
                         SettingsRow(
                             icon: "shield", 
                             title: "Admin Controls", 
                             subtitle: "Manage community permissions",
-                            action: { selectedTab = 3 }
+                            action: { showAdminControls() }
                         )
                         
                         SettingsRow(
@@ -13565,7 +13575,7 @@ struct EnhancedCommunityDetailView: View {
                             title: "Delete Community", 
                             subtitle: "Permanently delete this community", 
                             isDestructive: true,
-                            action: { selectedTab = 3 }
+                            action: { showDeleteConfirmation() }
                         )
                     }
                     .background(Color.white)
@@ -13578,21 +13588,21 @@ struct EnhancedCommunityDetailView: View {
                             icon: "bell", 
                             title: "Notifications", 
                             subtitle: "Manage notification preferences",
-                            action: { selectedTab = 3 }
+                            action: { showNotificationSettings() }
                         )
                         
                         SettingsRow(
                             icon: "person.2", 
                             title: "Member Management", 
                             subtitle: "View community members",
-                            action: { selectedTab = 3 }
+                            action: { showMemberManagement() }
                         )
                         
                         SettingsRow(
                             icon: "gear", 
                             title: "Community Settings", 
                             subtitle: "View community details",
-                            action: { selectedTab = 3 }
+                            action: { showCommunitySettings() }
                         )
                         
                         SettingsRow(
@@ -13600,7 +13610,7 @@ struct EnhancedCommunityDetailView: View {
                             title: "Leave Community", 
                             subtitle: "Leave this community", 
                             isDestructive: true,
-                            action: { selectedTab = 3 }
+                            action: { showLeaveConfirmation() }
                         )
                     }
                     .background(Color.white)
@@ -13609,6 +13619,49 @@ struct EnhancedCommunityDetailView: View {
                 }
             }
             .padding(.vertical, 20)
+        }
+        .sheet(isPresented: $showingNotificationSettings) {
+            NotificationSettingsView(
+                community: community,
+                firestoreService: firestoreService,
+                isAdmin: isAdmin
+            )
+        }
+        .sheet(isPresented: $showingMemberManagement) {
+            MemberManagementView(
+                community: community,
+                firestoreService: firestoreService,
+                isAdmin: isAdmin
+            )
+        }
+        .sheet(isPresented: $showingCommunitySettings) {
+            CommunitySettingsDetailView(
+                community: community,
+                firestoreService: firestoreService,
+                isAdmin: isAdmin
+            )
+        }
+        .sheet(isPresented: $showingAdminControls) {
+            AdminControlsView(
+                community: community,
+                firestoreService: firestoreService
+            )
+        }
+        .alert("Leave Community", isPresented: $showingLeaveAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Leave", role: .destructive) {
+                leaveCommunity()
+            }
+        } message: {
+            Text("Are you sure you want to leave this community? You can rejoin later using the invite code.")
+        }
+        .alert("Delete Community", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteCommunity()
+            }
+        } message: {
+            Text("Are you sure you want to delete this community? This action cannot be undone and all data will be permanently lost.")
         }
     }
     
@@ -13696,6 +13749,56 @@ struct EnhancedCommunityDetailView: View {
         firestoreService.isUserAdminInCommunity(communityId: community.id ?? "", userEmail: userEmail) { adminStatus in
             DispatchQueue.main.async {
                 self.isAdmin = adminStatus
+            }
+        }
+    }
+    
+    // MARK: - Settings Helper Methods
+    
+    private func showNotificationSettings() {
+        showingNotificationSettings = true
+    }
+    
+    private func showMemberManagement() {
+        showingMemberManagement = true
+    }
+    
+    private func showCommunitySettings() {
+        showingCommunitySettings = true
+    }
+    
+    private func showAdminControls() {
+        showingAdminControls = true
+    }
+    
+    private func showLeaveConfirmation() {
+        showingLeaveAlert = true
+    }
+    
+    private func showDeleteConfirmation() {
+        showingDeleteAlert = true
+    }
+    
+    private func leaveCommunity() {
+        guard let userEmail = firestoreService.currentUser?.email else { return }
+        
+        firestoreService.leaveCommunity(communityId: community.id ?? "", userEmail: userEmail) { success in
+            DispatchQueue.main.async {
+                if success {
+                    // Dismiss the view and go back to communities list
+                    dismiss()
+                }
+            }
+        }
+    }
+    
+    private func deleteCommunity() {
+        firestoreService.deleteCommunity(communityId: community.id ?? "") { success in
+            DispatchQueue.main.async {
+                if success {
+                    // Dismiss the view and go back to communities list
+                    dismiss()
+                }
             }
         }
     }
@@ -14257,23 +14360,23 @@ struct TradingProfileView: View {
     
         // MARK: - Quick Stats Section
     private var quickStatsSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             Text("Quick Stats")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(.black)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
             
             // Performance Grid - Horizontal scroll
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     CommunityPerformanceCard(icon: "person.2", value: "\(getUserCommunityCount())", label: "Communities", color: .slingBlue)
                     CommunityPerformanceCard(icon: "target", value: "\(userData?.total_bets ?? 0)", label: "Total Bets", color: .slingBlue)
-                    CommunityPerformanceCard(icon: "bolt.fill", value: "$\(userData?.total_winnings ?? 0)", label: "Total Winnings", color: .slingBlue)
-                    CommunityPerformanceCard(icon: "bolt.fill", value: "\(userData?.sling_points ?? 0)", label: "Sling Points", color: .slingBlue)
-                    CommunityPerformanceCard(icon: "flame.fill", value: "\(userData?.blitz_points ?? 0)", label: "Blitz Points", color: .slingBlue)
+                    CommunityPerformanceCard(icon: "bolt.fill", value: "\(userData?.blitz_points ?? 0)", label: "Sling Points", color: .slingBlue)
+                    CommunityPerformanceCard(icon: "flame.fill", value: "\(getUserStreak())", label: "Streak", color: .slingBlue)
                 }
                 .padding(.horizontal, 16)
             }
@@ -14417,6 +14520,40 @@ struct TradingProfileView: View {
     
     private func getUserCommunityCount() -> Int {
         return firestoreService.userCommunities.count
+    }
+    
+    private func getUserStreak() -> Int {
+        // Calculate consecutive correct bets
+        var currentStreak = 0
+        var maxStreak = 0
+        
+        // Get user's email
+        let userEmail = firestoreService.currentUser?.email ?? ""
+        
+        // Filter completed bets where user participated and won
+        let userParticipations = firestoreService.userBetParticipations.filter { participant in
+            participant.is_winner == true
+        }
+        
+        // Sort participations by date (most recent first)
+        let sortedParticipations = userParticipations.sorted { participation1, participation2 in
+            participation1.created_date > participation2.created_date
+        }
+        
+        // Calculate streak
+        for participation in sortedParticipations {
+            // Find the corresponding bet to check if it's completed
+            if let bet = userBets.first(where: { $0.id == participation.bet_id }),
+               bet.status == "completed" {
+                currentStreak += 1
+                maxStreak = max(maxStreak, currentStreak)
+            } else {
+                // If bet is not completed or not found, reset streak
+                currentStreak = 0
+            }
+        }
+        
+        return maxStreak
     }
     
     private func getAbbreviatedDate() -> String {
@@ -16394,6 +16531,656 @@ struct SignOutView: View {
     }
 }
 
+struct MemberManagementView: View {
+    let community: FirestoreCommunity
+    let firestoreService: FirestoreService
+    let isAdmin: Bool
+    @Environment(\.dismiss) private var dismiss
+    @State private var members: [CommunityMemberInfo] = []
+    @State private var isLoading = false
+    @State private var showingKickAlert = false
+    @State private var selectedMember: CommunityMemberInfo?
+    @State private var showingPromoteAlert = false
+    @State private var showingDemoteAlert = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.slingBlue)
+                    
+                    Spacer()
+                    
+                    Text("Member Management")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                    
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.slingBlue)
+                }
+                .padding()
+                .background(Color.white)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 0.5)
+                        .foregroundColor(Color.gray.opacity(0.3)),
+                    alignment: .bottom
+                )
+                
+                if isLoading {
+                    Spacer()
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    Spacer()
+                } else {
+                    List {
+                        ForEach(members, id: \.id) { member in
+                            MemberManagementRowView(
+                                member: member,
+                                isAdmin: isAdmin,
+                                onKick: { showKickAlert(for: member) },
+                                onPromote: { showPromoteAlert(for: member) },
+                                onDemote: { showDemoteAlert(for: member) }
+                            )
+                        }
+                    }
+                    .listStyle(PlainListStyle())
+                }
+            }
+            .navigationBarHidden(true)
+        }
+        .onAppear {
+            loadMembers()
+        }
+        .alert("Kick Member", isPresented: $showingKickAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Kick", role: .destructive) {
+                if let member = selectedMember {
+                    kickMember(member)
+                }
+            }
+        } message: {
+            if let member = selectedMember {
+                Text("Are you sure you want to kick \(member.name) from the community?")
+            }
+        }
+        .alert("Promote to Admin", isPresented: $showingPromoteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Promote") {
+                if let member = selectedMember {
+                    promoteMember(member)
+                }
+            }
+        } message: {
+            if let member = selectedMember {
+                Text("Are you sure you want to promote \(member.name) to admin?")
+            }
+        }
+        .alert("Demote from Admin", isPresented: $showingDemoteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Demote") {
+                if let member = selectedMember {
+                    demoteMember(member)
+                }
+            }
+        } message: {
+            if let member = selectedMember {
+                Text("Are you sure you want to demote \(member.name) from admin?")
+            }
+        }
+    }
+    
+    private func loadMembers() {
+        isLoading = true
+        firestoreService.fetchCommunityMembers(communityId: community.id ?? "") { fetchedMembers in
+            DispatchQueue.main.async {
+                self.members = fetchedMembers
+                self.isLoading = false
+            }
+        }
+    }
+    
+    private func showKickAlert(for member: CommunityMemberInfo) {
+        selectedMember = member
+        showingKickAlert = true
+    }
+    
+    private func showPromoteAlert(for member: CommunityMemberInfo) {
+        selectedMember = member
+        showingPromoteAlert = true
+    }
+    
+    private func showDemoteAlert(for member: CommunityMemberInfo) {
+        selectedMember = member
+        showingDemoteAlert = true
+    }
+    
+    private func kickMember(_ member: CommunityMemberInfo) {
+        firestoreService.kickMemberFromCommunity(communityId: community.id ?? "", memberEmail: member.email) { success in
+            if success {
+                DispatchQueue.main.async {
+                    // Remove member from local array
+                    self.members.removeAll { $0.id == member.id }
+                }
+            }
+        }
+    }
+    
+    private func promoteMember(_ member: CommunityMemberInfo) {
+        firestoreService.promoteMemberToAdmin(communityId: community.id ?? "", memberEmail: member.email) { success in
+            if success {
+                DispatchQueue.main.async {
+                    // Update member in local array
+                    if let index = self.members.firstIndex(where: { $0.id == member.id }) {
+                        self.members[index] = CommunityMemberInfo(
+                            id: member.id,
+                            email: member.email,
+                            name: member.name,
+                            isActive: member.isActive,
+                            joinDate: member.joinDate,
+                            isAdmin: true
+                        )
+                    }
+                }
+            }
+        }
+    }
+    
+    private func demoteMember(_ member: CommunityMemberInfo) {
+        firestoreService.demoteAdminToMember(communityId: community.id ?? "", memberEmail: member.email) { success in
+            if success {
+                DispatchQueue.main.async {
+                    // Update member in local array
+                    if let index = self.members.firstIndex(where: { $0.id == member.id }) {
+                        self.members[index] = CommunityMemberInfo(
+                            id: member.id,
+                            email: member.email,
+                            name: member.name,
+                            isActive: member.isActive,
+                            joinDate: member.joinDate,
+                            isAdmin: false
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct CommunitySettingsDetailView: View {
+    let community: FirestoreCommunity
+    let firestoreService: FirestoreService
+    let isAdmin: Bool
+    @Environment(\.dismiss) private var dismiss
+    @State private var communityName: String
+    @State private var communityDescription: String
+    @State private var isPrivate: Bool
+    @State private var isEditing = false
+    @State private var isSaving = false
+    @State private var errorMessage = ""
+    
+    init(community: FirestoreCommunity, firestoreService: FirestoreService, isAdmin: Bool) {
+        self.community = community
+        self.firestoreService = firestoreService
+        self.isAdmin = isAdmin
+        self._communityName = State(initialValue: community.name)
+        self._communityDescription = State(initialValue: community.description ?? "")
+        self._isPrivate = State(initialValue: community.is_private ?? false)
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.slingBlue)
+                    
+                    Spacer()
+                    
+                    Text("Community Settings")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                    
+                    if isAdmin {
+                        Button(isEditing ? "Save" : "Edit") {
+                            if isEditing {
+                                saveChanges()
+                            } else {
+                                isEditing = true
+                            }
+                        }
+                        .foregroundColor(.slingBlue)
+                        .disabled(isSaving)
+                    } else {
+                        Button("Done") {
+                            dismiss()
+                        }
+                        .foregroundColor(.slingBlue)
+                    }
+                }
+                .padding()
+                .background(Color.white)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 0.5)
+                        .foregroundColor(Color.gray.opacity(0.3)),
+                    alignment: .bottom
+                )
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Community Name
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Community Name")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            if isEditing && isAdmin {
+                                TextField("Community Name", text: $communityName)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                            } else {
+                                Text(communityName)
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .padding()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+                            }
+                        }
+                        
+                        // Community Description
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Description")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            if isEditing && isAdmin {
+                                TextField("Description", text: $communityDescription, axis: .vertical)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .lineLimit(3...6)
+                            } else {
+                                Text(communityDescription.isEmpty ? "No description" : communityDescription)
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .padding()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+                            }
+                        }
+                        
+                        // Privacy Setting
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Privacy")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            if isEditing && isAdmin {
+                                Toggle("Private Community", isOn: $isPrivate)
+                                    .padding()
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+                            } else {
+                                HStack {
+                                    Text(isPrivate ? "Private" : "Public")
+                                        .font(.subheadline)
+                                        .foregroundColor(.gray)
+                                    
+                                    Spacer()
+                                    
+                                    Image(systemName: isPrivate ? "lock.fill" : "globe")
+                                        .foregroundColor(isPrivate ? .orange : .green)
+                                }
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                            }
+                        }
+                        
+                        // Invite Code (Read-only)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Invite Code")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            HStack {
+                                Text(community.invite_code)
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.black)
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    UIPasteboard.general.string = community.invite_code
+                                }) {
+                                    Image(systemName: "doc.on.clipboard")
+                                        .font(.title3)
+                                        .foregroundColor(.slingBlue)
+                                }
+                            }
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                        }
+                        
+                        if !errorMessage.isEmpty {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .padding()
+                                .background(Color.red.opacity(0.1))
+                                .cornerRadius(8)
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationBarHidden(true)
+        }
+    }
+    
+    private func saveChanges() {
+        isSaving = true
+        errorMessage = ""
+        
+        let group = DispatchGroup()
+        var hasError = false
+        
+        // Update community name if changed
+        if communityName != community.name {
+            group.enter()
+            firestoreService.updateCommunityName(communityId: community.id ?? "", newName: communityName) { success in
+                if !success {
+                    hasError = true
+                    errorMessage = "Failed to update community name"
+                }
+                group.leave()
+            }
+        }
+        
+        // Update community description if changed
+        if communityDescription != (community.description ?? "") {
+            group.enter()
+            firestoreService.updateCommunityDescription(communityId: community.id ?? "", newDescription: communityDescription) { success in
+                if !success {
+                    hasError = true
+                    errorMessage = "Failed to update community description"
+                }
+                group.leave()
+            }
+        }
+        
+        // Update privacy setting if changed
+        if isPrivate != (community.is_private ?? false) {
+            group.enter()
+            firestoreService.toggleCommunityPrivacy(communityId: community.id ?? "", isPrivate: isPrivate) { success in
+                if !success {
+                    hasError = true
+                    errorMessage = "Failed to update privacy setting"
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            isSaving = false
+            if !hasError {
+                isEditing = false
+            }
+        }
+    }
+}
+
+struct AdminControlsView: View {
+    let community: FirestoreCommunity
+    let firestoreService: FirestoreService
+    @Environment(\.dismiss) private var dismiss
+    @State private var members: [CommunityMemberInfo] = []
+    @State private var isLoading = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.slingBlue)
+                    
+                    Spacer()
+                    
+                    Text("Admin Controls")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                    
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.slingBlue)
+                }
+                .padding()
+                .background(Color.white)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 0.5)
+                        .foregroundColor(Color.gray.opacity(0.3)),
+                    alignment: .bottom
+                )
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Admin Statistics
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Admin Statistics")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            VStack(spacing: 8) {
+                                HStack {
+                                    Text("Total Members")
+                                    Spacer()
+                                    Text("\(community.member_count)")
+                                        .fontWeight(.medium)
+                                }
+                                
+                                HStack {
+                                    Text("Total Bets")
+                                    Spacer()
+                                    Text("\(community.total_bets)")
+                                        .fontWeight(.medium)
+                                }
+                                
+                                HStack {
+                                    Text("Community Status")
+                                    Spacer()
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(community.is_active == true ? Color.green : Color.red)
+                                            .frame(width: 8, height: 8)
+                                        Text(community.is_active == true ? "Active" : "Inactive")
+                                            .fontWeight(.medium)
+                                    }
+                                }
+                            }
+                            .font(.subheadline)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(12)
+                        }
+                        
+                        // Quick Actions
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Quick Actions")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            VStack(spacing: 8) {
+                                Button(action: {
+                                    // Toggle community status
+                                    let newStatus = !(community.is_active ?? true)
+                                    // TODO: Implement toggle community status
+                                }) {
+                                    HStack {
+                                        Image(systemName: "power")
+                                            .foregroundColor(.slingBlue)
+                                        Text("Toggle Community Status")
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                Button(action: {
+                                    // Regenerate invite code
+                                    // TODO: Implement regenerate invite code
+                                }) {
+                                    HStack {
+                                        Image(systemName: "arrow.clockwise")
+                                            .foregroundColor(.slingBlue)
+                                        Text("Regenerate Invite Code")
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationBarHidden(true)
+        }
+        .onAppear {
+            loadMembers()
+        }
+    }
+    
+    private func loadMembers() {
+        isLoading = true
+        firestoreService.fetchCommunityMembers(communityId: community.id ?? "") { fetchedMembers in
+            DispatchQueue.main.async {
+                self.members = fetchedMembers
+                self.isLoading = false
+            }
+        }
+    }
+}
+
+struct MemberManagementRowView: View {
+    let member: CommunityMemberInfo
+    let isAdmin: Bool
+    let onKick: () -> Void
+    let onPromote: () -> Void
+    let onDemote: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Profile Picture
+            Circle()
+                .fill(Color.slingGradient)
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Text(String(member.name.prefix(1)).uppercased())
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                )
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(member.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.black)
+                    
+                    if member.isAdmin {
+                        HStack(spacing: 4) {
+                            Image(systemName: "crown.fill")
+                                .font(.caption)
+                                .foregroundColor(.slingPurple)
+                            Text("Admin")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingPurple)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.slingPurple.opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                }
+                
+                Text(member.email)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            if isAdmin && !member.isAdmin {
+                // Show promote button for regular members
+                Button(action: onPromote) {
+                    Image(systemName: "arrow.up.circle")
+                        .font(.title3)
+                        .foregroundColor(.slingBlue)
+                }
+            } else if isAdmin && member.isAdmin {
+                // Show demote button for other admins
+                Button(action: onDemote) {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.title3)
+                        .foregroundColor(.orange)
+                }
+            }
+            
+            if isAdmin && !member.isAdmin {
+                // Show kick button for regular members
+                Button(action: onKick) {
+                    Image(systemName: "xmark.circle")
+                        .font(.title3)
+                        .foregroundColor(.red)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+}
+
 struct MemberRowView: View {
     let memberWithPoints: CommunityMemberWithPoints
     let rank: Int
@@ -16700,6 +17487,149 @@ struct RecentBetRow: View {
             return "book.fill"
         default:
             return "questionmark.circle.fill"
+        }
+    }
+}
+
+// MARK: - Community Settings Views
+
+struct NotificationSettingsView: View {
+    let community: FirestoreCommunity
+    let firestoreService: FirestoreService
+    let isAdmin: Bool
+    @Environment(\.dismiss) private var dismiss
+    @State private var isNotificationsMuted = false
+    @State private var isLoading = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                // Header
+                VStack(spacing: 8) {
+                    Image(systemName: "bell")
+                        .font(.system(size: 40))
+                        .foregroundColor(.slingBlue)
+                    
+                    Text("Notification Settings")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Text("Manage how you receive notifications for \(community.name)")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 20)
+                
+                // Settings
+                VStack(spacing: 16) {
+                    // Mute Notifications Toggle
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Mute Notifications")
+                                .font(.headline)
+                                .fontWeight(.medium)
+                            Text("Stop receiving notifications from this community")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                        
+                        Toggle("", isOn: $isNotificationsMuted)
+                            .onChange(of: isNotificationsMuted) { newValue in
+                                updateNotificationPreferences(muted: newValue)
+                            }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    
+                    // Additional settings for admins
+                    if isAdmin {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Admin Notifications")
+                                .font(.headline)
+                                .fontWeight(.medium)
+                            
+                            VStack(spacing: 8) {
+                                HStack {
+                                    Text("New member joins")
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.green)
+                                }
+                                
+                                HStack {
+                                    Text("New bet created")
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.green)
+                                }
+                                
+                                HStack {
+                                    Text("Bet settled")
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.green)
+                                }
+                            }
+                            .font(.subheadline)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                
+                Spacer()
+                
+                // Done Button
+                Button("Done") {
+                    dismiss()
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.slingGradient)
+                .cornerRadius(12)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+            .navigationBarHidden(true)
+        }
+        .onAppear {
+            loadNotificationPreferences()
+        }
+    }
+    
+    private func loadNotificationPreferences() {
+        guard let userEmail = firestoreService.currentUser?.email else { return }
+        
+        isLoading = true
+        firestoreService.getNotificationPreferences(communityId: community.id ?? "", userEmail: userEmail) { isMuted in
+            DispatchQueue.main.async {
+                self.isNotificationsMuted = isMuted
+                self.isLoading = false
+            }
+        }
+    }
+    
+    private func updateNotificationPreferences(muted: Bool) {
+        guard let userEmail = firestoreService.currentUser?.email else { return }
+        
+        firestoreService.updateNotificationPreferences(communityId: community.id ?? "", userEmail: userEmail, isMuted: muted) { success in
+            if success {
+                print("✅ Notification preferences updated")
+            } else {
+                print("❌ Failed to update notification preferences")
+                // Revert the toggle if update failed
+                DispatchQueue.main.async {
+                    self.isNotificationsMuted.toggle()
+                }
+            }
         }
     }
 }

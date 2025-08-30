@@ -514,7 +514,255 @@ struct HomeView: View {
                     }
                     
                     // Show bet feed content
-                    betFeedContent
+                    Group {
+                        if firestoreService.userCommunities.isEmpty {
+                            // Show action buttons for users with no communities
+                            VStack(spacing: 20) {
+                                Spacer()
+                                
+                                VStack(spacing: 16) {
+                                    Image(systemName: "person.2")
+                                        .font(.system(size: 48))
+                                        .foregroundColor(.gray.opacity(0.6))
+                                    
+                                    Text("Welcome to Sling!")
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.black)
+                                    
+                                    Text("Get started by joining or creating a community. Connect with friends and start predicting!")
+                                        .font(.subheadline)
+                                        .foregroundColor(.gray)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .padding(.horizontal, 24)
+                                
+                                VStack(spacing: 12) {
+                                    Button(action: {
+                                        showingJoinCommunityModal = true
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "person.2")
+                                                .font(.subheadline)
+                                            Text("Join Community")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 12)
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color.slingGradient)
+                                        .cornerRadius(10)
+                                    }
+                                    
+                                    Button(action: {
+                                        showingCreateCommunityModal = true
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "plus")
+                                                .font(.subheadline)
+                                            Text("Create Community")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 12)
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color.slingGradient)
+                                        .cornerRadius(10)
+                                    }
+                                }
+                                .padding(.horizontal, 32)
+                                
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            // Feed of Bets from user's joined communities
+                            let currentTime = Date()
+                            let primaryBets = selectedFilter == "All Bets" 
+                                ? firestoreService.bets.filter { bet in
+                                    // Only show open bets that haven't expired
+                                    let isOpen = bet.status.lowercased() == "open"
+                                    let notExpired = bet.deadline > currentTime
+                                    return isOpen && notExpired
+                                }
+                                : firestoreService.bets.filter { bet in
+                                    // Only show open bets that haven't expired from the selected community
+                                    let isOpen = bet.status.lowercased() == "open"
+                                    let notExpired = bet.deadline > currentTime
+                                    if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+                                        let nameMatches = community.name == selectedFilter
+                                        return nameMatches && isOpen && notExpired
+                                    }
+                                    return false
+                                }
+                            
+                            let otherCommunityBets = selectedFilter == "All Bets" 
+                                ? []
+                                : firestoreService.bets.filter { bet in
+                                    // Only show open bets that haven't expired from other communities
+                                    let isOpen = bet.status.lowercased() == "open"
+                                    let notExpired = bet.deadline > currentTime
+                                    if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+                                        let isDifferentCommunity = community.name != selectedFilter
+                                        return isOpen && notExpired && isDifferentCommunity
+                                    }
+                                    return false
+                                }
+                            
+                            // Show primary bets (selected community or all bets)
+                            if primaryBets.isEmpty && selectedFilter != "All Bets" {
+                                // No bets in selected community - using card format
+                                VStack(alignment: .leading, spacing: 16) {
+                                    // Header with icon and title
+                                    HStack(alignment: .top, spacing: 12) {
+                                        // Placeholder image area (same size as bet images)
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(AnyShapeStyle(Color.slingGradient))
+                                            .frame(width: 60, height: 60)
+                                            .overlay(
+                                                Image(systemName: "list.bullet.clipboard")
+                                                    .font(.system(size: 24))
+                                                    .foregroundColor(.white)
+                                            )
+                                        
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            Text("No Active Bets")
+                                                .font(.headline)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.black)
+                                            
+                                            Text("This community doesn't have any active bets yet.")
+                                                .font(.subheadline)
+                                                .foregroundColor(.gray)
+                                        }
+                                        
+                                        Spacer()
+                                    }
+                                    
+                                    // Create Bet Button
+                                    Button(action: {
+                                        showingCreateBet = true
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "plus")
+                                                .font(.subheadline)
+                                                .foregroundColor(.white)
+                                            
+                                            Text("Create a Bet")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                                .foregroundColor(.white)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 44)
+                                        .background(AnyShapeStyle(Color.slingGradient))
+                                        .cornerRadius(10)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                                .padding(16)
+                                .background(Color.white)
+                                .cornerRadius(16)
+                                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                            } else {
+                                ForEach(primaryBets) { bet in
+                                    HomeBetCard(
+                                        bet: bet,
+                                        currentUserEmail: firestoreService.currentUser?.email,
+                                        firestoreService: firestoreService
+                                    )
+                                }
+                            }
+                            
+                            // Show separator and other community bets if filtering by a specific community
+                            if selectedFilter != "All Bets" {
+                                // Separator
+                                VStack(spacing: 12) {
+                                    HStack {
+                                        Rectangle()
+                                            .frame(height: 1)
+                                            .foregroundColor(Color.gray.opacity(0.3))
+                                        Text("Other Communities")
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.gray)
+                                            .fixedSize()
+                                            .padding(.horizontal, 8)
+                                        Rectangle()
+                                            .frame(height: 1)
+                                            .foregroundColor(Color.gray.opacity(0.3))
+                                    }
+                                    .padding(.vertical, 16)
+                                    
+                                    // Other community bets
+                                    ForEach(otherCommunityBets) { bet in
+                                        HomeBetCard(
+                                            bet: bet,
+                                            currentUserEmail: firestoreService.currentUser?.email,
+                                            firestoreService: firestoreService
+                                        )
+                                    }
+                                    
+                                    // Show message if no other community bets exist
+                                    if otherCommunityBets.isEmpty {
+                                        VStack(alignment: .leading, spacing: 16) {
+                                            // Header with icon and title
+                                            HStack(alignment: .top, spacing: 12) {
+                                                                                    // Placeholder image area (same size as bet images)
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(AnyShapeStyle(Color.slingGradient))
+                                        .frame(width: 60, height: 60)
+                                        .overlay(
+                                            Image(systemName: "person.2")
+                                                .font(.system(size: 24))
+                                                .foregroundColor(.white)
+                                        )
+                                                
+                                                VStack(alignment: .leading, spacing: 8) {
+                                                    Text("No Other Bets")
+                                                        .font(.headline)
+                                                        .fontWeight(.semibold)
+                                                        .foregroundColor(.black)
+                                                    
+                                                    Text("No bets in other communities")
+                                                        .font(.subheadline)
+                                                        .foregroundColor(.gray)
+                                                }
+                                                
+                                                Spacer()
+                                            }
+                                            
+                                            // Placeholder for betting options area
+                                            VStack(spacing: 8) {
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .fill(Color.gray.opacity(0.05))
+                                                    .frame(height: 44)
+                                                    .overlay(
+                                                        Text("Check back later for new bets!")
+                                                            .font(.subheadline)
+                                                            .foregroundColor(.gray.opacity(0.6))
+                                                    )
+                                            }
+                                        }
+                                        .padding(16)
+                                        .background(Color.white)
+                                        .cornerRadius(16)
+                                        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                                    }
+                                }
+                            }
+                            
+                            // Show empty state if no bets at all
+                            if primaryBets.isEmpty && otherCommunityBets.isEmpty && selectedFilter == "All Bets" {
+                                EmptyBetsView(firestoreService: firestoreService)
+                            }
+                        }
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8) // Reduced from 16 to 8
@@ -560,190 +808,7 @@ struct HomeView: View {
         }
     }
     
-    // MARK: - Bet Feed Content
-    
-    private var betFeedContent: some View {
-        Group {
-            if firestoreService.userCommunities.isEmpty {
-                // Show action buttons for users with no communities
-                VStack(spacing: 20) {
-                    Spacer()
-                    
-                    VStack(spacing: 16) {
-                        Image(systemName: "person.2")
-                            .font(.system(size: 48))
-                            .foregroundColor(.gray.opacity(0.6))
-                        
-                        Text("Welcome to Sling!")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
-                        
-                        Text("Get started by joining or creating a community. Connect with friends and start predicting!")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, 24)
-                    
-                    VStack(spacing: 12) {
-                        Button(action: {
-                            showingJoinCommunityModal = true
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "person.2")
-                                    .font(.subheadline)
-                                Text("Join Community")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.slingGradient)
-                            .cornerRadius(10)
-                        }
-                        
-                        Button(action: {
-                            showingCreateCommunityModal = true
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "plus")
-                                    .font(.subheadline)
-                                Text("Create Community")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.slingGradient)
-                            .cornerRadius(10)
-                        }
-                    }
-                    .padding(.horizontal, 32)
-                    
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                // Feed of Bets from user's joined communities
-                let currentTime = Date()
-                let primaryBets = selectedFilter == "All Bets" 
-                    ? filteredBets
-                    : firestoreService.bets.filter { bet in
-                        // Only show open bets that haven't expired from the selected community
-                        let isOpen = bet.status.lowercased() == "open"
-                        let notExpired = bet.deadline > currentTime
-                        if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
-                            let nameMatches = community.name == selectedFilter
-                            return nameMatches && isOpen && notExpired
-                        }
-                        return false
-                    }
-                
-                let otherCommunityBets = selectedFilter == "All Bets" 
-                    ? []
-                    : firestoreService.bets.filter { bet in
-                        // Only show open bets that haven't expired from other communities
-                        let isOpen = bet.status.lowercased() == "open"
-                        let notExpired = bet.deadline > currentTime
-                        if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
-                            let isDifferentCommunity = community.name != selectedFilter
-                            return isOpen && notExpired && isDifferentCommunity
-                        }
-                        return false
-                    }
-                
-                // Show primary bets (selected community or all bets)
-                if primaryBets.isEmpty && selectedFilter != "All Bets" {
-                    // No bets in selected community
-                    VStack(spacing: 16) {
-                        Image(systemName: "person.2")
-                            .font(.system(size: 48))
-                            .foregroundColor(.gray.opacity(0.6))
-                        
-                        Text("No bets in \(selectedFilter)")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
-                        
-                        Text("This community doesn't have any active bets yet.")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
-                } else {
-                    ForEach(primaryBets) { bet in
-                        HomeBetCard(
-                            bet: bet,
-                            currentUserEmail: firestoreService.currentUser?.email,
-                            firestoreService: firestoreService
-                        )
-                    }
-                }
-                
-                // Show separator and other community bets if filtering by a specific community
-                if selectedFilter != "All Bets" {
-                    // Separator
-                    VStack(spacing: 12) {
-                        HStack {
-                            Rectangle()
-                                .frame(height: 1)
-                                .foregroundColor(Color.gray.opacity(0.3))
-                            Text("Other Communities")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.gray)
-                                .padding(.horizontal, 8)
-                            Rectangle()
-                                .frame(height: 1)
-                                .foregroundColor(Color.gray.opacity(0.3))
-                        }
-                        .padding(.vertical, 16)
-                        
-                        // Other community bets
-                        ForEach(otherCommunityBets) { bet in
-                            HomeBetCard(
-                                bet: bet,
-                                currentUserEmail: firestoreService.currentUser?.email,
-                                firestoreService: firestoreService
-                            )
-                        }
-                        
-                        // Show message if no other community bets exist
-                        if otherCommunityBets.isEmpty {
-                            VStack(spacing: 8) {
-                                Image(systemName: "person.2")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(.gray.opacity(0.6))
-                                
-                                Text("No bets in other communities")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 24)
-                        }
-                    }
-                }
-                
-                // Show empty state if no bets at all
-                if primaryBets.isEmpty && otherCommunityBets.isEmpty && selectedFilter == "All Bets" {
-                    EmptyBetsView(firestoreService: firestoreService)
-                }
-            }
-        }
-        .onAppear {
-            // View appeared
-        }
-    }
+
     
     // MARK: - Computed Properties
     
