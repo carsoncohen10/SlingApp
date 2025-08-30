@@ -43,13 +43,34 @@ struct AuthenticationView: View {
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var showingEmailForm = false
-    @State private var animatedCategoryIndex = 0
+    @State private var currentNonce: String?
+    @State private var errorMessageTimer: Timer?
+    @State private var appleButtonPressed = false
+    @State private var emailButtonPressed = false
+    @State private var logoAnimationProgress: CGFloat = 0
     
     // Dynamic prediction categories that fade in/out
     private let predictionCategories = [
         "sports", "politics", "finance", "crypto", 
         "entertainment", "technology", "weather", "elections"
     ]
+    
+    // Function to set error message with auto-fade
+    private func setErrorMessage(_ message: String) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            errorMessage = message
+        }
+        
+        // Cancel any existing timer
+        errorMessageTimer?.invalidate()
+        
+        // Set timer to clear error message after 4 seconds
+        errorMessageTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { _ in
+            withAnimation(.easeOut(duration: 0.5)) {
+                errorMessage = ""
+            }
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -58,143 +79,193 @@ struct AuthenticationView: View {
                 Color.white.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Top section with app branding and dynamic message
+                    // Top section - removed branding elements
                     VStack(spacing: 32) {
                         Spacer()
                         
-                        // App Logo and Name
-                        VStack(spacing: 20) {
-                            Image("Logo")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 80, height: 80)
-                                .cornerRadius(20)
-                                .shadow(color: .black.opacity(0.1), radius: 15, x: 0, y: 8)
-                
-                            Text("Sling")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.black)
-                        }
+                        Spacer()
                         
-                        // Dynamic main message with fading categories
-                        VStack(spacing: 16) {
-                            Text("Predict on anything")
-                                .font(.title2)
-                                .fontWeight(.bold)
+                        // Animated Logo
+                        ZStack {
+                            // Background rounded square (squircle) with sling gradient
+                            RoundedRectangle(cornerRadius: 30)
+                                .fill(Color.slingGradient)
+                                .frame(width: 120, height: 120)
+                                .shadow(color: Color.slingBlue.opacity(0.3), radius: 12, x: 0, y: 6)
+                            
+                            // Animated line chart with arrow - using exact vector path
+                            Path { path in
+                                // Original SVG path data
+                                path.move(to: CGPoint(x: 31.0002, y: 315.673))
+                                path.addLine(to: CGPoint(x: 178.673, y: 168))
+                                path.addLine(to: CGPoint(x: 336.112, y: 253.175))
+                                path.addLine(to: CGPoint(x: 621, y: 31))
+                                // Arrow part
+                                path.addLine(to: CGPoint(x: 437.939, y: 31)) // H437.939
+                                path.move(to: CGPoint(x: 621, y: 31)) // M621 31
+                                path.addLine(to: CGPoint(x: 621, y: 227.667)) // V227.667
+                            }
+                            .trim(from: 0, to: logoAnimationProgress)
+                            .stroke(Color.white, style: StrokeStyle(lineWidth: 35, lineCap: .round, lineJoin: .round))
+                            .scaleEffect(0.12)
+                            .offset(x: -18, y: -15)
+                        }
+                        .padding(.bottom, 12)
+                        
+                        // Main Tagline
+                        VStack(spacing: 8) {
+                            Text("Bet on Anything.")
+                                .font(.largeTitle)
+                                .fontWeight(.black)
                                 .foregroundColor(.black)
                                 .multilineTextAlignment(.center)
                             
-                            // Fading categories display
-                            HStack(spacing: 0) {
-                                Text("sports")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.gray)
-                                    .opacity(animatedCategoryIndex == 0 ? 1 : 0.3)
-                                    .animation(.easeInOut(duration: 0.5), value: animatedCategoryIndex)
-                                
-                                Text(" • ")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.gray.opacity(0.6))
-                                
-                                Text("politics")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.gray)
-                                    .opacity(animatedCategoryIndex == 1 ? 1 : 0.3)
-                                    .animation(.easeInOut(duration: 0.5), value: animatedCategoryIndex)
-                                
-                                Text(" • ")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.gray.opacity(0.6))
-                                
-                                Text("finance")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.gray)
-                                    .opacity(animatedCategoryIndex == 2 ? 1 : 0.3)
-                                    .animation(.easeInOut(duration: 0.5), value: animatedCategoryIndex)
-                            }
+                            Text("With Friends.")
+                                .font(.largeTitle)
+                                .fontWeight(.black)
+                                .foregroundStyle(Color.slingGradient)
+                                .multilineTextAlignment(.center)
                         }
-                        
-                        Spacer()
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 32)
                         
                         // Authentication Buttons - Centered Content
                         VStack(spacing: 16) {
                             // Google Sign-In Button
                             GoogleSignInButton(action: handleGoogleSignIn, isLoading: isLoading)
                             
-                            // Apple Sign-In Button
-                            SignInWithAppleButton(
-                                onRequest: { request in
-                                    request.requestedScopes = [.fullName, .email]
-                                },
-                                onCompletion: { result in
-                                    handleAppleSignIn(result)
+                            // Apple Sign-In Button - Custom implementation to match Google button
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.218)) {
+                                    appleButtonPressed = true
                                 }
-                            )
-                            .signInWithAppleButtonStyle(.black)
-                            .frame(height: 56)
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                            )
-                            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
-                            .disabled(isLoading)
-                            .overlay(
-                                HStack(spacing: 16) {
-                                    Image(systemName: "applelogo")
-                                        .font(.title2)
-                                        .foregroundColor(.black)
-                                        .frame(width: 24, height: 24)
-                                    
-                                    Spacer()
+                                
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.218) {
+                                    appleButtonPressed = false
+                                    // Trigger Apple Sign In
+                                    triggerAppleSignIn()
                                 }
-                                .padding(.horizontal, 20)
-                                .allowsHitTesting(false)
-                            )
-                            
-                            // Email Sign-In Button
-                            Button(action: { showingEmailForm = true }) {
-                                HStack(spacing: 16) {
-                                    Image(systemName: "envelope.fill")
-                                        .font(.title2)
-                                        .foregroundColor(.white)
-                                        .frame(width: 24, height: 24)
+                            }) {
+                                ZStack {
+                                    // Button state overlay (matches Google's animation)
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.black.opacity(0.1))
+                                        .opacity(appleButtonPressed ? 0.12 : 0)
+                                        .animation(.easeInOut(duration: 0.218), value: appleButtonPressed)
                                     
-                                    Text("Sign up with Email")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.white)
-                                    
-                                    Spacer()
+                                    // Main button content
+                                    HStack(spacing: 16) {
+                                        Spacer()
+                                        
+                                        // Apple Logo
+                                        Image(systemName: "applelogo")
+                                            .font(.title2)
+                                            .foregroundColor(.black)
+                                            .frame(width: 24, height: 24)
+                                        
+                                        Text("Continue with Apple")
+                                            .font(.headline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.black)
+                                        
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 20)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 56)
-                                .padding(.horizontal, 20)
-                                .background(Color.slingGradient)
+                                .background(Color.white)
                                 .cornerRadius(16)
-                                .shadow(color: Color.slingBlue.opacity(0.3), radius: 8, x: 0, y: 4)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
                             }
                             .disabled(isLoading)
+                            .scaleEffect(appleButtonPressed ? 0.98 : 1.0)
+                            .animation(.easeInOut(duration: 0.218), value: appleButtonPressed)
+                            
+                            // Email Sign-Up Button - Always goes to Sign Up
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.218)) {
+                                    emailButtonPressed = true
+                                }
+                                
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.218) {
+                                    emailButtonPressed = false
+                                    isSignUp = true
+                                    showingEmailForm = true
+                                }
+                            }) {
+                                ZStack {
+                                    // Button state overlay (matches Google's animation)
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.slingBlue.opacity(0.1))
+                                        .opacity(emailButtonPressed ? 0.12 : 0)
+                                        .animation(.easeInOut(duration: 0.218), value: emailButtonPressed)
+                                    
+                                    // Main button content
+                                    HStack(spacing: 16) {
+                                        Spacer()
+                                        
+                                        // Email Icon
+                                        Image(systemName: "envelope.fill")
+                                            .font(.title2)
+                                            .foregroundColor(.slingBlue)
+                                            .frame(width: 24, height: 24)
+                                        
+                                        Text("Sign up with Email")
+                                            .font(.headline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.slingBlue)
+                                        
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 20)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                                .background(Color.white)
+                                .cornerRadius(16)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+                            }
+                            .disabled(isLoading)
+                            .scaleEffect(emailButtonPressed ? 0.98 : 1.0)
+                            .animation(.easeInOut(duration: 0.218), value: emailButtonPressed)
                         }
                         .padding(.horizontal, 24)
                         
                         // Toggle between sign in and sign up
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                isSignUp.toggle()
+                                if isSignUp {
+                                    // User wants to sign in - show sign in form
+                                    isSignUp = false
+                                    showingEmailForm = true
+                                } else {
+                                    // User wants to sign up - show sign up form
+                                    isSignUp = true
+                                    showingEmailForm = true
+                                }
                                 errorMessage = ""
                             }
                         }) {
-                            Text(isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.gray.opacity(0.7))
+                            HStack(spacing: 4) {
+                                Text(isSignUp ? "Already have an account? " : "Don't have an account? ")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.gray.opacity(0.7))
+                                
+                                Text(isSignUp ? "Sign In" : "Sign Up")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.slingBlue)
+                            }
                         }
                         .padding(.top, 8)
                         
@@ -236,13 +307,22 @@ struct AuthenticationView: View {
         .sheet(isPresented: $showingEmailForm) {
             EmailAuthenticationView(
                 firestoreService: firestoreService,
-                isSignUp: isSignUp,
+                isSignUp: $isSignUp,
                 onDismiss: { showingEmailForm = false }
             )
         }
         .onAppear {
-            // Start the category animation
-            startCategoryAnimation()
+            // Apple Sign In state will be checked when button is clicked
+            
+            // Animate the logo drawing
+            withAnimation(.easeInOut(duration: 2.0)) {
+                logoAnimationProgress = 1.0
+            }
+        }
+        .onDisappear {
+            // Clean up timer when view disappears
+            errorMessageTimer?.invalidate()
+            errorMessageTimer = nil
         }
     }
     
@@ -250,59 +330,88 @@ struct AuthenticationView: View {
         isLoading = true
         errorMessage = ""
         
+        // Add debugging information
+        print("🍎 Apple Sign-In started")
+        print("🍎 Current nonce: \(currentNonce ?? "nil")")
+        
         switch result {
         case .success(let authorization):
+            print("🍎 Apple Sign-In authorization successful")
             if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                print("🍎 Got Apple ID credential for user: \(appleIDCredential.user)")
                 handleAppleSignInSuccess(appleIDCredential)
             } else {
+                print("🍎 Failed to get Apple ID credential from authorization")
                 isLoading = false
-                errorMessage = "Apple sign-in failed. Please try again."
+                setErrorMessage("Apple sign-in failed. Please try again.")
             }
         case .failure(let error):
+            print("🍎 Apple Sign-In failed with error: \(error)")
             isLoading = false
             if let authError = error as? ASAuthorizationError {
+                print("🍎 ASAuthorizationError code: \(authError.code.rawValue)")
                 switch authError.code {
                 case .canceled:
                     // User canceled, don't show error
+                    print("🍎 User canceled Apple Sign-In")
                     break
                 case .failed:
-                    errorMessage = "Apple sign-in failed. Please try again."
+                    setErrorMessage("Apple sign-in failed. Please try again.")
                 case .invalidResponse:
-                    errorMessage = "Invalid response from Apple. Please try again."
+                    setErrorMessage("Invalid response from Apple. Please try again.")
                 case .notHandled:
-                    errorMessage = "Apple sign-in not handled. Please try again."
+                    setErrorMessage("Apple sign-in not handled. Please try again.")
                 case .unknown:
-                    errorMessage = "Unknown error occurred. Please try again."
+                    setErrorMessage("Unknown error occurred. Please try again.")
+                case .notInteractive:
+                    setErrorMessage("Sign in requires user interaction. Please try again.")
                 @unknown default:
-                    errorMessage = "Apple sign-in failed. Please try again."
+                    setErrorMessage("Apple sign-in failed. Please try again.")
                 }
             } else {
-                errorMessage = "Apple sign-in failed. Please try again."
+                print("🍎 Non-ASAuthorizationError: \(error)")
+                
+                // Handle specific Apple ID errors
+                if let nsError = error as NSError? {
+                    print("🍎 NSError domain: \(nsError.domain), code: \(nsError.code)")
+                    if nsError.domain == "AKAuthenticationError" && nsError.code == -7026 {
+                        setErrorMessage("Apple ID configuration issue. Please check your Apple ID settings.")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            self.handleAppleIDConfigurationIssue()
+                        }
+                    } else if nsError.domain == "com.apple.AuthenticationServices.AuthorizationError" && nsError.code == 1000 {
+                        setErrorMessage("Authorization failed. Please try signing out and signing back in.")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            self.handleAuthorizationError()
+                        }
+                    } else if nsError.localizedDescription.contains("MCPasscodeManager") {
+                        setErrorMessage("This device doesn't support the required security features for Apple Sign In.")
+                    } else {
+                        setErrorMessage("Apple sign-in failed. Please try again.")
+                    }
+                } else {
+                    setErrorMessage("Apple sign-in failed. Please try again.")
+                }
             }
         }
     }
     
-    private func startCategoryAnimation() {
-        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
-            withAnimation(.easeInOut(duration: 0.5)) {
-                animatedCategoryIndex = (animatedCategoryIndex + 1) % 3
-            }
-        }
-    }
+
     
     private func handleAppleSignInSuccess(_ appleIDCredential: ASAuthorizationAppleIDCredential) {
         guard let appleIDToken = appleIDCredential.identityToken,
               let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
             isLoading = false
-            errorMessage = "Failed to get Apple ID token. Please try again."
+            setErrorMessage("Failed to get Apple ID token. Please try again.")
             return
         }
         
-        let nonce = randomNonceString()
-        let appleIDProvider = ASAuthorizationAppleIDProvider()
-        let request = appleIDProvider.createRequest()
-        request.requestedScopes = [.fullName, .email]
-        request.nonce = sha256(nonce)
+        // Get the nonce that was used for this request
+        guard let nonce = currentNonce else {
+            isLoading = false
+            setErrorMessage("Invalid nonce. Please try again.")
+            return
+        }
         
         let credential = OAuthProvider.credential(
             withProviderID: "apple.com",
@@ -314,33 +423,34 @@ struct AuthenticationView: View {
             DispatchQueue.main.async {
                 self.isLoading = false
                 if let error = error {
+                    print("🍎 Firebase Auth Error: \(error)")
                     if let nsError = error as NSError? {
                         switch nsError.code {
                         case AuthErrorCode.accountExistsWithDifferentCredential.rawValue:
-                            self.errorMessage = "An account with this email already exists. Please sign in with the original method."
+                            self.setErrorMessage("An account with this email already exists. Please sign in with the original method.")
                         case AuthErrorCode.invalidCredential.rawValue:
-                            self.errorMessage = "Invalid credentials. Please try again."
+                            self.setErrorMessage("Invalid credentials. Please try again.")
                         case AuthErrorCode.operationNotAllowed.rawValue:
-                            self.errorMessage = "Apple sign-in is not enabled. Please contact support."
+                            self.setErrorMessage("Apple sign-in is not enabled. Please contact support.")
                         case AuthErrorCode.networkError.rawValue:
-                            self.errorMessage = "Network error. Please check your connection and try again."
+                            self.setErrorMessage("Network error. Please check your connection and try again.")
                         case AuthErrorCode.userNotFound.rawValue:
-                            self.errorMessage = "User not found. Please try again."
+                            self.setErrorMessage("User not found. Please try again.")
                         case AuthErrorCode.tooManyRequests.rawValue:
-                            self.errorMessage = "Too many requests. Please try again later."
+                            self.setErrorMessage("Too many requests. Please try again later.")
                         case AuthErrorCode.userDisabled.rawValue:
-                            self.errorMessage = "Account disabled. Please contact support."
+                            self.setErrorMessage("Account disabled. Please contact support.")
                         default:
-                            self.errorMessage = "Authentication failed. Please try again."
+                            self.setErrorMessage("Authentication failed. Please try again.")
                         }
                     } else {
-                        self.errorMessage = "Authentication failed. Please try again."
+                        self.setErrorMessage("Authentication failed. Please try again.")
                     }
                     return
                 }
                 
                 guard let firebaseUser = result?.user else {
-                    self.errorMessage = "Failed to get user information. Please try again."
+                    self.setErrorMessage("Failed to get user information. Please try again.")
                     return
                 }
                 
@@ -353,6 +463,8 @@ struct AuthenticationView: View {
                             // Create new user profile
                             self.createAppleUserProfile(firebaseUser: firebaseUser, appleIDCredential: appleIDCredential)
                         }
+                        // Clear the nonce after successful authentication
+                        self.currentNonce = nil
                     }
                 }
             }
@@ -401,7 +513,7 @@ struct AuthenticationView: View {
             try self.firestoreService.db.collection("Users").document(firebaseUser.email ?? "").setData(from: userProfile)
             self.firestoreService.currentUser = userProfile
         } catch {
-            self.errorMessage = "Failed to create user profile. Please try again."
+            self.setErrorMessage("Failed to create user profile. Please try again.")
         }
     }
     
@@ -411,7 +523,7 @@ struct AuthenticationView: View {
                 if let document = document, document.exists {
                     self.firestoreService.currentUser = try? document.data(as: FirestoreUser.self)
                 } else {
-                    self.errorMessage = "Profile not found. Please contact support."
+                    self.setErrorMessage("Profile not found. Please contact support.")
                 }
             }
         }
@@ -461,6 +573,121 @@ struct AuthenticationView: View {
         return hashString
     }
     
+    private func handleAppleIDConfigurationIssue() {
+        let alert = UIAlertController(
+            title: "Apple ID Configuration Required",
+            message: "Please go to Settings > Apple ID > Sign In & Security to configure your Apple ID for this app.",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "Open Settings", style: .default) { _ in
+            if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(settingsUrl)
+            }
+        })
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        
+        // Present the alert
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first {
+            window.rootViewController?.present(alert, animated: true)
+        }
+    }
+    
+    private func handleAuthorizationError() {
+        let alert = UIAlertController(
+            title: "Authorization Error",
+            message: "There was an issue with your Apple ID authorization. Please try signing out and signing back in.",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        
+        // Present the alert
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first {
+            window.rootViewController?.present(alert, animated: true)
+        }
+    }
+    
+    private func checkAppleSignInState() {
+        // Check if running on simulator
+        #if targetEnvironment(simulator)
+        print("🍎 ⚠️ WARNING: Apple Sign In is running on simulator - this will cause errors!")
+        print("🍎 Please test on a physical device for proper Apple Sign In functionality")
+        setErrorMessage("Apple Sign In requires a physical device. Please test on a real device.")
+        return
+        #endif
+        
+        // Check bundle identifier
+        if let bundleId = Bundle.main.bundleIdentifier {
+            print("🍎 App Bundle ID: \(bundleId)")
+        }
+        
+        // Check entitlements
+        if let entitlementsPath = Bundle.main.path(forResource: "SlingApp", ofType: "entitlements") {
+            print("🍎 Entitlements file found at: \(entitlementsPath)")
+        } else {
+            print("🍎 ⚠️ No entitlements file found - this may cause Apple Sign In issues")
+        }
+        
+        let appleIDProvider = ASAuthorizationAppleIDProvider()
+        appleIDProvider.getCredentialState(forUserID: "current") { state, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("🍎 Error checking Apple Sign In state: \(error)")
+                    return
+                }
+                
+                switch state {
+                case .authorized:
+                    print("🍎 Apple Sign In state: Authorized")
+                case .revoked:
+                    print("🍎 Apple Sign In state: Revoked")
+                    setErrorMessage("Apple Sign In access revoked. Please sign in again.")
+                case .notFound:
+                    print("🍎 Apple Sign In state: Not Found")
+                case .transferred:
+                    print("🍎 Apple Sign In state: Transferred")
+                @unknown default:
+                    print("🍎 Apple Sign In state: Unknown")
+                }
+            }
+        }
+    }
+    
+    private func triggerAppleSignIn() {
+        // Check Apple Sign In state only when button is clicked
+        checkAppleSignInState()
+        
+        #if targetEnvironment(simulator)
+        setErrorMessage("Apple Sign In requires a physical device. Please test on a real device.")
+        return
+        #endif
+        
+        // Generate a new nonce for this request
+        let nonce = randomNonceString()
+        currentNonce = nonce
+        
+        let appleIDProvider = ASAuthorizationAppleIDProvider()
+        let request = appleIDProvider.createRequest()
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = sha256(nonce)
+        
+        let authorizationController = ASAuthorizationController(authorizationRequests: [request])
+        authorizationController.delegate = AppleSignInDelegate(
+            onSuccess: { credential in
+                self.handleAppleSignInSuccess(credential)
+            },
+            onFailure: { error in
+                self.setErrorMessage("Apple Sign In failed. Please try again.")
+            }
+        )
+        authorizationController.presentationContextProvider = AppleSignInPresentationContextProvider()
+        authorizationController.performRequests()
+    }
+    
     // MARK: - Google Sign-In Functions
     
     private func handleGoogleSignIn() {
@@ -469,7 +696,7 @@ struct AuthenticationView: View {
         
         guard let presentingViewController = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first?.rootViewController else {
             isLoading = false
-            errorMessage = "Failed to present Google Sign-In. Please try again."
+            setErrorMessage("Failed to present Google Sign-In. Please try again.")
             return
         }
         
@@ -484,21 +711,21 @@ struct AuthenticationView: View {
                             // User canceled, don't show error
                             break
                         case GIDSignInError.hasNoAuthInKeychain.rawValue:
-                            self.errorMessage = "No previous sign-in found. Please try again."
+                            self.setErrorMessage("No previous sign-in found. Please try again.")
                         case GIDSignInError.unknown.rawValue:
-                            self.errorMessage = "Unknown error occurred. Please try again."
+                            self.setErrorMessage("Unknown error occurred. Please try again.")
                         default:
-                            self.errorMessage = "Google sign-in failed. Please try again."
+                            self.setErrorMessage("Google sign-in failed. Please try again.")
                         }
                     } else {
-                        self.errorMessage = "Google sign-in failed. Please try again."
+                        self.setErrorMessage("Google sign-in failed. Please try again.")
                     }
                     return
                 }
                 
                 guard let user = result?.user,
                       let idToken = user.idToken?.tokenString else {
-                    self.errorMessage = "Failed to get Google ID token. Please try again."
+                    self.setErrorMessage("Failed to get Google ID token. Please try again.")
                     return
                 }
                 
@@ -510,30 +737,30 @@ struct AuthenticationView: View {
                             if let nsError = error as NSError? {
                                 switch nsError.code {
                                 case AuthErrorCode.accountExistsWithDifferentCredential.rawValue:
-                                    self.errorMessage = "An account with this email already exists. Please sign in with the original method."
+                                    self.setErrorMessage("An account with this email already exists. Please sign in with the original method.")
                                 case AuthErrorCode.invalidCredential.rawValue:
-                                    self.errorMessage = "Invalid credentials. Please try again."
+                                    self.setErrorMessage("Invalid credentials. Please try again.")
                                 case AuthErrorCode.operationNotAllowed.rawValue:
-                                    self.errorMessage = "Google sign-in is not enabled. Please contact support."
+                                    self.setErrorMessage("Google sign-in is not enabled. Please contact support.")
                                 case AuthErrorCode.networkError.rawValue:
-                                    self.errorMessage = "Network error. Please check your connection and try again."
+                                    self.setErrorMessage("Network error. Please check your connection and try again.")
                                 case AuthErrorCode.userNotFound.rawValue:
-                                    self.errorMessage = "User not found. Please try again."
+                                    self.setErrorMessage("User not found. Please try again.")
                                 case AuthErrorCode.tooManyRequests.rawValue:
-                                    self.errorMessage = "Too many requests. Please try again later."
+                                    self.setErrorMessage("Too many requests. Please try again later.")
                                 case AuthErrorCode.userDisabled.rawValue:
-                                    self.errorMessage = "Account disabled. Please contact support."
+                                    self.setErrorMessage("Account disabled. Please contact support.")
                                 default:
-                                    self.errorMessage = "Authentication failed. Please try again."
+                                    self.setErrorMessage("Authentication failed. Please try again.")
                                 }
                             } else {
-                                self.errorMessage = "Authentication failed. Please try again."
+                                self.setErrorMessage("Authentication failed. Please try again.")
                             }
                             return
                         }
                         
                         guard let firebaseUser = result?.user else {
-                            self.errorMessage = "Failed to get user information. Please try again."
+                            self.setErrorMessage("Failed to get user information. Please try again.")
                             return
                         }
                         
@@ -600,7 +827,7 @@ struct AuthenticationView: View {
             try self.firestoreService.db.collection("Users").document(firebaseUser.email ?? "").setData(from: userProfile)
             self.firestoreService.currentUser = userProfile
         } catch {
-            self.errorMessage = "Failed to create user profile. Please try again."
+            self.setErrorMessage("Failed to create user profile. Please try again.")
         }
     }
 }
@@ -704,7 +931,7 @@ struct CategoryChip: View {
 
 struct EmailAuthenticationView: View {
     @ObservedObject var firestoreService: FirestoreService
-    let isSignUp: Bool
+    @Binding var isSignUp: Bool
     let onDismiss: () -> Void
     
     @State private var currentStep = 0
@@ -737,21 +964,20 @@ struct EmailAuthenticationView: View {
                         }) {
                             Image(systemName: currentStep > 0 ? "chevron.left" : "xmark")
                                 .font(.title2)
-                                .foregroundColor(.gray)
+                                .foregroundColor(.black)
                                 .frame(width: 44, height: 44)
-                                .background(Color.gray.opacity(0.1))
-                                .clipShape(Circle())
                         }
                         
                         Spacer()
                         
-                        // Progress indicator for sign up
+                        // Progress indicator for sign up - using dashes like in the design
                         if isSignUp {
                             HStack(spacing: 8) {
                                 ForEach(0..<3, id: \.self) { step in
-                                    Circle()
+                                    Rectangle()
                                         .fill(step <= currentStep ? Color.slingBlue : Color.gray.opacity(0.3))
-                                        .frame(width: 8, height: 8)
+                                        .frame(width: 20, height: 3)
+                                        .cornerRadius(1.5)
                                 }
                             }
                         }
@@ -773,14 +999,15 @@ struct EmailAuthenticationView: View {
                         Group {
                             switch currentStep {
                             case 0:
-                                EmailStepView(email: $email, isSignUp: isSignUp)
+                                EmailStepView(email: $email, isSignUp: $isSignUp, password: $password)
                             case 1:
-                                PasswordStepView(password: $password, isSignUp: isSignUp)
+                                PasswordStepView(password: $password, isSignUp: $isSignUp)
                             case 2:
                                 UserDetailsStepView(
                                     firstName: $firstName,
                                     lastName: $lastName,
-                                    displayName: $displayName
+                                    displayName: $displayName,
+                                    isSignUp: $isSignUp
                                 )
                             default:
                                 EmptyView()
@@ -795,15 +1022,23 @@ struct EmailAuthenticationView: View {
                         
                         // Action button
                         Button(action: handleNextStep) {
-                            if isLoading {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(1.2)
-                            } else {
-                                Text(getButtonText())
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
+                            HStack(spacing: 8) {
+                                if isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(1.2)
+                                } else {
+                                    Text(getButtonText())
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                    
+                                    if currentStep < 2 || !isSignUp {
+                                        Image(systemName: "arrow.right")
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                    }
+                                }
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -813,7 +1048,15 @@ struct EmailAuthenticationView: View {
                         .shadow(color: getButtonShadowColor(), radius: 8, x: 0, y: 4)
                         .disabled(isLoading || !canProceed())
                         .padding(.horizontal, 24)
-                        .padding(.bottom, 40)
+                        .padding(.bottom, 20)
+                        
+                        // Terms of service text
+                        Text("By continuing, you acknowledge and agree to Sling's terms of service")
+                            .font(.caption)
+                            .foregroundColor(.gray.opacity(0.6))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                            .padding(.bottom, 40)
                     }
                 }
                 
@@ -956,40 +1199,112 @@ struct EmailAuthenticationView: View {
 
 struct EmailStepView: View {
     @Binding var email: String
-    let isSignUp: Bool
+    @Binding var isSignUp: Bool
+    @Binding var password: String
     
     var body: some View {
         VStack(spacing: 32) {
             // Title
-            Text(isSignUp ? "What's your email?" : "Welcome back to Sling")
-                .font(.title2)
+            Text(isSignUp ? "Create Account" : "Welcome back to Sling")
+                .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundColor(.black)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
             
+            // Subtitle
+            if isSignUp {
+                Text("Join Sling and start predicting")
+                    .font(.body)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
+            
             // Email input field
-            VStack(spacing: 16) {
-                TextField("Email", text: $email)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Email")
+                    .font(.headline)
+                    .foregroundColor(.black)
+                
+                TextField("Enter your email", text: $email)
                     .textFieldStyle(ModernTextFieldStyle())
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .frame(maxWidth: .infinity)
-                
-
             }
             .padding(.horizontal, 24)
             
-            // Login prompt for sign up
+            // Toggle button for Create Account page - moved much closer to email input
             if isSignUp {
-                Button(action: {}) {
-                    Text("Have an account? Sign In")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(Color.slingBlue)
-                        .underline()
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        // Switch to sign in
+                        isSignUp = false
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Text("Have an account? ")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                        
+                        Text("Sign In")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.slingBlue)
+                    }
                 }
+                .padding(.top, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
             }
+            
+                            // Password input field for Sign In
+                if !isSignUp {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Password")
+                            .font(.headline)
+                            .foregroundColor(.black)
+                        
+                        SecureField("Enter your password", text: $password)
+                            .textFieldStyle(ModernTextFieldStyle())
+                            .overlay(
+                                HStack {
+                                    Spacer()
+                                    
+                                    Button(action: {}) {
+                                        Image(systemName: "eye")
+                                            .foregroundColor(.gray)
+                                            .frame(width: 24, height: 24)
+                                    }
+                                    .padding(.trailing, 20)
+                                }
+                            )
+                    }
+                    .padding(.horizontal, 24)
+                    
+                    // Toggle button for Sign In page - moved much closer to password input
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            // Switch to sign up
+                            isSignUp = true
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Text("Don't have an account? ")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            
+                            Text("Sign Up")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                        }
+                    }
+                    .padding(.top, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                }
             
             Spacer()
         }
@@ -1001,28 +1316,49 @@ struct EmailStepView: View {
 
 struct PasswordStepView: View {
     @Binding var password: String
-    let isSignUp: Bool
+    @Binding var isSignUp: Bool
     
     var body: some View {
         VStack(spacing: 32) {
             // Title
             Text("Create a password")
-                .font(.title2)
+                .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundColor(.black)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
             
+            // Subtitle
+            Text("Choose a strong password to secure your account.")
+                .font(.body)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+            
             // Password input field
-            VStack(spacing: 16) {
-                SecureField("Password", text: $password)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Password")
+                    .font(.headline)
+                    .foregroundColor(.black)
+                
+                SecureField("Enter your password", text: $password)
                     .textFieldStyle(ModernTextFieldStyle())
-                    .frame(maxWidth: .infinity)
+                    .overlay(
+                        HStack {
+                            Spacer()
+                            
+                            Button(action: {}) {
+                                Image(systemName: "eye")
+                                    .foregroundColor(.gray)
+                                    .frame(width: 24, height: 24)
+                            }
+                            .padding(.trailing, 20)
+                        }
+                    )
                 
                 Text("Must be at least 6 characters")
                     .font(.caption)
                     .foregroundColor(.gray)
-                    .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 24)
             
@@ -1038,41 +1374,144 @@ struct UserDetailsStepView: View {
     @Binding var firstName: String
     @Binding var lastName: String
     @Binding var displayName: String
+    @Binding var isSignUp: Bool
+    @State private var isUsernameAvailable = false
+    @State private var isCheckingUsername = false
+    @State private var showingUsernameTakenAlert = false
     
     var body: some View {
         VStack(spacing: 32) {
             // Title
-            Text("Tell us about yourself")
-                .font(.title2)
+            Text("Create Your Profile")
+                .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundColor(.black)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
             
+            // Subtitle
+            Text("Help us personalize your experience")
+                .font(.body)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+            
             // User details input fields
-            VStack(spacing: 16) {
-                TextField("First Name", text: $firstName)
-                    .textFieldStyle(ModernTextFieldStyle())
-                    .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: 16) {
+                // First and Last name on same row
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("First Name")
+                            .font(.headline)
+                            .foregroundColor(.black)
+                        
+                        TextField("First", text: $firstName)
+                            .textFieldStyle(ModernTextFieldStyle())
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Last Name")
+                            .font(.headline)
+                            .foregroundColor(.black)
+                        
+                        TextField("Last", text: $lastName)
+                            .textFieldStyle(ModernTextFieldStyle())
+                    }
+                }
                 
-                TextField("Last Name", text: $lastName)
-                    .textFieldStyle(ModernTextFieldStyle())
-                    .frame(maxWidth: .infinity)
-                
-                TextField("Display Name", text: $displayName)
-                    .textFieldStyle(ModernTextFieldStyle())
-                    .frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Display Name")
+                        .font(.headline)
+                        .foregroundColor(.black)
+                    
+                    HStack(spacing: 0) {
+                        Text("@")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .padding(.leading, 20)
+                        
+                        TextField("username", text: $displayName)
+                            .textFieldStyle(ModernTextFieldStyle())
+                            .padding(.leading, 8)
+                            .onChange(of: displayName) { newValue in
+                                checkUsernameAvailability(newValue)
+                            }
+                            .overlay(
+                                HStack {
+                                    Spacer()
+                                    
+                                    // Checkmark for username validation
+                                    if !displayName.isEmpty {
+                                        if isCheckingUsername {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .gray))
+                                                .scaleEffect(0.8)
+                                                .padding(.trailing, 20)
+                                        } else if isUsernameAvailable {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.slingBlue)
+                                                .font(.title3)
+                                                .padding(.trailing, 20)
+                                        } else {
+                                            Image(systemName: "xmark")
+                                                .foregroundColor(.red)
+                                                .font(.title3)
+                                                .padding(.trailing, 20)
+                                        }
+                                    }
+                                }
+                            )
+                    }
+                }
                 
                 Text("This is how other users will see you")
                     .font(.caption)
                     .foregroundColor(.gray)
-                    .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 24)
             
             Spacer()
         }
         .padding(.top, 40)
+        .alert("Display Name Taken", isPresented: $showingUsernameTakenAlert) {
+            Button("OK") { }
+        } message: {
+            Text("This display name is already taken. Please choose a different one.")
+        }
+    }
+    
+    private func checkUsernameAvailability(_ username: String) {
+        guard !username.isEmpty else {
+            isUsernameAvailable = false
+            isCheckingUsername = false
+            return
+        }
+        
+        isCheckingUsername = true
+        
+        // Check Firestore for existing display names
+        let db = Firestore.firestore()
+        db.collection("Users")
+            .whereField("display_name", isEqualTo: username)
+            .getDocuments { snapshot, error in
+                DispatchQueue.main.async {
+                    isCheckingUsername = false
+                    
+                    if let error = error {
+                        print("Error checking username: \(error)")
+                        isUsernameAvailable = false
+                        return
+                    }
+                    
+                    // Username is available if no documents found
+                    isUsernameAvailable = snapshot?.documents.isEmpty ?? true
+                    
+                    // Show alert if username is taken
+                    if !isUsernameAvailable {
+                        showingUsernameTakenAlert = true
+                    }
+                }
+            }
     }
 }
 
@@ -1083,11 +1522,11 @@ struct ModernTextFieldStyle: TextFieldStyle {
         configuration
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
-            .background(Color.gray.opacity(0.05))
+            .background(Color.white)
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
             )
             .font(.body)
     }
@@ -1098,5 +1537,41 @@ struct ModernTextFieldStyle: TextFieldStyle {
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
+    }
+}
+
+// MARK: - Apple Sign In Delegate
+
+class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate {
+    let onSuccess: (ASAuthorizationAppleIDCredential) -> Void
+    let onFailure: (Error) -> Void
+    
+    init(onSuccess: @escaping (ASAuthorizationAppleIDCredential) -> Void, onFailure: @escaping (Error) -> Void) {
+        self.onSuccess = onSuccess
+        self.onFailure = onFailure
+    }
+    
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
+            onSuccess(appleIDCredential)
+        } else {
+            onFailure(NSError(domain: "AppleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid credential"]))
+        }
+    }
+    
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        onFailure(error)
+    }
+}
+
+// MARK: - Apple Sign In Presentation Context Provider
+
+class AppleSignInPresentationContextProvider: NSObject, ASAuthorizationControllerPresentationContextProviding {
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else {
+            fatalError("No window available")
+        }
+        return window
     }
 }
