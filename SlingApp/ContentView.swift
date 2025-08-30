@@ -103,7 +103,7 @@ struct AuthenticationView: View {
                                 // Arrow part
                                 path.addLine(to: CGPoint(x: 437.939, y: 31)) // H437.939
                                 path.move(to: CGPoint(x: 621, y: 31)) // M621 31
-                                path.addLine(to: CGPoint(x: 621, y: 227.667)) // V227.667
+                                path.addLine(to: CGPoint(x: 621, y: 209)) // V209 (doubled from 120 to 209)
                             }
                             .trim(from: 0, to: logoAnimationProgress)
                             .stroke(Color.white, style: StrokeStyle(lineWidth: 35, lineCap: .round, lineJoin: .round))
@@ -240,28 +240,22 @@ struct AuthenticationView: View {
                         }
                         .padding(.horizontal, 24)
                         
-                        // Toggle between sign in and sign up
+                        // Always show "Already have an account? Sign In" button
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                if isSignUp {
-                                    // User wants to sign in - show sign in form
-                                    isSignUp = false
-                                    showingEmailForm = true
-                                } else {
-                                    // User wants to sign up - show sign up form
-                                    isSignUp = true
-                                    showingEmailForm = true
-                                }
+                                // Always go to sign in page
+                                isSignUp = false
+                                showingEmailForm = true
                                 errorMessage = ""
                             }
                         }) {
                             HStack(spacing: 4) {
-                                Text(isSignUp ? "Already have an account? " : "Don't have an account? ")
+                                Text("Already have an account? ")
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                     .foregroundColor(.gray.opacity(0.7))
                                 
-                                Text(isSignUp ? "Sign In" : "Sign Up")
+                                Text("Sign In")
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
                                     .foregroundColor(.slingBlue)
