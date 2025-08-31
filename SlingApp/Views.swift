@@ -1238,7 +1238,7 @@ struct MyBetsView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 // Markets Header
                 HStack {
                     Text("Markets")
@@ -1253,7 +1253,7 @@ struct MyBetsView: View {
                 .background(Color.white)
                 
                 // Markets to Bet On Section - Always show
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Markets to Bet On")
                             .font(.headline)
@@ -5016,7 +5016,7 @@ struct CommunitiesView: View {
     
     var body: some View {
         ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 16) {
                         // Communities Header
                         HStack {
                             Text("Communities")
@@ -5026,12 +5026,11 @@ struct CommunitiesView: View {
                             
                             Spacer()
                         }
-                        .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                         .background(Color.white)
                         
                         // Outstanding Balances Section
-                            outstandingBalancesSection
+                        outstandingBalancesSection
                         
                         // Search and Actions Section
                         searchAndActionsSection
@@ -5040,7 +5039,6 @@ struct CommunitiesView: View {
                         communitiesSection
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 20)
                     .padding(.bottom, 100) // Space for bottom tab bar
         }
         .refreshable {
@@ -5071,7 +5069,7 @@ struct CommunitiesView: View {
     
     // MARK: - Outstanding Balances Section
     private var outstandingBalancesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 HStack(spacing: 8) {
                     Text("Outstanding Balances")
@@ -5125,7 +5123,7 @@ struct CommunitiesView: View {
     
     // MARK: - Search and Actions Section
     private var searchAndActionsSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 8) {
             // Modern Search Bar
                 HStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
@@ -5205,7 +5203,7 @@ struct CommunitiesView: View {
     
     // MARK: - Communities Section
     private var communitiesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 8) {
             if !filteredCommunities.isEmpty {
                 HStack {
                     Text("Your Communities")
