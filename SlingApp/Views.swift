@@ -3151,7 +3151,8 @@ struct ChatListItem: Identifiable {
     let communityId: String
     let communityName: String
     let lastMessage: String
-    let timestamp: String
+    let timestamp: Date  // Changed from String to Date for proper sorting
+    let timestampString: String  // Keep formatted string for display
     let unreadCount: Int
     let imageUrl: String
 }
@@ -3170,6 +3171,9 @@ struct ChatMessageBubble: View {
     // Global timestamp state - passed from parent view
     let isShowingTimestamps: Bool
     
+    // Function to get user's full name from email
+    let getUserFullName: (String) -> String
+    
     // Fixed timestamp gutter for perfect vertical alignment
     private let timestampGutter: CGFloat = 68
     
@@ -3186,37 +3190,39 @@ struct ChatMessageBubble: View {
     
 
     
+
+    
     var body: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: 8) {
             // Left side - Avatar/Logo space (consistent for all message types)
-            HStack(alignment: .top, spacing: 4) {
+            HStack(alignment: .top, spacing: 2) {
                 if isBot {
                     // Sling logo - smaller and circular like user avatars
                     Image("Logo")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 26, height: 26)
                         .clipShape(Circle())
                 } else if !isCurrentUser {
                     // User avatar for other users
                     Circle()
                         .fill(Color.slingLightBlue)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 30, height: 30)
                         .overlay(
                             Text(String(message.senderName.prefix(1)).uppercased())
-                                .font(.caption)
+                                .font(.caption2)
                                 .fontWeight(.semibold)
                                 .foregroundColor(Color.slingBlue)
                         )
                 }
             }
-            .frame(width: 44, alignment: .leading)
+            .frame(width: 32, alignment: .leading)
             
             // Center content area
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 if isBot {
                     // Bot message content
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 3) {
                         // Sling name
                         Text("Sling")
                             .font(.caption)
@@ -3269,18 +3275,18 @@ struct ChatMessageBubble: View {
                             Text(message.text)
                                 .font(.subheadline)
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
                                 .background(AnyShapeStyle(Color.slingGradient))
-                                .cornerRadius(18)
+                                .cornerRadius(16)
                         }
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.trailing, 0)
                     } else {
                         // Other users: align to left
-                        VStack(alignment: .leading, spacing: 4) {
-                            // Sender name
-                            Text(message.senderName)
+                        VStack(alignment: .leading, spacing: 3) {
+                            // Sender name - show full name instead of first name
+                            Text(getUserFullName(message.senderEmail))
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.gray)
@@ -3289,12 +3295,12 @@ struct ChatMessageBubble: View {
                             Text(message.text)
                                 .font(.subheadline)
                                 .foregroundColor(.black)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
                                 .background(Color.white)
-                                .cornerRadius(18)
+                                .cornerRadius(16)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 18)
+                                    RoundedRectangle(cornerRadius: 16)
                                         .stroke(Color.gray.opacity(0.15), lineWidth: 1)
                                 )
                         }
@@ -3359,7 +3365,7 @@ struct MessagesView: View {
     @State private var selectedBetOption = ""
     @State private var isKeyboardActive = false
     @State private var isLoadingMessages = false
-
+    @State private var userFullNames: [String: String] = [:] // Cache for user full names
     
     // Global timestamp state - activated by swiping anywhere on the page
     @State private var isShowingTimestamps = false
@@ -3368,19 +3374,23 @@ struct MessagesView: View {
     private func getChatList() -> [ChatListItem] {
         let chatItems = firestoreService.userCommunities.map { community in
             let unreadCount = unreadCounts[community.id ?? ""] ?? 0
+            let timestampString = getLastMessageTimestamp(community)
+            let actualTimestamp = getLastMessageActualDate(community)
+            
             return ChatListItem(
                 id: community.id ?? UUID().uuidString,
                 communityId: community.id ?? "",
                 communityName: community.name,
                 lastMessage: getLastMessage(community),
-                timestamp: getLastMessageTimestamp(community),
+                timestamp: actualTimestamp,
+                timestampString: timestampString,
                 unreadCount: unreadCount,
                 imageUrl: getDefaultImageUrl(for: community.name)
             )
         }
         
-        // Sort chat list: unread messages first, then by most recent activity
-        return chatItems.sorted { item1, item2 in
+        // Sort chat list: unread messages first (most recent to oldest), then read messages (most recent to oldest)
+        let sortedItems = chatItems.sorted { item1, item2 in
             // First priority: communities with unread messages come first
             if item1.unreadCount > 0 && item2.unreadCount == 0 {
                 return true
@@ -3388,19 +3398,22 @@ struct MessagesView: View {
                 return false
             }
             
-            // Second priority: if both have unread messages, sort by unread count (highest first)
+            // Second priority: if both have unread messages, sort by most recent activity (most recent first)
             if item1.unreadCount > 0 && item2.unreadCount > 0 {
-                if item1.unreadCount != item2.unreadCount {
-                    return item1.unreadCount > item2.unreadCount
-                }
+                return item1.timestamp > item2.timestamp
             }
             
-            // Third priority: sort by most recent activity (most recent first)
-            // Convert relative timestamps to actual dates for proper sorting
-            let date1 = parseRelativeTimestamp(item1.timestamp)
-            let date2 = parseRelativeTimestamp(item2.timestamp)
-            return date1 > date2
+            // Third priority: if both have no unread messages, sort by most recent activity (most recent first)
+            return item1.timestamp > item2.timestamp
         }
+        
+        // Debug: Print the sorted order
+        print("📱 Chat List Sorting Debug:")
+        for (index, item) in sortedItems.enumerated() {
+            print("  \(index + 1). \(item.communityName) - Unread: \(item.unreadCount), Timestamp: \(item.timestampString) (Date: \(item.timestamp))")
+        }
+        
+        return sortedItems
     }
     
     private func sendMessage() {
@@ -3458,16 +3471,31 @@ struct MessagesView: View {
     }
     
     private func formatMessagePreview(_ message: FirestoreCommunityMessage) -> String {
-        return "\(message.sender_name): \(message.message)"
+        // Convert stored name to full name for preview
+        let senderFullName = getFullNameFromStoredName(message.sender_name, email: message.sender_email)
+        return "\(senderFullName): \(message.message)"
     }
     
     private func getLastMessageTimestamp(_ community: FirestoreCommunity) -> String {
         guard let communityId = community.id,
               let lastMessage = firestoreService.communityLastMessages[communityId] else {
-            return formatTimestamp(community.created_date)
+            let timestamp = formatTimestamp(community.created_date)
+            return timestamp
         }
         
-        return formatTimestamp(lastMessage.timestamp)
+        let timestamp = formatTimestamp(lastMessage.timestamp)
+        return timestamp
+    }
+    
+    private func getLastMessageActualDate(_ community: FirestoreCommunity) -> Date {
+        guard let communityId = community.id,
+              let lastMessage = firestoreService.communityLastMessages[communityId] else {
+            // Use community creation date as fallback
+            return community.created_date
+        }
+        
+        // Return the actual Date object for sorting
+        return lastMessage.timestamp
     }
     
     private func formatTimestamp(_ date: Date) -> String {
@@ -3481,7 +3509,7 @@ struct MessagesView: View {
         return ""
     }
     
-    // Helper function to parse relative timestamps for sorting
+    // Helper function to parse relative timestamps for sorting (no longer used, kept for reference)
     private func parseRelativeTimestamp(_ timestamp: String) -> Date {
         let now = Date()
         let calendar = Calendar.current
@@ -3489,29 +3517,43 @@ struct MessagesView: View {
         if timestamp == "Today" {
             return now
         } else if timestamp == "Yesterday" {
-            return calendar.date(byAdding: .day, value: -1, to: now) ?? now
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: now) ?? now
+            return yesterday
         } else if timestamp.contains("ago") {
-            // Parse relative time like "2h ago", "5m ago", etc.
+            // Parse relative time like "6m ago", "38m ago", "1w ago", etc.
             let components = timestamp.components(separatedBy: " ")
             if components.count >= 2, let value = Int(components[0]) {
                 let unit = components[1].lowercased()
+                let result: Date
+                
                 switch unit {
                 case "s", "sec", "secs", "second", "seconds":
-                    return calendar.date(byAdding: .second, value: -value, to: now) ?? now
+                    result = calendar.date(byAdding: .second, value: -value, to: now) ?? now
                 case "m", "min", "mins", "minute", "minutes":
-                    return calendar.date(byAdding: .minute, value: -value, to: now) ?? now
+                    result = calendar.date(byAdding: .minute, value: -value, to: now) ?? now
                 case "h", "hr", "hrs", "hour", "hours":
-                    return calendar.date(byAdding: .hour, value: -value, to: now) ?? now
+                    result = calendar.date(byAdding: .hour, value: -value, to: now) ?? now
                 case "d", "day", "days":
-                    return calendar.date(byAdding: .day, value: -value, to: now) ?? now
+                    result = calendar.date(byAdding: .day, value: -value, to: now) ?? now
                 case "w", "wk", "week", "weeks":
-                    return calendar.date(byAdding: .weekOfYear, value: -value, to: now) ?? now
+                    result = calendar.date(byAdding: .weekOfYear, value: -value, to: now) ?? now
                 case "mo", "month", "months":
-                    return calendar.date(byAdding: .month, value: -value, to: now) ?? now
+                    result = calendar.date(byAdding: .month, value: -value, to: now) ?? now
                 case "y", "yr", "year", "years":
-                    return calendar.date(byAdding: .year, value: -value, to: now) ?? now
+                    result = calendar.date(byAdding: .year, value: -value, to: now) ?? now
                 default:
-                    break
+                    // If we can't parse the unit, try to extract just the number and assume minutes
+                    result = calendar.date(byAdding: .minute, value: -value, to: now) ?? now
+                }
+                
+                return result
+            } else {
+                // If we can't parse the components, try to extract just the number
+                let numbers = timestamp.components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap { Int($0) }
+                if let value = numbers.first {
+                    // Assume minutes if we can't determine the unit
+                    let result = calendar.date(byAdding: .minute, value: -value, to: now) ?? now
+                    return result
                 }
             }
         } else {
@@ -3522,12 +3564,14 @@ struct MessagesView: View {
                 // Set the year to current year for comparison
                 var components = calendar.dateComponents([.year, .month, .day], from: date)
                 components.year = calendar.component(.year, from: now)
-                return calendar.date(from: components) ?? now
+                let result = calendar.date(from: components) ?? now
+                return result
             }
         }
         
         // Fallback to a very old date if parsing fails
-        return calendar.date(byAdding: .year, value: -100, to: now) ?? now
+        let fallback = calendar.date(byAdding: .year, value: -100, to: now) ?? now
+        return fallback
     }
     
     private func initializeUnreadCounts() {
@@ -3562,6 +3606,46 @@ struct MessagesView: View {
 
         // Fetch messages without blocking the UI
         firestoreService.fetchMessages(for: communityId)
+    }
+    
+    // Function to get user's full name, with caching
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // For current user, use local data
+        if let user = firestoreService.currentUser, user.email == email {
+            let fullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            userFullNames[email] = fullName
+            return fullName
+        }
+        
+        // For other users, fetch from Firestore and cache
+        firestoreService.getUserDetails(email: email) { fullName, _ in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return first name as fallback while fetching
+        return email.components(separatedBy: "@").first ?? email
+    }
+    
+    // Helper function to convert stored name to full name for preview
+    private func getFullNameFromStoredName(_ storedName: String, email: String) -> String {
+        // If the stored name is the current user's display name, convert to full name
+        if let currentUser = firestoreService.currentUser, 
+           currentUser.email == email,
+           storedName == currentUser.display_name {
+            let fullName = "\(currentUser.first_name ?? "") \(currentUser.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            return fullName.isEmpty ? storedName : fullName
+        }
+        
+        // For other users, try to get full name from Firestore
+        // For now, return the stored name as is (could be enhanced later)
+        return storedName
     }
     
     private var chatListView: some View {
@@ -3734,7 +3818,7 @@ struct MessagesView: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(chatItem.timestamp)
+                                            Text(chatItem.timestampString)
                         .font(.caption)
                         .foregroundColor(.gray)
                 }
@@ -3973,15 +4057,18 @@ struct MessagesView: View {
                             // Messages for this date
                             ForEach(group.messages) { message in
                                 ChatMessageBubble(
-                            message: message,
-                            isCurrentUser: message.senderEmail == firestoreService.currentUser?.email,
-                            firestoreService: firestoreService,
-                            selectedBet: $selectedBet,
-                            showingBetDetail: $showingBetDetail,
-                            selectedBetOption: $selectedBetOption,
-                                    showingPlaceBet: $showingPlaceBet,
-                                    isShowingTimestamps: isShowingTimestamps
-                        )
+                                message: message,
+                                isCurrentUser: message.senderEmail == firestoreService.currentUser?.email,
+                                firestoreService: firestoreService,
+                                selectedBet: $selectedBet,
+                                showingBetDetail: $showingBetDetail,
+                                selectedBetOption: $selectedBetOption,
+                                showingPlaceBet: $showingPlaceBet,
+                                isShowingTimestamps: isShowingTimestamps,
+                                getUserFullName: { email in
+                                    return self.getUserFullName(from: email)
+                                }
+                            )
                             }
                         }
                     }

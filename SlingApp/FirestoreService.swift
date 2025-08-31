@@ -455,6 +455,21 @@ class FirestoreService: ObservableObject {
         return String((0..<24).map { _ in characters.randomElement()! })
     }
     
+    // Helper function to convert stored name to full name for preview
+    private func getFullNameFromStoredName(_ storedName: String, email: String) -> String {
+        // If the stored name is the current user's display name, convert to full name
+        if let currentUser = currentUser, 
+           currentUser.email == email,
+           storedName == currentUser.display_name {
+            let fullName = "\(currentUser.first_name ?? "") \(currentUser.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            return fullName.isEmpty ? storedName : fullName
+        }
+        
+        // For other users, try to get full name from Firestore
+        // For now, return the stored name as is (could be enhanced later)
+        return storedName
+    }
+    
     // MARK: - Community Management
     
     func fetchCommunities() {
@@ -1012,11 +1027,14 @@ class FirestoreService: ObservableObject {
                         let mostRecentMessage = chatHistory.values.max { $0.time_stamp < $1.time_stamp }
                         
                         if let lastMessageData = mostRecentMessage {
+                            // Convert stored name to full name for preview
+                            let senderFullName = self?.getFullNameFromStoredName(lastMessageData.sender_name, email: lastMessageData.sender_email) ?? lastMessageData.sender_name
+                            
                             let lastMessage = CommunityMessage(
                                 id: lastMessageData.id,
                                 communityId: communityId,
                                 senderEmail: lastMessageData.sender_email,
-                                senderName: lastMessageData.sender_name,
+                                senderName: senderFullName,
                                 text: lastMessageData.message,
                                 timestamp: lastMessageData.time_stamp,
                                 messageType: MessageType(rawValue: lastMessageData.type) ?? .regular,
@@ -1044,7 +1062,8 @@ class FirestoreService: ObservableObject {
     func sendMessage(to communityId: String, text: String, completion: @escaping (Bool, String?) -> Void) {
         guard let userEmail = currentUser?.email,
               let userId = currentUser?.id,
-              let userName = currentUser?.display_name ?? currentUser?.full_name else {
+              let firstName = currentUser?.first_name,
+              let lastName = currentUser?.last_name else {
             completion(false, "User not authenticated")
             return
         }
@@ -1065,7 +1084,7 @@ class FirestoreService: ObservableObject {
                 "id": messageId,
                 "community_id": communityId,
                 "sender_id": userId,
-                "sender_name": userName,
+                "sender_name": "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces), // Store full name
                 "sender_email": userEmail,
                 "message": text,
                 "time_stamp": now,
@@ -1092,7 +1111,7 @@ class FirestoreService: ObservableObject {
                         id: messageId,
                         communityId: communityId,
                         senderEmail: userEmail,
-                        senderName: userName,
+                        senderName: "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces), // Use full name
                         text: text,
                         timestamp: now,
                         messageType: .regular,
@@ -3094,7 +3113,7 @@ class FirestoreService: ObservableObject {
         return Array(groupedBalances.values)
     }
     
-    private func getUserDetails(email: String, completion: @escaping (String, String) -> Void) {
+    func getUserDetails(email: String, completion: @escaping (String, String) -> Void) {
         db.collection("Users").document(email).getDocument { document, error in
             if let document = document, document.exists,
                let data = document.data() {
