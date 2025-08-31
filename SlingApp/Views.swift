@@ -3665,30 +3665,7 @@ struct MessagesView: View {
                 isLoadingMessages = false
             }
         }
-        .overlay(
-            // Subtle loading indicator overlay when refreshing
-            Group {
-                if isLoadingMessages {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
-                                .scaleEffect(0.8)
-                            Text("Refreshing...")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.white.opacity(0.9))
-                        .cornerRadius(20)
-                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-                        .padding(.bottom, 20)
-                    }
-                }
-            }
-        )
+
 
     }
     
