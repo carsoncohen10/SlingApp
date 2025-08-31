@@ -1281,11 +1281,11 @@ class FirestoreService: ObservableObject {
         db.collection("Notification")
             .whereField("user_email", isEqualTo: userEmail)
             .getDocuments(source: .default) { [weak self] snapshot, error in
-                if let error = error {
-                    print("❌ Error fetching notifications: \(error.localizedDescription)")
-                    return
-                }
-                
+                    if let error = error {
+                        print("❌ Error fetching notifications: \(error.localizedDescription)")
+                        return
+                    }
+                    
                 print("🔍 fetchNotifications: Received snapshot with \(snapshot?.documents.count ?? 0) documents")
                 
                 let notifications: [FirestoreNotification] = snapshot?.documents.compactMap { document in
@@ -1297,8 +1297,8 @@ class FirestoreService: ObservableObject {
                         print("❌ fetchNotifications: Failed to parse notification document \(document.documentID): \(error)")
                         return nil
                     }
-                } ?? []
-                
+                    } ?? []
+                    
                 print("🔍 fetchNotifications: Successfully parsed \(notifications.count) notifications")
                 
                 let sortedNotifications = notifications.sorted(by: { $0.created_date > $1.created_date })
@@ -1615,8 +1615,8 @@ class FirestoreService: ObservableObject {
                         print("❌ Failed to create sample notification: \(notification.title)")
                     }
                 }
+                }
             }
-        }
     }
     
     func fetchTransactions(communityId: String, userEmail: String, completion: @escaping ([BetParticipant]) -> Void) {
@@ -1644,29 +1644,29 @@ class FirestoreService: ObservableObject {
     
     func fetchBet(by betId: String, completion: @escaping (FirestoreBet?) -> Void) {
         db.collection("Bet").document(betId).getDocument(source: .default) { [weak self] document, error in
-            if let error = error {
-                print("❌ Error fetching bet: \(error.localizedDescription)")
+                if let error = error {
+                    print("❌ Error fetching bet: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     completion(nil)
                 }
-                return
-            }
-            
-            guard let document = document, document.exists else {
-                print("❌ Bet not found with ID: \(betId)")
+                    return
+                }
+                
+                guard let document = document, document.exists else {
+                    print("❌ Bet not found with ID: \(betId)")
                 DispatchQueue.main.async {
                     completion(nil)
                 }
-                return
-            }
-            
-            do {
-                let bet = try document.data(as: FirestoreBet.self)
+                    return
+                }
+                
+                do {
+                    let bet = try document.data(as: FirestoreBet.self)
                 DispatchQueue.main.async {
                     completion(bet)
                 }
-            } catch {
-                print("❌ Error parsing bet: \(error)")
+                } catch {
+                    print("❌ Error parsing bet: \(error)")
                 DispatchQueue.main.async {
                     completion(nil)
                 }

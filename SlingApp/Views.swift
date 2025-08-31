@@ -8079,7 +8079,6 @@ struct NotificationsView: View {
     @Environment(\.dismiss) private var dismiss
     let firestoreService: FirestoreService
     @State private var isLoadingNotifications = false
-    @State private var isMarkingAllAsRead = false
     @State private var selectedFilter: NotificationFilter = .all
     
     // Computed property to filter notifications based on selected filter
@@ -8128,92 +8127,34 @@ struct NotificationsView: View {
                         
                         Spacer()
                         
-                        // Invisible spacer to center title
-                        Image(systemName: "xmark")
-                            .font(.title2)
-                            .foregroundColor(.clear)
-                            .frame(width: 44, height: 44)
-                    }
-                    
-                    // Action Buttons Row
-                    HStack(alignment: .center, spacing: 12) {
-                        // Mark all as read button
-                        Button(action: {
-                            isMarkingAllAsRead = true
-                            
-                            // Mark only the filtered notifications as read
-                            let unreadFilteredNotifications = filteredNotifications.filter { !$0.is_read }
-                            let notificationIds = unreadFilteredNotifications.compactMap { $0.id }
-                            
-                            // Mark each notification as read
-                            let group = DispatchGroup()
-                            var successCount = 0
-                            var failureCount = 0
-                            
-                            for notificationId in notificationIds {
-                                group.enter()
-                                firestoreService.markNotificationAsRead(notificationId: notificationId) { success in
-                                    if success {
-                                        successCount += 1
-                                    } else {
-                                        failureCount += 1
-                                    }
-                                    group.leave()
-                                }
-                            }
-                            
-                            group.notify(queue: .main) {
-                                isMarkingAllAsRead = false
-                                if failureCount == 0 {
-                                    print("✅ All \(successCount) filtered notifications marked as read")
-                                } else {
-                                    print("⚠️ Marked \(successCount) notifications as read, \(failureCount) failed")
-                                }
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                if isMarkingAllAsRead {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.caption)
-                                }
-                                Text(isMarkingAllAsRead ? "Marking..." : "Mark All Read")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(20)
-                            .frame(height: 32)
-                        }
-                        .disabled(filteredNotifications.filter { !$0.is_read }.count == 0 || isMarkingAllAsRead)
-                        .opacity(filteredNotifications.filter { !$0.is_read }.count == 0 || isMarkingAllAsRead ? 0.5 : 1.0)
-                        
-                        // Filter buttons
-                        HStack(spacing: 8) {
+                        // Filter button
+                        Menu {
                             ForEach(NotificationFilter.allCases, id: \.self) { filter in
-                                FilterButton(
-                                    title: filter.rawValue,
-                                    isSelected: selectedFilter == filter
-                                ) {
+                                Button(filter.rawValue) {
                                     selectedFilter = filter
                                 }
                             }
+                        } label: {
+                            ZStack {
+                                Image(systemName: "line.3.horizontal.decrease.circle")
+                                    .font(.title2)
+                                    .foregroundColor(.black)
+                                
+                                // Small indicator for current filter
+                                if selectedFilter == .unread {
+                                    Circle()
+                                        .fill(Color.blue)
+                                        .frame(width: 8, height: 8)
+                                        .offset(x: 8, y: -8)
+                                }
+                            }
+                            .frame(width: 44, height: 44)
                         }
-                        
-                        Spacer()
                     }
+                    
+
+                    
+
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
@@ -8277,6 +8218,7 @@ struct NotificationsView: View {
             }
             .background(Color.white)
             .navigationBarHidden(true)
+
             .onAppear {
                 print("🔍 NotificationsView: onAppear triggered")
                 print("🔍 NotificationsView: Current user email: \(firestoreService.currentUser?.email ?? "nil")")
