@@ -241,6 +241,18 @@ struct FirestoreUser: Identifiable, Codable {
     var id: String? // 24-character alphanumeric user ID
     var uid: String? // Firebase Auth UID
     var sling_points: Int? // Alternative points system
+    
+    // User Settings Fields
+    var push_notifications_enabled: Bool?
+    var email_notifications_enabled: Bool?
+    var weekly_summaries_enabled: Bool?
+    var bet_results_enabled: Bool?
+    var community_updates_enabled: Bool?
+    var promotional_emails_enabled: Bool?
+    var profile_visibility: ProfileVisibilitySettings?
+    var dark_mode_enabled: Bool?
+    var language: String?
+    var profile_visibility_settings: ProfileVisibilitySettings?
 
     // Computed property to handle missing full_name
     var displayName: String {
@@ -262,6 +274,27 @@ struct FirestoreUser: Identifiable, Codable {
     
     var lastName: String? {
         return last_name
+    }
+}
+
+// MARK: - User Settings Models
+
+struct ProfileVisibilitySettings: Codable {
+    var showPointBalance: Bool
+    var showTotalWinnings: Bool
+    var showTotalBets: Bool
+    var showSlingPoints: Bool
+    var showBlitzPoints: Bool
+    var showCommunities: Bool
+    
+    init(showPointBalance: Bool = true, showTotalWinnings: Bool = true, showTotalBets: Bool = true, 
+         showSlingPoints: Bool = true, showBlitzPoints: Bool = true, showCommunities: Bool = true) {
+        self.showPointBalance = showPointBalance
+        self.showTotalWinnings = showTotalWinnings
+        self.showTotalBets = showTotalBets
+        self.showSlingPoints = showSlingPoints
+        self.showBlitzPoints = showBlitzPoints
+        self.showCommunities = showCommunities
     }
 }
 

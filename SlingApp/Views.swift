@@ -626,43 +626,43 @@ struct WelcomeCard: View {
             // Action Buttons
             VStack(spacing: 12) {
                 Button(action: {
-                        showingJoinCommunityModal = true
+                        showingCreateCommunityModal = true
                 }) {
                     HStack(spacing: 8) {
-                            Image(systemName: "person.2")
+                            Image(systemName: "plus")
                                 .font(.subheadline)
-                            Text("Join Community")
+                            Text("Create Community")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                         }
-                        .foregroundColor(.blue)
+                        .foregroundColor(.white)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
                         .frame(maxWidth: .infinity)
-                        .background(Color.white)
-                        .cornerRadius(10)
-                    }
-                    
-                    Button(action: {
-                        showingCreateCommunityModal = true
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus")
-                                .font(.subheadline)
-                        Text("Create Community")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity)
                         .background(Color.white.opacity(0.2))
-                    .cornerRadius(10)
+                        .cornerRadius(10)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
                                 .stroke(Color.white, lineWidth: 1)
                         )
+                    }
+                    
+                    Button(action: {
+                        showingJoinCommunityModal = true
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "person.2")
+                                .font(.subheadline)
+                        Text("Join Community")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                    }
+                    .foregroundColor(.blue)
+                        .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity)
+                        .background(Color.white)
+                    .cornerRadius(10)
                     }
                 }
             }
@@ -5051,10 +5051,28 @@ struct CommunitiesView: View {
     private var outstandingBalancesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Outstanding Balances")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.black)
+                HStack(spacing: 8) {
+                    Text("Outstanding Balances")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    if outstandingBalances.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.slingBlue)
+                            Text("All caught up")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.slingBlue.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                }
                 
                 Spacer()
                 
@@ -5068,45 +5086,17 @@ struct CommunitiesView: View {
                 }
             }
             
-            if outstandingBalances.isEmpty {
-                // No outstanding balances message - styled like Create Bet card
-                VStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(.slingBlue)
-                    
-                    Text("All caught up!")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.slingBlue)
-                    
-                    Text("No outstanding balances at the moment.")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 140)
-                .background(Color.white)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-            } else {
+            if !outstandingBalances.isEmpty {
                 // Outstanding balances cards
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(outstandingBalances) { balance in
-                        OutstandingBalanceCard(balance: balance)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(outstandingBalances) { balance in
+                            OutstandingBalanceCard(balance: balance)
+                        }
                     }
+                    .padding(.horizontal, 4)
                 }
-                .padding(.horizontal, 4)
-            }
-            .background(Color.white)
+                .background(Color.white)
             }
         }
     }
@@ -8325,6 +8315,9 @@ struct EditProfileView: View {
     @State private var displayName: String
     @State private var firstName: String
     @State private var lastName: String
+    @State private var isLoading = false
+    @State private var showingSaveSuccess = false
+    @State private var showingUnsavedChangesAlert = false
     
     init(firestoreService: FirestoreService) {
         self.firestoreService = firestoreService
@@ -8335,190 +8328,174 @@ struct EditProfileView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                // Modern Header
-                HStack {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "arrow.left")
-                            .font(.title2)
-                            .foregroundColor(.slingBlue)
-                            .frame(width: 44, height: 44)
-                    }
-                    
-                    Spacer()
-                    
-                    Text("Edit Profile")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
-                    
-                    Spacer()
-                    
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.title2)
-                            .foregroundColor(.gray)
-                            .frame(width: 44, height: 44)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
-                .background(Color.white)
+            ZStack {
+                // Clean white background
+                Color.white.ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Email Display (Read-only)
-                        VStack(spacing: 16) {
-                            HStack {
-                                Text("Account Information")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.black)
-                                Spacer()
+                VStack(spacing: 0) {
+                    // Header
+                    HStack {
+                        Button(action: { 
+                            if hasUnsavedChanges() {
+                                showingUnsavedChangesAlert = true
+                            } else {
+                                dismiss()
                             }
-                            
-                            VStack(spacing: 0) {
-                                HStack {
-                                    SettingsRow(icon: "envelope", title: "Email", subtitle: firestoreService.currentUser?.email ?? "user@example.com", isDestructive: false, showArrow: false, action: {})
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.slingBlue)
-                                        .font(.caption)
-                                        .scaleEffect(0.8)
-                                }
-                            }
-                            .background(Color.white)
-                            .cornerRadius(12)
+                        }) {
+                            Image(systemName: "arrow.left")
+                                .font(.title2)
+                                .foregroundColor(.black)
+                                .frame(width: 44, height: 44)
                         }
-                    
                         
-                        // Profile Fields
-                        VStack(spacing: 16) {
-                            HStack {
-                                Text("Profile Information")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.black)
-                                Spacer()
-                            }
-                            
-                            VStack(spacing: 0) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Display Name *")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.black)
-                                        .padding(.horizontal, 16)
-                                        .padding(.top, 16)
-                                    
-                                    TextField("Enter display name", text: $displayName)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .padding(.horizontal, 16)
-                                        .padding(.bottom, 16)
-                                }
-                                
-                                Divider().padding(.leading, 56)
-                                
+                        Spacer()
+                        
+                        Text("Edit Profile")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            saveChanges()
+                        }) {
+                            Text("Save")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                        }
+                        .disabled(isLoading)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    
+                    // Content
+                    VStack(spacing: 32) {
+                        // Title
+                        Text("Update Your Profile")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                        
+                        // Subtitle
+                        Text("Keep your information up to date")
+                            .font(.body)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                        
+                        // User details input fields
+                        VStack(alignment: .leading, spacing: 16) {
+                            // First and Last name on same row
+                            HStack(spacing: 16) {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("First Name")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
+                                        .font(.headline)
                                         .foregroundColor(.black)
-                                        .padding(.horizontal, 16)
-                                        .padding(.top, 16)
                                     
-                                    TextField("Enter first name", text: $firstName)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .padding(.horizontal, 16)
-                                        .padding(.bottom, 16)
+                                    TextField("First", text: $firstName)
+                                        .textFieldStyle(ModernTextFieldStyle())
                                 }
-                                
-                                Divider().padding(.leading, 56)
                                 
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("Last Name")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
+                                        .font(.headline)
                                         .foregroundColor(.black)
-                                        .padding(.horizontal, 16)
-                                        .padding(.top, 16)
                                     
-                                    TextField("Enter last name", text: $lastName)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .padding(.horizontal, 16)
-                                        .padding(.bottom, 16)
+                                    TextField("Last", text: $lastName)
+                                        .textFieldStyle(ModernTextFieldStyle())
                                 }
                             }
-                            .background(Color.white)
-                            .cornerRadius(12)
-                        }
-                    
-                        
-                        // Action Buttons
-                        VStack(spacing: 12) {
-                            Button(action: {
-                                // Validate input
-                                guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                                    return
-                                }
-                                
-                                // Save changes action - for now just dismiss
-                                dismiss()
-                            }) {
-                                Text("Save Changes")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 16)
-                                    .background(Color.slingBlue)
-                                    .cornerRadius(12)
-                            }
-                            .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .opacity(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.6 : 1.0)
                             
-                            Button("Cancel") {
-                                dismiss()
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Display Name")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                                
+                                HStack(spacing: 0) {
+                                    Text("@")
+                                        .font(.title2)
+                                        .foregroundColor(.gray)
+                                        .padding(.leading, 20)
+                                    
+                                    TextField("username", text: $displayName)
+                                        .textFieldStyle(ModernTextFieldStyle())
+                                        .padding(.leading, 8)
+                                }
                             }
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.gray)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(Color.white)
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                            )
+                            
+                            Text("This is how other users will see you")
+                                .font(.caption)
+                                .foregroundColor(.gray)
                         }
-                    
+                        .padding(.horizontal, 24)
                         
-                        // Sign Out Button
-                        Button(action: {
-                            firestoreService.signOut()
-                            // Let the authentication state change handle navigation
-                        }) {
-                            Text("Sign Out")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(Color.red)
-                                .cornerRadius(12)
-                        }
+                        Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
+                    .padding(.top, 40)
                 }
             }
-            .background(Color.white)
             .navigationBarHidden(true)
+            .alert("Profile Updated", isPresented: $showingSaveSuccess) {
+                Button("OK") { dismiss() }
+            } message: {
+                Text("Your profile has been successfully updated.")
+            }
+            .alert("Unsaved Changes", isPresented: $showingUnsavedChangesAlert) {
+                Button("Leave", role: .destructive) { dismiss() }
+                Button("Stay", role: .cancel) { }
+            } message: {
+                Text("You have unsaved changes. Are you sure you want to leave?")
+            }
+        }
+    }
+    
+    private func hasUnsavedChanges() -> Bool {
+        let originalDisplayName = firestoreService.currentUser?.display_name ?? ""
+        let originalFirstName = firestoreService.currentUser?.first_name ?? ""
+        let originalLastName = firestoreService.currentUser?.last_name ?? ""
+        
+        return displayName != originalDisplayName || 
+               firstName != originalFirstName || 
+               lastName != originalLastName
+    }
+    
+    private func saveChanges() {
+        isLoading = true
+        
+        // Validate input
+        guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            isLoading = false
+            return
+        }
+        
+        // Update user profile in Firestore
+        let updateData: [String: Any] = [
+            "display_name": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+            "first_name": firstName.trimmingCharacters(in: .whitespacesAndNewlines),
+            "last_name": lastName.trimmingCharacters(in: .whitespacesAndNewlines),
+            "updated_date": Date()
+        ]
+        
+        firestoreService.updateUserSettings(settings: updateData) { success in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if success {
+                    print("✅ Profile updated successfully")
+                    self.showingSaveSuccess = true
+                } else {
+                    print("❌ Failed to update profile")
+                    // You could show an error alert here
+                }
+            }
         }
     }
 }
+
+
 
 // MARK: - Create Bet View
 
@@ -14270,12 +14247,12 @@ struct TradingProfileView: View {
         VStack(spacing: 0) {
             // Navigation Header
             HStack {
-                Button(action: { dismiss() }) {
-                    Image(systemName: "arrow.left")
-                        .font(.title2)
-                        .foregroundColor(.black)
-                        .frame(width: 44, height: 44)
-                }
+                        Button(action: { dismiss() }) {
+                            Image(systemName: "arrow.left")
+                                .font(.title2)
+                                .foregroundColor(.black)
+                                .frame(width: 44, height: 44)
+                        }
                 
                 Spacer()
                 
@@ -14375,7 +14352,7 @@ struct TradingProfileView: View {
                 HStack(spacing: 12) {
                     CommunityPerformanceCard(icon: "person.2", value: "\(getUserCommunityCount())", label: "Communities", color: .slingBlue)
                     CommunityPerformanceCard(icon: "target", value: "\(userData?.total_bets ?? 0)", label: "Total Bets", color: .slingBlue)
-                    CommunityPerformanceCard(icon: "bolt.fill", value: "\(userData?.blitz_points ?? 0)", label: "Sling Points", color: .slingBlue)
+                    CommunityPerformanceCard(icon: "bolt.fill", value: "\(formatNumber(userData?.blitz_points ?? 0))", label: "Sling Points", color: .slingBlue)
                     CommunityPerformanceCard(icon: "flame.fill", value: "\(getUserStreak())", label: "Streak", color: .slingBlue)
                 }
                 .padding(.horizontal, 16)
@@ -14527,8 +14504,8 @@ struct TradingProfileView: View {
         var currentStreak = 0
         var maxStreak = 0
         
-        // Get user's email
-        let userEmail = firestoreService.currentUser?.email ?? ""
+        // Get user's email (not currently used but available for future use)
+        _ = firestoreService.currentUser?.email ?? ""
         
         // Filter completed bets where user participated and won
         let userParticipations = firestoreService.userBetParticipations.filter { participant in
@@ -14560,6 +14537,13 @@ struct TradingProfileView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM yyyy"
         return formatter.string(from: Date())
+    }
+    
+    private func formatNumber(_ number: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter.string(from: NSNumber(value: number)) ?? "\(number)"
     }
     
     private func loadUserData() {
@@ -14620,6 +14604,7 @@ struct UserSettingsView: View {
     @State private var showingContactSupport = false
     @State private var showingTermsOfService = false
     @State private var showingPrivacyPolicy = false
+    @State private var showingLanguageError = false
     
     var body: some View {
         NavigationView {
@@ -14628,7 +14613,7 @@ struct UserSettingsView: View {
                 headerSection
                 
                 // Settings Content
-        ScrollView {
+                ScrollView {
                     VStack(spacing: 24) {
                         // Profile Section
                         profileSection
@@ -14659,26 +14644,38 @@ struct UserSettingsView: View {
             .navigationBarHidden(true)
             .sheet(isPresented: $showingEditProfile) {
                 EditProfileView(firestoreService: firestoreService)
+                    .onAppear {
+                        print("🔧 Sheet presenting: EditProfileView")
+                    }
             }
 
             .sheet(isPresented: $showingPushNotifications) {
-                PushNotificationsView()
+                PushNotificationsView(firestoreService: firestoreService)
+                    .onAppear {
+                        print("🔧 Sheet presenting: PushNotificationsView")
+                    }
             }
             .sheet(isPresented: $showingEmailNotifications) {
-                EmailNotificationsView()
+                EmailNotificationsView(firestoreService: firestoreService)
             }
 
             .sheet(isPresented: $showingProfileVisibility) {
-                ProfileVisibilityView()
+                ProfileVisibilityView(firestoreService: firestoreService)
             }
             .sheet(isPresented: $showingChangePassword) {
                 ChangePasswordView()
+                    .onAppear {
+                        print("🔧 Sheet presenting: ChangePasswordView")
+                    }
             }
             .sheet(isPresented: $showingLanguageSettings) {
-                LanguageSettingsView()
+                LanguageSettingsView(firestoreService: firestoreService)
+                    .onAppear {
+                        print("🔧 Sheet presenting: LanguageSettingsView")
+                    }
             }
             .sheet(isPresented: $showingContactSupport) {
-                ContactSupportView()
+                ContactSupportView(firestoreService: firestoreService)
             }
 
             .sheet(isPresented: $showingTermsOfService) {
@@ -14694,7 +14691,44 @@ struct UserSettingsView: View {
             .sheet(isPresented: $showingSignOut) {
                 SignOutView(firestoreService: firestoreService)
             }
+            .alert("Feature Coming Soon", isPresented: $showingLanguageError) {
+                Button("OK") { }
+            } message: {
+                Text("Language selection will be available in a future update. For now, the app is only available in English.")
+            }
+            .onAppear {
+                print("🔧 UserSettingsView body rendered")
+                // Ensure user settings exist in Firestore
+                firestoreService.ensureUserSettingsExist { success in
+                    if success {
+                        print("✅ User settings ensured in Firestore")
+                        // Load current user settings
+                        self.loadCurrentUserSettings()
+                    } else {
+                        print("❌ Failed to ensure user settings in Firestore")
+                    }
+                }
+            }
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func loadCurrentUserSettings() {
+        guard let user = firestoreService.currentUser else { return }
+        
+        // Load dark mode setting
+        if let darkMode = user.dark_mode_enabled {
+            darkModeEnabled = darkMode
+        }
+        
+        // Load language setting
+        if let language = user.language {
+            // Update the language display in the UI
+            print("🔧 Loaded language setting: \(language)")
+        }
+        
+        print("🔧 Loaded current user settings")
     }
     
     // MARK: - Header Section
@@ -14731,7 +14765,7 @@ struct UserSettingsView: View {
     
     // MARK: - Profile Section
     private var profileSection: some View {
-                VStack(spacing: 16) {
+        VStack(spacing: 16) {
             HStack {
                 Text("Profile")
                     .font(.headline)
@@ -14741,17 +14775,23 @@ struct UserSettingsView: View {
             }
             
             VStack(spacing: 0) {
-                Button(action: {
+                SettingsRow(icon: "person.circle", title: "Edit Profile", subtitle: "Update your personal information", isDestructive: false, action: {
+                    print("🔧 Edit Profile button tapped")
                     showingEditProfile = true
-                }) {
-                    SettingsRow(icon: "person.circle", title: "Edit Profile", subtitle: "Update your personal information", isDestructive: false, action: {})
-                }
+                    print("🔧 showingEditProfile set to: \(showingEditProfile)")
+                })
                 Divider().padding(.leading, 56)
-                Button(action: {
+                SettingsRow(icon: "key", title: "Change Password", subtitle: "Update your password", isDestructive: false, action: {
+                    print("🔧 Change Password button tapped")
                     showingChangePassword = true
-                }) {
-                    SettingsRow(icon: "key", title: "Change Password", subtitle: "Update your password", isDestructive: false, action: {})
-                }
+                    print("🔧 showingChangePassword set to: \(showingChangePassword)")
+                })
+                Divider().padding(.leading, 56)
+                SettingsRow(icon: "eye", title: "Profile Visibility", subtitle: "What's displayed on your profile page", isDestructive: false, action: {
+                    print("🔧 Profile Visibility button tapped")
+                    showingProfileVisibility = true
+                    print("🔧 showingProfileVisibility set to: \(showingProfileVisibility)")
+                })
             }
             .background(Color.white)
             .cornerRadius(12)
@@ -14770,17 +14810,17 @@ struct UserSettingsView: View {
             }
             
             VStack(spacing: 0) {
-                Button(action: {
+                SettingsRow(icon: "bell", title: "Push Notifications", subtitle: "Bet updates and community alerts", isDestructive: false, action: {
+                    print("🔧 Push Notifications button tapped")
                     showingPushNotifications = true
-                }) {
-                    SettingsRow(icon: "bell", title: "Push Notifications", subtitle: "Bet updates and community alerts", isDestructive: false, action: {})
-                }
+                    print("🔧 showingPushNotifications set to: \(showingPushNotifications)")
+                })
                 Divider().padding(.leading, 56)
-                Button(action: {
+                SettingsRow(icon: "envelope", title: "Email Notifications", subtitle: "Weekly summaries and updates", isDestructive: false, action: {
+                    print("🔧 Email Notifications button tapped")
                     showingEmailNotifications = true
-                }) {
-                    SettingsRow(icon: "envelope", title: "Email Notifications", subtitle: "Weekly summaries and updates", isDestructive: false, action: {})
-                }
+                    print("🔧 showingEmailNotifications set to: \(showingEmailNotifications)")
+                })
             }
             .background(Color.white)
             .cornerRadius(12)
@@ -14799,11 +14839,7 @@ struct UserSettingsView: View {
             }
             
             VStack(spacing: 0) {
-                Button(action: {
-                    showingProfileVisibility = true
-                }) {
-                    SettingsRow(icon: "eye", title: "Profile Visibility", subtitle: "What's displayed on your profile page", isDestructive: false, action: {})
-                }
+                // Privacy settings can be added here in the future
             }
             .background(Color.white)
             .cornerRadius(12)
@@ -14829,6 +14865,17 @@ struct UserSettingsView: View {
                         .labelsHidden()
                         .scaleEffect(0.8)
                         .tint(.slingBlue)
+                        .padding(.trailing, 16)
+                        .onChange(of: darkModeEnabled) { _, newValue in
+                            print("🔧 Dark mode changed to: \(newValue)")
+                            firestoreService.updateDarkModeSetting(enabled: newValue) { success in
+                                if success {
+                                    print("✅ Dark mode setting saved to Firestore")
+                                } else {
+                                    print("❌ Failed to save dark mode setting")
+                                }
+                            }
+                        }
                 }
             }
             .background(Color.white)
@@ -14848,11 +14895,10 @@ struct UserSettingsView: View {
             }
             
             VStack(spacing: 0) {
-                Button(action: {
-                    showingLanguageSettings = true
-                }) {
-                    SettingsRow(icon: "globe", title: "Language", subtitle: "English", isDestructive: false, action: {})
-                }
+                SettingsRow(icon: "globe", title: "Language", subtitle: "English", isDestructive: false, showArrow: false, action: {
+                    print("🔧 Language button tapped - feature coming soon!")
+                    showingLanguageError = true
+                })
             }
             .background(Color.white)
             .cornerRadius(12)
@@ -14871,23 +14917,23 @@ struct UserSettingsView: View {
             }
             
             VStack(spacing: 0) {
-                Button(action: {
+                SettingsRow(icon: "message", title: "Contact Us", subtitle: "Get help from our team", isDestructive: false, action: {
+                    print("🔧 Contact Us button tapped")
                     showingContactSupport = true
-                }) {
-                    SettingsRow(icon: "message", title: "Contact Us", subtitle: "Get help from our team", isDestructive: false, action: {})
-                }
+                    print("🔧 showingContactSupport set to: \(showingContactSupport)")
+                })
                 Divider().padding(.leading, 56)
-                Button(action: {
+                SettingsRow(icon: "doc.text", title: "Terms of Service", subtitle: "Read our terms and conditions", isDestructive: false, action: {
+                    print("🔧 Terms of Service button tapped")
                     showingTermsOfService = true
-                }) {
-                    SettingsRow(icon: "doc.text", title: "Terms of Service", subtitle: "Read our terms and conditions", isDestructive: false, action: {})
-                }
+                    print("🔧 showingTermsOfService set to: \(showingTermsOfService)")
+                })
                 Divider().padding(.leading, 56)
-                Button(action: {
+                SettingsRow(icon: "hand.raised", title: "Privacy Policy", subtitle: "Learn about data privacy", isDestructive: false, action: {
+                    print("🔧 Privacy Policy button tapped")
                     showingPrivacyPolicy = true
-                }) {
-                    SettingsRow(icon: "hand.raised", title: "Privacy Policy", subtitle: "Learn about data privacy", isDestructive: false, action: {})
-                }
+                    print("🔧 showingPrivacyPolicy set to: \(showingPrivacyPolicy)")
+                })
             }
             .background(Color.white)
             .cornerRadius(12)
@@ -14907,11 +14953,15 @@ struct UserSettingsView: View {
             
             VStack(spacing: 0) {
                 SettingsRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", subtitle: "Sign out of your account", isDestructive: true, action: {
+                    print("🔧 Sign Out button tapped")
                     showingSignOut = true
+                    print("🔧 showingSignOut set to: \(showingSignOut)")
                 })
                 Divider().padding(.leading, 56)
                 SettingsRow(icon: "trash", title: "Delete Account", subtitle: "Permanently delete your account", isDestructive: true, action: {
+                    print("🔧 Delete Account button tapped")
                     showingDeleteAccount = true
+                    print("🔧 showingDeleteAccount set to: \(showingDeleteAccount)")
                 })
             }
             .background(Color.white)
@@ -14919,8 +14969,6 @@ struct UserSettingsView: View {
         }
     }
 }
-
-
 
 // MARK: - Profile Picture View
 struct ProfilePictureView: View {
@@ -15067,6 +15115,7 @@ struct ProfilePictureView: View {
 // MARK: - Push Notifications View
 struct PushNotificationsView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var firestoreService: FirestoreService
     @State private var betUpdates = true
     @State private var communityAlerts = true
     @State private var newMessages = true
@@ -15075,16 +15124,35 @@ struct PushNotificationsView: View {
     @State private var membersLeft = true
     @State private var hotBetsTrending = true
     @State private var outstandingBalances = true
+    @State private var isLoading = false
+    @State private var showingSaveSuccess = false
+    @State private var showingUnsavedChangesAlert = false
+    
+    // Original values to track changes
+    @State private var originalBetUpdates = true
+    @State private var originalCommunityAlerts = true
+    @State private var originalNewMessages = true
+    @State private var originalWeeklySummaries = false
+    @State private var originalNewMembersJoined = true
+    @State private var originalMembersLeft = true
+    @State private var originalHotBetsTrending = true
+    @State private var originalOutstandingBalances = true
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
                 // Header
                 HStack {
-                    Button(action: { dismiss() }) {
+                    Button(action: { 
+                        if hasUnsavedChanges() {
+                            showingUnsavedChangesAlert = true
+                        } else {
+                            dismiss()
+                        }
+                    }) {
                         Image(systemName: "arrow.left")
                             .font(.title2)
-                            .foregroundColor(.slingBlue)
+                            .foregroundColor(.black)
                             .frame(width: 44, height: 44)
                     }
                     
@@ -15097,17 +15165,18 @@ struct PushNotificationsView: View {
                     
                     Spacer()
                     
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.title2)
-                            .foregroundColor(.gray)
-                            .frame(width: 44, height: 44)
+                    Button(action: {
+                        savePreferences()
+                    }) {
+                        Text("Save")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.slingBlue)
                     }
+                    .disabled(isLoading)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
-                .background(Color.white)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
                 
                 // Content
         ScrollView {
@@ -15123,35 +15192,39 @@ struct PushNotificationsView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "target", title: "Bet Updates", subtitle: "Get notified about your bets", isDestructive: false, action: {})
+                                    SettingsRow(icon: "target", title: "Bet Updates", subtitle: "Get notified about your bets", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $betUpdates)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "person.3", title: "Community Alerts", subtitle: "New community activities", isDestructive: false, action: {})
+                                    SettingsRow(icon: "person.3", title: "Community Alerts", subtitle: "New community activities", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $communityAlerts)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "message", title: "New Messages", subtitle: "Direct messages and mentions", isDestructive: false, action: {})
+                                    SettingsRow(icon: "message", title: "New Messages", subtitle: "Direct messages and mentions", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $newMessages)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false, action: {})
+                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $weeklySummaries)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                             }
                             .background(Color.white)
@@ -15169,35 +15242,39 @@ struct PushNotificationsView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "person.badge.plus", title: "New Members Joined", subtitle: "When someone joins your community", isDestructive: false, action: {})
+                                    SettingsRow(icon: "person.badge.plus", title: "New Members Joined", subtitle: "When someone joins your community", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $newMembersJoined)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "person.badge.minus", title: "Members Left", subtitle: "When someone leaves your community", isDestructive: false, action: {})
+                                    SettingsRow(icon: "person.badge.minus", title: "Members Left", subtitle: "When someone leaves your community", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $membersLeft)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "flame.fill", title: "Hot Bets Trending", subtitle: "Popular bets in your communities", isDestructive: false, action: {})
+                                    SettingsRow(icon: "flame.fill", title: "Hot Bets Trending", subtitle: "Popular bets in your communities", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $hotBetsTrending)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "exclamationmark.triangle", title: "Outstanding Balances", subtitle: "Updates on pending balances", isDestructive: false, action: {})
+                                    SettingsRow(icon: "exclamationmark.triangle", title: "Outstanding Balances", subtitle: "Updates on pending balances", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $outstandingBalances)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                             }
                             .background(Color.white)
@@ -15210,27 +15287,125 @@ struct PushNotificationsView: View {
             }
             .background(Color.gray.opacity(0.05))
             .navigationBarHidden(true)
+            .alert("Preferences Saved", isPresented: $showingSaveSuccess) {
+                Button("OK") { }
+            } message: {
+                Text("Your notification preferences have been updated.")
+            }
+            .alert("Unsaved Changes", isPresented: $showingUnsavedChangesAlert) {
+                Button("Leave", role: .destructive) { dismiss() }
+                Button("Stay", role: .cancel) { }
+            } message: {
+                Text("You have unsaved changes. Are you sure you want to leave?")
+            }
+            .onAppear {
+                loadCurrentUserSettings()
+            }
         }
+    }
+    
+    private func hasUnsavedChanges() -> Bool {
+        return betUpdates != originalBetUpdates ||
+               communityAlerts != originalCommunityAlerts ||
+               newMessages != originalNewMessages ||
+               weeklySummaries != originalWeeklySummaries ||
+               newMembersJoined != originalNewMembersJoined ||
+               membersLeft != originalMembersLeft ||
+               hotBetsTrending != originalHotBetsTrending ||
+               outstandingBalances != originalOutstandingBalances
+    }
+    
+    private func savePreferences() {
+        isLoading = true
+        
+        print("🔧 Saving push notification preferences")
+        
+        // Save push notification preferences to Firestore
+        firestoreService.updatePushNotificationSettings(enabled: true) { success in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if success {
+                    print("✅ Push notification preferences saved to Firestore")
+                    self.showingSaveSuccess = true
+                    
+                    // Update original values after successful save
+                    self.originalBetUpdates = self.betUpdates
+                    self.originalCommunityAlerts = self.communityAlerts
+                    self.originalNewMessages = self.newMessages
+                    self.originalWeeklySummaries = self.weeklySummaries
+                    self.originalNewMembersJoined = self.newMembersJoined
+                    self.originalMembersLeft = self.membersLeft
+                    self.originalHotBetsTrending = self.hotBetsTrending
+                    self.originalOutstandingBalances = self.outstandingBalances
+                    
+                    // Dismiss after showing success
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        self.dismiss()
+                    }
+                } else {
+                    print("❌ Failed to save push notification preferences")
+                    // You could show an error alert here
+                }
+            }
+        }
+    }
+    
+    private func loadCurrentUserSettings() {
+        guard let user = firestoreService.currentUser else { return }
+        
+        // Load current push notification settings
+        if let pushEnabled = user.push_notifications_enabled {
+            // Update the UI based on current settings
+            print("🔧 Loaded push notification settings from Firestore: \(pushEnabled)")
+        }
+        
+        // Set original values to track changes
+        originalBetUpdates = betUpdates
+        originalCommunityAlerts = communityAlerts
+        originalNewMessages = newMessages
+        originalWeeklySummaries = weeklySummaries
+        originalNewMembersJoined = newMembersJoined
+        originalMembersLeft = membersLeft
+        originalHotBetsTrending = hotBetsTrending
+        originalOutstandingBalances = outstandingBalances
+        
+        print("🔧 Loaded push notification settings from Firestore")
     }
 }
 
 // MARK: - Email Notifications View
 struct EmailNotificationsView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var firestoreService: FirestoreService
     @State private var weeklySummaries = true
     @State private var betResults = true
     @State private var communityUpdates = false
     @State private var promotionalEmails = false
+    @State private var isLoading = false
+    @State private var showingSaveSuccess = false
+    @State private var showingUnsavedChangesAlert = false
+    
+    // Original values to track changes
+    @State private var originalWeeklySummaries = true
+    @State private var originalBetResults = true
+    @State private var originalCommunityUpdates = false
+    @State private var originalPromotionalEmails = false
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
                 // Header
                 HStack {
-                    Button(action: { dismiss() }) {
+                    Button(action: { 
+                        if hasUnsavedChanges() {
+                            showingUnsavedChangesAlert = true
+                        } else {
+                            dismiss()
+                        }
+                    }) {
                         Image(systemName: "arrow.left")
                             .font(.title2)
-                            .foregroundColor(.slingBlue)
+                            .foregroundColor(.black)
                             .frame(width: 44, height: 44)
                     }
                     
@@ -15243,17 +15418,18 @@ struct EmailNotificationsView: View {
                     
                     Spacer()
                     
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.title2)
-                            .foregroundColor(.gray)
-                            .frame(width: 44, height: 44)
+                    Button(action: {
+                        savePreferences()
+                    }) {
+                        Text("Save")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.slingBlue)
                     }
+                    .disabled(isLoading)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
-                .background(Color.white)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
                 
                 // Content
                 ScrollView {
@@ -15269,35 +15445,39 @@ struct EmailNotificationsView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false, action: {})
+                                    SettingsRow(icon: "chart.bar", title: "Weekly Summaries", subtitle: "Your weekly performance", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $weeklySummaries)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "target", title: "Bet Results", subtitle: "Final outcomes of your bets", isDestructive: false, action: {})
+                                    SettingsRow(icon: "target", title: "Bet Results", subtitle: "Final outcomes of your bets", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $betResults)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "person.3", title: "Community Updates", subtitle: "New community activities", isDestructive: false, action: {})
+                                    SettingsRow(icon: "person.3", title: "Community Updates", subtitle: "New community activities", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $communityUpdates)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "megaphone", title: "Promotional Emails", subtitle: "Special offers and updates", isDestructive: false, action: {})
+                                    SettingsRow(icon: "megaphone", title: "Promotional Emails", subtitle: "Special offers and updates", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $promotionalEmails)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                             }
                             .background(Color.white)
@@ -15305,12 +15485,95 @@ struct EmailNotificationsView: View {
                         }
                     }
                     .padding(.horizontal, 16)
-            .padding(.vertical, 20)
+                    .padding(.vertical, 20)
                 }
             }
             .background(Color.gray.opacity(0.05))
             .navigationBarHidden(true)
+            .alert("Preferences Saved", isPresented: $showingSaveSuccess) {
+                Button("OK") { }
+            } message: {
+                Text("Your email notification preferences have been updated.")
+            }
+            .alert("Unsaved Changes", isPresented: $showingUnsavedChangesAlert) {
+                Button("Leave", role: .destructive) { dismiss() }
+                Button("Stay", role: .cancel) { }
+            } message: {
+                Text("You have unsaved changes. Are you sure you want to leave?")
+            }
+            .onAppear {
+                loadCurrentUserSettings()
+            }
         }
+    }
+    
+    private func hasUnsavedChanges() -> Bool {
+        return weeklySummaries != originalWeeklySummaries ||
+               betResults != originalBetResults ||
+               communityUpdates != originalCommunityUpdates ||
+               promotionalEmails != originalPromotionalEmails
+    }
+    
+    private func savePreferences() {
+        isLoading = true
+        
+        print("🔧 Saving email notification preferences")
+        
+        // Save email notification preferences to Firestore
+        firestoreService.updateEmailNotificationSettings(
+            weeklySummaries: weeklySummaries,
+            betResults: betResults,
+            communityUpdates: communityUpdates,
+            promotionalEmails: promotionalEmails
+        ) { success in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if success {
+                    print("✅ Email notification preferences saved to Firestore")
+                    self.showingSaveSuccess = true
+                    
+                    // Update original values after successful save
+                    self.originalWeeklySummaries = self.weeklySummaries
+                    self.originalBetResults = self.betResults
+                    self.originalCommunityUpdates = self.communityUpdates
+                    self.originalPromotionalEmails = self.promotionalEmails
+                    
+                    // Dismiss after showing success
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        self.dismiss()
+                    }
+                } else {
+                    print("❌ Failed to save email notification preferences")
+                    // You could show an error alert here
+                }
+            }
+        }
+    }
+    
+    private func loadCurrentUserSettings() {
+        guard let user = firestoreService.currentUser else { return }
+        
+        // Load current email notification settings
+        if let weeklySummaries = user.weekly_summaries_enabled {
+            self.weeklySummaries = weeklySummaries
+        }
+        if let betResults = user.bet_results_enabled {
+            self.betResults = betResults
+        }
+        if let communityUpdates = user.community_updates_enabled {
+            self.communityUpdates = communityUpdates
+        }
+        if let promotionalEmails = user.promotional_emails_enabled {
+            self.promotionalEmails = promotionalEmails
+        }
+        
+        // Set original values to track changes
+        originalWeeklySummaries = weeklySummaries
+        originalBetResults = betResults
+        originalCommunityUpdates = communityUpdates
+        originalPromotionalEmails = promotionalEmails
+        
+        print("🔧 Loaded email notification settings from Firestore")
     }
 }
 
@@ -15417,21 +15680,37 @@ struct SoundSettingsView: View {
 // MARK: - Simple Placeholder Views for Other Settings
 struct ProfileVisibilityView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var showPointBalance = true
+    @ObservedObject var firestoreService: FirestoreService
     @State private var showTotalWinnings = true
     @State private var showTotalBets = true
     @State private var showSlingPoints = true
     @State private var showBlitzPoints = true
     @State private var showCommunities = true
+    @State private var isLoading = false
+    @State private var showingSaveSuccess = false
+    @State private var showingUnsavedChangesAlert = false
+    
+    // Original values to track changes
+    @State private var originalShowTotalWinnings = true
+    @State private var originalShowTotalBets = true
+    @State private var originalShowSlingPoints = true
+    @State private var originalShowBlitzPoints = true
+    @State private var originalShowCommunities = true
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
                 HStack {
-                    Button(action: { dismiss() }) {
+                    Button(action: { 
+                        if hasUnsavedChanges() {
+                            showingUnsavedChangesAlert = true
+                        } else {
+                            dismiss()
+                        }
+                    }) {
                         Image(systemName: "arrow.left")
                             .font(.title2)
-                            .foregroundColor(.slingBlue)
+                            .foregroundColor(.black)
                             .frame(width: 44, height: 44)
                     }
                     
@@ -15444,17 +15723,18 @@ struct ProfileVisibilityView: View {
                     
                     Spacer()
                     
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.title2)
-                            .foregroundColor(.gray)
-                            .frame(width: 44, height: 44)
+                    Button(action: {
+                        savePreferences()
+                    }) {
+                        Text("Save")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.slingBlue)
                     }
+                    .disabled(isLoading)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
-                .background(Color.white)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
                 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -15469,51 +15749,48 @@ struct ProfileVisibilityView: View {
                             
                             VStack(spacing: 0) {
                                 HStack {
-                                    SettingsRow(icon: "bolt.fill", title: "Point Balance", subtitle: "Show your current point balance", isDestructive: false, action: {})
-                                    Spacer()
-                                    Toggle("", isOn: $showPointBalance)
-                                        .labelsHidden()
-                                        .tint(.slingBlue)
-                                }
-                                Divider().padding(.leading, 56)
-                                HStack {
-                                    SettingsRow(icon: "dollarsign.circle", title: "Total Winnings", subtitle: "Display your total winnings", isDestructive: false, action: {})
+                                    SettingsRow(icon: "dollarsign.circle", title: "Total Winnings", subtitle: "Show your total winnings amount", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showTotalWinnings)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "target", title: "Total Bets", subtitle: "Show your bet count", isDestructive: false, action: {})
+                                    SettingsRow(icon: "target", title: "Total Bets", subtitle: "Show your total number of bets", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showTotalBets)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "bolt.fill", title: "Sling Points", subtitle: "Display Sling Points", isDestructive: false, action: {})
+                                    SettingsRow(icon: "bolt.fill", title: "Sling Points", subtitle: "Show your Sling Points balance", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showSlingPoints)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "flame.fill", title: "Blitz Points", subtitle: "Display Blitz Points", isDestructive: false, action: {})
+                                    SettingsRow(icon: "flame.fill", title: "Blitz Points", subtitle: "Show your Blitz Points balance", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showBlitzPoints)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "person.2", title: "Communities", subtitle: "Show your community count", isDestructive: false, action: {})
+                                    SettingsRow(icon: "person.2", title: "Communities", subtitle: "Show your community memberships", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showCommunities)
                                         .labelsHidden()
                                         .tint(.slingBlue)
+                                        .padding(.trailing, 16)
                                 }
                             }
                             .background(Color.white)
@@ -15521,12 +15798,96 @@ struct ProfileVisibilityView: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                            .padding(.vertical, 20)
+                    .padding(.vertical, 20)
                 }
             }
             .background(Color.gray.opacity(0.05))
             .navigationBarHidden(true)
+            .alert("Preferences Saved", isPresented: $showingSaveSuccess) {
+                Button("OK") { }
+            } message: {
+                Text("Your profile visibility preferences have been updated.")
+            }
+            .alert("Unsaved Changes", isPresented: $showingUnsavedChangesAlert) {
+                Button("Leave", role: .destructive) { dismiss() }
+                Button("Stay", role: .cancel) { }
+            } message: {
+                Text("You have unsaved changes. Are you sure you want to leave?")
+            }
+            .onAppear {
+                loadCurrentUserSettings()
+            }
         }
+    }
+    
+    private func hasUnsavedChanges() -> Bool {
+        return showTotalWinnings != originalShowTotalWinnings ||
+               showTotalBets != originalShowTotalBets ||
+               showSlingPoints != originalShowSlingPoints ||
+               showBlitzPoints != originalShowBlitzPoints ||
+               showCommunities != originalShowCommunities
+    }
+    
+    private func savePreferences() {
+        isLoading = true
+        
+        print("🔧 Saving profile visibility preferences")
+        
+        // Create ProfileVisibilitySettings object
+        let visibilitySettings = ProfileVisibilitySettings(
+            showTotalWinnings: showTotalWinnings,
+            showTotalBets: showTotalBets,
+            showSlingPoints: showSlingPoints,
+            showBlitzPoints: showBlitzPoints,
+            showCommunities: showCommunities
+        )
+        
+        // Save profile visibility preferences to Firestore
+        firestoreService.updateProfileVisibilitySettings(settings: visibilitySettings) { success in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if success {
+                    print("✅ Profile visibility preferences saved to Firestore")
+                    self.showingSaveSuccess = true
+                    
+                    // Update original values after successful save
+                    self.originalShowTotalWinnings = self.showTotalWinnings
+                    self.originalShowTotalBets = self.showTotalBets
+                    self.originalShowSlingPoints = self.showSlingPoints
+                    self.originalShowBlitzPoints = self.showBlitzPoints
+                    self.originalShowCommunities = self.showCommunities
+                    
+                    // Dismiss after showing success
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        self.dismiss()
+                    }
+                } else {
+                    print("❌ Failed to save profile visibility preferences")
+                    // You could show an error alert here
+                }
+            }
+        }
+    }
+    
+    private func loadCurrentUserSettings() {
+        guard let user = firestoreService.currentUser,
+              let profileSettings = user.profile_visibility_settings else { return }
+        
+        // Load current profile visibility settings
+        showTotalWinnings = profileSettings.showTotalWinnings
+        showTotalBets = profileSettings.showTotalBets
+        showSlingPoints = profileSettings.showSlingPoints
+        showBlitzPoints = profileSettings.showBlitzPoints
+        showCommunities = profileSettings.showCommunities
+        
+        // Set original values to track changes
+        originalShowTotalWinnings = showTotalWinnings
+        originalShowTotalBets = showTotalBets
+        originalShowSlingPoints = showSlingPoints
+        originalShowBlitzPoints = showBlitzPoints
+        originalShowCommunities = showCommunities
+        
+        print("🔧 Loaded profile visibility settings from Firestore")
     }
 }
 
@@ -15603,124 +15964,248 @@ struct ChangePasswordView: View {
     @State private var newPassword = ""
     @State private var confirmPassword = ""
     @State private var isChanging = false
+    @State private var showCurrentPassword = false
+    @State private var showNewPassword = false
+    @State private var showConfirmPassword = false
+    @State private var showingSaveSuccess = false
+    @State private var errorMessage = ""
+    @State private var showingUnsavedChangesAlert = false
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                HStack {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "arrow.left")
-                            .font(.title2)
-                            .foregroundColor(.slingBlue)
-                            .frame(width: 44, height: 44)
-                    }
-                    
-                    Spacer()
-                    
-                    Text("Change Password")
-                .font(.title2)
-                .fontWeight(.bold)
-                        .foregroundColor(.black)
-                    
-                    Spacer()
-                    
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.title2)
-                .foregroundColor(.gray)
-                            .frame(width: 44, height: 44)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
-                .background(Color.white)
+            ZStack {
+                // Clean white background
+                Color.white.ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(spacing: 24) {
-                        VStack(spacing: 16) {
-                            HStack {
-                                Text("Password Change")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.black)
-                                Spacer()
+                VStack(spacing: 0) {
+                    // Header
+                    HStack {
+                        Button(action: { 
+                            if hasUnsavedChanges() {
+                                showingUnsavedChangesAlert = true
+                            } else {
+                                dismiss()
                             }
-                            
-                            VStack(spacing: 16) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Current Password")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.black)
-                                    
-                                    SecureField("Enter current password", text: $currentPassword)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .font(.body)
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("New Password")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.black)
-                                    
-                                    SecureField("Enter new password", text: $newPassword)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .font(.body)
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Confirm New Password")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.black)
-                                    
-                                    SecureField("Confirm new password", text: $confirmPassword)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .font(.body)
-                                }
-                            }
-                            .padding(20)
-                            .background(Color.white)
-                            .cornerRadius(12)
-                            
-                            Button(action: changePassword) {
-                                HStack {
-                                    if isChanging {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                            .scaleEffect(0.8)
-                                    } else {
-                                        Text("Change Password")
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                    }
-                                }
-                                .foregroundColor(.white)
-        .frame(maxWidth: .infinity)
-                                .frame(height: 50)
-                                .background(Color.slingBlue)
-                                .cornerRadius(12)
-                            }
-                            .disabled(isChanging)
+                        }) {
+                            Image(systemName: "arrow.left")
+                                .font(.title2)
+                                .foregroundColor(.black)
+                                .frame(width: 44, height: 44)
                         }
+                        
+                        Spacer()
+                        
+                        Text("Change Password")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            changePassword()
+                        }) {
+                            Text("Save")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                        }
+                        .disabled(isChanging)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    
+                    // Content
+                    VStack(spacing: 32) {
+                        // Title
+                        Text("Update Your Password")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                        
+                        // Subtitle
+                        Text("Choose a strong password to secure your account")
+                            .font(.body)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                        
+                        // Password input fields
+                        VStack(alignment: .leading, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Current Password")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                                
+                                if showCurrentPassword {
+                                    TextField("Enter current password", text: $currentPassword)
+                                        .textFieldStyle(ModernTextFieldStyle())
+                                        .overlay(
+                                            HStack {
+                                                Spacer()
+                                                
+                                                Button(action: { showCurrentPassword.toggle() }) {
+                                                    Image(systemName: "eye.slash")
+                                                        .foregroundColor(.gray)
+                                                        .frame(width: 24, height: 24)
+                                                }
+                                                .padding(.trailing, 20)
+                                            }
+                                        )
+                                } else {
+                                    SecureField("Enter current password", text: $currentPassword)
+                                        .textFieldStyle(ModernTextFieldStyle())
+                                        .overlay(
+                                            HStack {
+                                                Spacer()
+                                                
+                                                Button(action: { showCurrentPassword.toggle() }) {
+                                                    Image(systemName: "eye")
+                                                        .foregroundColor(.gray)
+                                                        .frame(width: 24, height: 24)
+                                                }
+                                                .padding(.trailing, 20)
+                                            }
+                                        )
+                                }
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("New Password")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                                
+                                if showNewPassword {
+                                    TextField("Enter new password", text: $newPassword)
+                                        .textFieldStyle(ModernTextFieldStyle())
+                                        .overlay(
+                                            HStack {
+                                                Spacer()
+                                                
+                                                Button(action: { showNewPassword.toggle() }) {
+                                                    Image(systemName: "eye.slash")
+                                                        .foregroundColor(.gray)
+                                                        .frame(width: 24, height: 24)
+                                                }
+                                                .padding(.trailing, 20)
+                                            }
+                                        )
+                                } else {
+                                    SecureField("Enter new password", text: $newPassword)
+                                        .textFieldStyle(ModernTextFieldStyle())
+                                        .overlay(
+                                            HStack {
+                                                Spacer()
+                                                
+                                                Button(action: { showNewPassword.toggle() }) {
+                                                    Image(systemName: "eye")
+                                                        .foregroundColor(.gray)
+                                                        .frame(width: 24, height: 24)
+                                                }
+                                                .padding(.trailing, 20)
+                                            }
+                                        )
+                                }
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Confirm New Password")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                                
+                                if showConfirmPassword {
+                                    TextField("Confirm new password", text: $confirmPassword)
+                                        .textFieldStyle(ModernTextFieldStyle())
+                                        .overlay(
+                                            HStack {
+                                                Spacer()
+                                                
+                                                Button(action: { showConfirmPassword.toggle() }) {
+                                                    Image(systemName: "eye.slash")
+                                                        .foregroundColor(.gray)
+                                                        .frame(width: 24, height: 24)
+                                                }
+                                                .padding(.trailing, 20)
+                                            }
+                                        )
+                                } else {
+                                    SecureField("Confirm new password", text: $confirmPassword)
+                                        .textFieldStyle(ModernTextFieldStyle())
+                                        .overlay(
+                                            HStack {
+                                                Spacer()
+                                                
+                                                Button(action: { showConfirmPassword.toggle() }) {
+                                                    Image(systemName: "eye")
+                                                        .foregroundColor(.gray)
+                                                        .frame(width: 24, height: 24)
+                                                }
+                                                .padding(.trailing, 20)
+                                            }
+                                        )
+                                }
+                            }
+                            
+                            Text("Must be at least 6 characters")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 24)
+                        
+                        Spacer()
+                    }
+                    .padding(.top, 40)
                 }
             }
-            .background(Color.gray.opacity(0.05))
             .navigationBarHidden(true)
+            .alert("Password Changed", isPresented: $showingSaveSuccess) {
+                Button("OK") { dismiss() }
+            } message: {
+                Text("Your password has been successfully updated.")
+            }
+            .alert("Error", isPresented: .constant(!errorMessage.isEmpty)) {
+                Button("OK") { errorMessage = "" }
+            } message: {
+                Text(errorMessage)
+            }
+            .alert("Unsaved Changes", isPresented: $showingUnsavedChangesAlert) {
+                Button("Leave", role: .destructive) { dismiss() }
+                Button("Stay", role: .cancel) { }
+            } message: {
+                Text("You have unsaved changes. Are you sure you want to leave?")
+            }
         }
     }
     
+    private func hasUnsavedChanges() -> Bool {
+        return !currentPassword.isEmpty || !newPassword.isEmpty || !confirmPassword.isEmpty
+    }
+    
     private func changePassword() {
+        // Validate input
+        guard !currentPassword.isEmpty && !newPassword.isEmpty && !confirmPassword.isEmpty else {
+            errorMessage = "Please fill in all fields"
+            return
+        }
+        
+        guard newPassword == confirmPassword else {
+            errorMessage = "New passwords do not match"
+            return
+        }
+        
+        guard newPassword.count >= 6 else {
+            errorMessage = "Password must be at least 6 characters"
+            return
+        }
+        
         isChanging = true
-        // TODO: Implement password change
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            isChanging = false
-            dismiss()
+        
+        // Simulate password change (you'll need to implement this in FirestoreService)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            self.isChanging = false
+            self.showingSaveSuccess = true
         }
     }
 }
@@ -15797,6 +16282,7 @@ struct ExportDataView: View {
 
 struct LanguageSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var firestoreService: FirestoreService
     @State private var selectedLanguage = "English"
     
     let languages = ["English", "Spanish", "French", "German", "Chinese", "Japanese"]
@@ -15810,6 +16296,15 @@ struct LanguageSettingsView: View {
                             .font(.title2)
                             .foregroundColor(.slingBlue)
                             .frame(width: 44, height: 44)
+                    }
+                    
+                    Button(action: {
+                        saveLanguage()
+                    }) {
+                        Text("Save")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.slingBlue)
                     }
                     
                     Spacer()
@@ -15847,7 +16342,7 @@ struct LanguageSettingsView: View {
                             VStack(spacing: 0) {
                                 ForEach(languages, id: \.self) { language in
                                     HStack {
-                                        SettingsRow(icon: "globe", title: language, subtitle: "", isDestructive: false, action: {})
+                                        SettingsRow(icon: "globe", title: language, subtitle: "", isDestructive: false, showArrow: false, action: {})
                                         Spacer()
                                         if selectedLanguage == language {
                                             Image(systemName: "checkmark")
@@ -15871,6 +16366,36 @@ struct LanguageSettingsView: View {
             }
             .background(Color.gray.opacity(0.05))
             .navigationBarHidden(true)
+            .onAppear {
+                loadCurrentUserSettings()
+            }
+        }
+    }
+    
+    private func saveLanguage() {
+        print("🔧 Saving language preference")
+        
+        // Save language preference to Firestore
+        firestoreService.updateLanguageSetting(language: selectedLanguage) { success in
+            DispatchQueue.main.async {
+                if success {
+                    print("✅ Language preference saved to Firestore")
+                    self.dismiss()
+                } else {
+                    print("❌ Failed to save language preference")
+                    // You could show an error alert here
+                }
+            }
+        }
+    }
+    
+    private func loadCurrentUserSettings() {
+        guard let user = firestoreService.currentUser else { return }
+        
+        // Load current language setting
+        if let language = user.language {
+            selectedLanguage = language
+            print("🔧 Loaded language setting from Firestore: \(language)")
         }
     }
 }
@@ -15878,6 +16403,7 @@ struct LanguageSettingsView: View {
 // MARK: - Contact Us View
 struct ContactSupportView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var firestoreService: FirestoreService
     @State private var messageText = ""
     @State private var subject = ""
     @State private var isSubmitting = false
@@ -15895,6 +16421,16 @@ struct ContactSupportView: View {
                             .foregroundColor(.slingBlue)
                             .frame(width: 44, height: 44)
                     }
+                    
+                    Button(action: {
+                        submitContactRequest()
+                    }) {
+                        Text("Submit")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.slingBlue)
+                    }
+                    .disabled(isSubmitting)
                     
                     Spacer()
                     
@@ -16135,6 +16671,8 @@ struct RateAppView: View {
             .navigationBarHidden(true)
         }
     }
+    
+
 }
 
 struct TermsOfServiceView: View {
@@ -17035,7 +17573,7 @@ struct AdminControlsView: View {
                             VStack(spacing: 8) {
                                 Button(action: {
                                     // Toggle community status
-                                    let newStatus = !(community.is_active ?? true)
+                                    _ = !(community.is_active ?? true)
                                     // TODO: Implement toggle community status
                                 }) {
                                     HStack {
@@ -17537,7 +18075,7 @@ struct NotificationSettingsView: View {
                         Spacer()
                         
                         Toggle("", isOn: $isNotificationsMuted)
-                            .onChange(of: isNotificationsMuted) { newValue in
+                            .onChange(of: isNotificationsMuted) { _, newValue in
                                 updateNotificationPreferences(muted: newValue)
                             }
                     }

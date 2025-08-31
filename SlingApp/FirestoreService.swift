@@ -3026,5 +3026,123 @@ class FirestoreService: ObservableObject {
             completion(isMuted)
         }
     }
+    
+    // MARK: - User Settings Management
+    
+    func updateUserSettings(settings: [String: Any], completion: @escaping (Bool) -> Void) {
+        guard let userEmail = currentUser?.email else {
+            print("❌ No current user email available")
+            completion(false)
+            return
+        }
+        
+        print("🔧 Updating user settings for: \(userEmail)")
+        print("🔧 Settings to update: \(settings)")
+        
+        // Add timestamp
+        var updateData = settings
+        updateData["updated_date"] = Date()
+        
+        db.collection("Users").document(userEmail).updateData(updateData) { error in
+            if let error = error {
+                print("❌ Error updating user settings: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                print("✅ Successfully updated user settings")
+                // Refresh current user to get updated data
+                self.refreshCurrentUser()
+                completion(true)
+            }
+        }
+    }
+    
+    func updatePushNotificationSettings(enabled: Bool, completion: @escaping (Bool) -> Void) {
+        let settings: [String: Any] = [
+            "push_notifications_enabled": enabled
+        ]
+        updateUserSettings(settings: settings, completion: completion)
+    }
+    
+    func updateEmailNotificationSettings(weeklySummaries: Bool, betResults: Bool, communityUpdates: Bool, promotionalEmails: Bool, completion: @escaping (Bool) -> Void) {
+        let settings: [String: Any] = [
+            "email_notifications_enabled": true,
+            "weekly_summaries_enabled": weeklySummaries,
+            "bet_results_enabled": betResults,
+            "community_updates_enabled": communityUpdates,
+            "promotional_emails_enabled": promotionalEmails
+        ]
+        updateUserSettings(settings: settings, completion: completion)
+    }
+    
+    func updateProfileVisibilitySettings(settings: ProfileVisibilitySettings, completion: @escaping (Bool) -> Void) {
+        let settingsData: [String: Any] = [
+            "profile_visibility_settings": [
+                "showPointBalance": settings.showPointBalance,
+                "showTotalWinnings": settings.showTotalWinnings,
+                "showTotalBets": settings.showTotalBets,
+                "showSlingPoints": settings.showSlingPoints,
+                "showBlitzPoints": settings.showBlitzPoints,
+                "showCommunities": settings.showCommunities
+            ]
+        ]
+        updateUserSettings(settings: settingsData, completion: completion)
+    }
+    
+    func updateDarkModeSetting(enabled: Bool, completion: @escaping (Bool) -> Void) {
+        let settings: [String: Any] = [
+            "dark_mode_enabled": enabled
+        ]
+        updateUserSettings(settings: settings, completion: completion)
+    }
+    
+    func updateLanguageSetting(language: String, completion: @escaping (Bool) -> Void) {
+        let settings: [String: Any] = [
+            "language": language
+        ]
+        updateUserSettings(settings: settings, completion: completion)
+    }
+    
+    func ensureUserSettingsExist(completion: @escaping (Bool) -> Void) {
+        guard let userEmail = currentUser?.email else {
+            print("❌ No current user email available")
+            completion(false)
+            return
+        }
+        
+        print("🔧 Ensuring user settings exist for: \(userEmail)")
+        
+        // Default settings
+        let defaultSettings: [String: Any] = [
+            "push_notifications_enabled": true,
+            "email_notifications_enabled": true,
+            "weekly_summaries_enabled": true,
+            "bet_results_enabled": true,
+            "community_updates_enabled": true,
+            "promotional_emails_enabled": false,
+            "profile_visibility_settings": [
+                "showPointBalance": true,
+                "showTotalWinnings": true,
+                "showTotalBets": true,
+                "showSlingPoints": true,
+                "showBlitzPoints": true,
+                "showCommunities": true
+            ],
+            "dark_mode_enabled": false,
+            "language": "English",
+            "updated_date": Date()
+        ]
+        
+        db.collection("Users").document(userEmail).setData(defaultSettings, merge: true) { error in
+            if let error = error {
+                print("❌ Error ensuring user settings exist: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                print("✅ Successfully ensured user settings exist")
+                // Refresh current user to get updated data
+                self.refreshCurrentUser()
+                completion(true)
+            }
+        }
+    }
 
 }
