@@ -737,17 +737,26 @@ struct HomeView: View {
                                                 Spacer()
                                             }
                                             
-                                            // Placeholder for betting options area
-                                            VStack(spacing: 8) {
-                                                RoundedRectangle(cornerRadius: 10)
-                                                    .fill(Color.gray.opacity(0.05))
-                                                    .frame(height: 44)
-                                                    .overlay(
-                                                        Text("Check back later for new bets!")
-                                                            .font(.subheadline)
-                                                            .foregroundColor(.gray.opacity(0.6))
-                                                    )
+                                            // Create Bet Button
+                                            Button(action: {
+                                                showingCreateBet = true
+                                            }) {
+                                                HStack(spacing: 8) {
+                                                    Image(systemName: "plus")
+                                                        .font(.subheadline)
+                                                        .foregroundColor(.white)
+                                                    
+                                                    Text("Create a Bet")
+                                                        .font(.subheadline)
+                                                        .fontWeight(.medium)
+                                                        .foregroundColor(.white)
+                                                }
+                                                .frame(maxWidth: .infinity)
+                                                .frame(height: 44)
+                                                .background(AnyShapeStyle(Color.slingGradient))
+                                                .cornerRadius(10)
                                             }
+                                            .buttonStyle(PlainButtonStyle())
                                         }
                                         .padding(16)
                                         .background(Color.white)

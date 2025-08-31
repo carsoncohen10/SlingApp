@@ -879,12 +879,12 @@ struct EmptyCommunitiesView: View {
             
             VStack(spacing: 12) {
                 Button(action: {
-                    showingJoinCommunityModal = true
+                    showingCreateCommunityModal = true
                 }) {
                     HStack(spacing: 8) {
-                        Image(systemName: "person.2")
+                        Image(systemName: "plus")
                             .font(.subheadline)
-                        Text("Join Community")
+                        Text("Create Community")
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
@@ -897,12 +897,12 @@ struct EmptyCommunitiesView: View {
                 }
                 
                 Button(action: {
-                    showingCreateCommunityModal = true
+                    showingJoinCommunityModal = true
                 }) {
                     HStack(spacing: 8) {
-                        Image(systemName: "plus")
+                        Image(systemName: "person.2")
                             .font(.subheadline)
-                        Text("Create Community")
+                        Text("Join Community")
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
@@ -1239,9 +1239,18 @@ struct MyBetsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Header removed
-                
-
+                // Markets Header
+                HStack {
+                    Text("Markets")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.white)
                 
                 // Markets to Bet On Section - Always show
                 VStack(alignment: .leading, spacing: 12) {
@@ -5008,6 +5017,19 @@ struct CommunitiesView: View {
     var body: some View {
         ScrollView {
                     VStack(spacing: 24) {
+                        // Communities Header
+                        HStack {
+                            Text("Communities")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.black)
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color.white)
+                        
                         // Outstanding Balances Section
                             outstandingBalancesSection
                         
@@ -5142,6 +5164,22 @@ struct CommunitiesView: View {
                 
                 // Action Buttons - Smaller and more compact
                         HStack(spacing: 8) {
+                    Button(action: { showingCreateCommunityModal = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.subheadline)
+                            Text("Create")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(AnyShapeStyle(Color.slingGradient))
+                        .cornerRadius(10)
+                    }
+                    
                     Button(action: { showingJoinCommunityModal = true }) {
                         HStack(spacing: 6) {
                             Image(systemName: "person.badge.plus")
@@ -5160,22 +5198,6 @@ struct CommunitiesView: View {
                             RoundedRectangle(cornerRadius: 10)
                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
-                    }
-                    
-                    Button(action: { showingCreateCommunityModal = true }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.subheadline)
-                            Text("Create")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(AnyShapeStyle(Color.slingGradient))
-                        .cornerRadius(10)
                     }
                 }
         }
@@ -5372,17 +5394,43 @@ struct AllBalancesView: View {
                 .background(Color.white)
                 
                 // Content
-                ScrollView {
-                    LazyVStack(spacing: 16) {
-                        ForEach(sortedBalances) { balance in
-                            DetailedBalanceRow(balance: balance)
-                        }
+                if sortedBalances.isEmpty {
+                    // Empty state when no balances
+                    VStack(spacing: 20) {
+                        Spacer()
+                        
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 64))
+                            .foregroundColor(.slingBlue)
+                        
+                        Text("All Caught Up!")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                        
+                        Text("You don't have any outstanding balances at the moment. Everyone is square!")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                        
+                        Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.white)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 16) {
+                            ForEach(sortedBalances) { balance in
+                                DetailedBalanceRow(balance: balance)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                    }
                 }
             }
-            .background(Color.gray.opacity(0.05))
+            .background(Color.white)
             .navigationBarHidden(true)
         }
     }
@@ -10525,6 +10573,7 @@ struct JoinBetView: View {
     @State private var showingBetDetail = false
     @State private var selectedBetForDetail: FirestoreBet? = nil
     @State private var showingCommunityDetails = false
+    @State private var showingCreateBet = false
     
     private var communityName: String {
         if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
@@ -10784,7 +10833,7 @@ struct JoinBetView: View {
                             
                             if let otherBets = getOtherBets() {
                                 if otherBets.isEmpty {
-                                    VStack(spacing: 8) {
+                                    VStack(spacing: 16) {
                                         Image(systemName: "tray")
                                             .font(.title2)
                                             .foregroundColor(.gray.opacity(0.6))
@@ -10794,9 +10843,25 @@ struct JoinBetView: View {
                                             .foregroundColor(.gray)
                                             .fontWeight(.medium)
                                         
-                                        Text("Check back later for new bets")
-                                            .font(.caption)
-                                            .foregroundColor(.gray.opacity(0.8))
+                                        Button(action: {
+                                            showingCreateBet = true
+                                        }) {
+                                            HStack(spacing: 8) {
+                                                Image(systemName: "plus")
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.white)
+                                                
+                                                Text("Create a Bet")
+                                                    .font(.subheadline)
+                                                    .fontWeight(.medium)
+                                                    .foregroundColor(.white)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 44)
+                                            .background(AnyShapeStyle(Color.slingGradient))
+                                            .cornerRadius(10)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 24)
@@ -10852,7 +10917,7 @@ struct JoinBetView: View {
                                     }
                                 }
                             } else {
-                                VStack(spacing: 8) {
+                                VStack(spacing: 16) {
                                     Image(systemName: "tray")
                                         .font(.title2)
                                         .foregroundColor(.gray.opacity(0.6))
@@ -10862,9 +10927,25 @@ struct JoinBetView: View {
                                         .foregroundColor(.gray)
                                         .fontWeight(.medium)
                                     
-                                    Text("Check back later for new bets")
-                                        .font(.caption)
-                                        .foregroundColor(.gray.opacity(0.8))
+                                    Button(action: {
+                                        showingCreateBet = true
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "plus")
+                                                .font(.subheadline)
+                                                .foregroundColor(.white)
+                                            
+                                            Text("Create a Bet")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                                .foregroundColor(.white)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 44)
+                                        .background(AnyShapeStyle(Color.slingGradient))
+                                        .cornerRadius(10)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 24)
@@ -10901,6 +10982,9 @@ struct JoinBetView: View {
                         }
                     )
                 }
+            }
+            .sheet(isPresented: $showingCreateBet) {
+                CreateBetView(firestoreService: firestoreService)
             }
             .onAppear {
                 loadBetParticipants()
