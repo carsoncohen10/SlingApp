@@ -8068,9 +8068,29 @@ struct StatCard: View {
 
 // MARK: - Notifications View
 
+// MARK: - Notification Filter Enum
+
+enum NotificationFilter: String, CaseIterable {
+    case all = "All"
+    case unread = "Unread"
+}
+
 struct NotificationsView: View {
     @Environment(\.dismiss) private var dismiss
     let firestoreService: FirestoreService
+    @State private var isLoadingNotifications = false
+    @State private var isMarkingAllAsRead = false
+    @State private var selectedFilter: NotificationFilter = .all
+    
+    // Computed property to filter notifications based on selected filter
+    private var filteredNotifications: [FirestoreNotification] {
+        switch selectedFilter {
+        case .all:
+            return firestoreService.notifications
+        case .unread:
+            return firestoreService.notifications.filter { !$0.is_read }
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -8083,56 +8103,84 @@ struct NotificationsView: View {
                             dismiss()
                         }) {
                             Image(systemName: "xmark")
-                                .font(.title3)
-                                .foregroundColor(.gray)
-                                .frame(width: 32, height: 32)
-                                .background(Color(.systemGray6))
-                                .clipShape(Circle())
+                                .font(.title2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.black)
+                                .frame(width: 44, height: 44)
                         }
                         
                         Spacer()
                         
-                        // Unread count badge
-                        if firestoreService.notifications.filter({ !$0.is_read }).count > 0 {
-                            Text("\(firestoreService.notifications.filter { !$0.is_read }.count)")
-                                .font(.caption)
+                        VStack(spacing: 2) {
+                            Text("Notifications")
+                                .font(.headline)
                                 .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .frame(width: 20, height: 20)
-                                .background(Color.red)
-                                .clipShape(Circle())
+                                .foregroundColor(.black)
+                            
+                            // Show unread count
+                            let unreadCount = firestoreService.notifications.filter { !$0.is_read }.count
+                            if unreadCount > 0 {
+                                Text("\(unreadCount) unread")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
                         }
-                    }
-                    
-                    // Title and Description
-                    VStack(spacing: 8) {
-                        Text("Notifications")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
                         
-                        Text("Stay updated with your latest activities")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
+                        Spacer()
+                        
+                        // Invisible spacer to center title
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.clear)
+                            .frame(width: 44, height: 44)
                     }
                     
                     // Action Buttons Row
-                    HStack(spacing: 12) {
+                    HStack(alignment: .center, spacing: 12) {
                         // Mark all as read button
                         Button(action: {
-                            firestoreService.markAllNotificationsAsRead { success in
-                                if success {
-                                    print("✅ All notifications marked as read")
+                            isMarkingAllAsRead = true
+                            
+                            // Mark only the filtered notifications as read
+                            let unreadFilteredNotifications = filteredNotifications.filter { !$0.is_read }
+                            let notificationIds = unreadFilteredNotifications.compactMap { $0.id }
+                            
+                            // Mark each notification as read
+                            let group = DispatchGroup()
+                            var successCount = 0
+                            var failureCount = 0
+                            
+                            for notificationId in notificationIds {
+                                group.enter()
+                                firestoreService.markNotificationAsRead(notificationId: notificationId) { success in
+                                    if success {
+                                        successCount += 1
+                                    } else {
+                                        failureCount += 1
+                                    }
+                                    group.leave()
+                                }
+                            }
+                            
+                            group.notify(queue: .main) {
+                                isMarkingAllAsRead = false
+                                if failureCount == 0 {
+                                    print("✅ All \(successCount) filtered notifications marked as read")
                                 } else {
-                                    print("❌ Failed to mark all notifications as read")
+                                    print("⚠️ Marked \(successCount) notifications as read, \(failureCount) failed")
                                 }
                             }
                         }) {
                             HStack(spacing: 6) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.caption)
-                                Text("Mark All Read")
+                                if isMarkingAllAsRead {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption)
+                                }
+                                Text(isMarkingAllAsRead ? "Marking..." : "Mark All Read")
                                     .font(.caption)
                                     .fontWeight(.medium)
                             }
@@ -8147,14 +8195,21 @@ struct NotificationsView: View {
                                 )
                             )
                             .cornerRadius(20)
+                            .frame(height: 32)
                         }
-                        .disabled(firestoreService.notifications.filter { !$0.is_read }.count == 0)
-                        .opacity(firestoreService.notifications.filter { !$0.is_read }.count == 0 ? 0.5 : 1.0)
+                        .disabled(filteredNotifications.filter { !$0.is_read }.count == 0 || isMarkingAllAsRead)
+                        .opacity(filteredNotifications.filter { !$0.is_read }.count == 0 || isMarkingAllAsRead ? 0.5 : 1.0)
                         
                         // Filter buttons
                         HStack(spacing: 8) {
-                            FilterButton(title: "All", isSelected: true)
-                            FilterButton(title: "Unread", isSelected: false)
+                            ForEach(NotificationFilter.allCases, id: \.self) { filter in
+                                FilterButton(
+                                    title: filter.rawValue,
+                                    isSelected: selectedFilter == filter
+                                ) {
+                                    selectedFilter = filter
+                                }
+                            }
                         }
                         
                         Spacer()
@@ -8166,25 +8221,38 @@ struct NotificationsView: View {
                 .background(Color.white)
                 
                 // Enhanced Notifications List
-                if firestoreService.notifications.isEmpty {
-                    // Empty State
+                if filteredNotifications.isEmpty {
+                    // Empty State or Loading State
                     VStack(spacing: 20) {
                         Spacer()
                         
-                        Image(systemName: "bell.slash")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray.opacity(0.5))
-                        
-                        VStack(spacing: 8) {
-                            Text("No notifications yet")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
+                        if isLoadingNotifications {
+                            // Loading State
+                            ProgressView()
+                                .scaleEffect(1.2)
+                                .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
                             
-                            Text("When you receive notifications, they'll appear here")
+                            Text("Loading notifications...")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
+                                .padding(.top, 8)
+                        } else {
+                            // Empty State
+                            Image(systemName: "bell.slash")
+                                .font(.system(size: 60))
+                                .foregroundColor(.gray.opacity(0.5))
+                            
+                            VStack(spacing: 8) {
+                                Text(selectedFilter == .all ? "No notifications yet" : "No unread notifications")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                                
+                                Text(selectedFilter == .all ? "When you receive notifications, they'll appear here" : "All notifications have been read")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
                         }
                         
                         Spacer()
@@ -8193,21 +8261,36 @@ struct NotificationsView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 1) {
-                            ForEach(firestoreService.notifications) { notification in
+                            ForEach(filteredNotifications) { notification in
                                 EnhancedNotificationRow(
                                     notification: convertToNotificationItem(notification),
                                     firestoreService: firestoreService
                                 )
+                                .transition(.opacity.combined(with: .move(edge: .leading)))
                             }
                         }
                         .padding(.top, 8)
+                        .animation(.easeInOut(duration: 0.3), value: filteredNotifications.count)
                     }
+
                 }
             }
             .background(Color.white)
             .navigationBarHidden(true)
             .onAppear {
-                firestoreService.fetchNotifications()
+                print("🔍 NotificationsView: onAppear triggered")
+                print("🔍 NotificationsView: Current user email: \(firestoreService.currentUser?.email ?? "nil")")
+                print("🔍 NotificationsView: Current notifications count: \(firestoreService.notifications.count)")
+                // Fetch notifications if none exist
+                if firestoreService.notifications.isEmpty {
+                    isLoadingNotifications = true
+                    firestoreService.fetchNotifications()
+                }
+            }
+            .onReceive(firestoreService.$notifications) { notifications in
+                print("🔍 NotificationsView: Notifications updated, count: \(notifications.count)")
+                // Notifications are automatically marked as read when they appear on screen
+                isLoadingNotifications = false
             }
         }
     }
@@ -8218,21 +8301,27 @@ struct NotificationsView: View {
 struct FilterButton: View {
     let title: String
     let isSelected: Bool
+    let action: () -> Void
     
     var body: some View {
-        Button(action: {}) {
-        Text(title)
-            .font(.caption)
-            .fontWeight(.medium)
-                .foregroundColor(isSelected ? .white : .slingBlue)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
+        Button(action: action) {
+            Text(title)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(isSelected ? .white : .black)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
                     isSelected ? 
                     AnyShapeStyle(Color.slingGradient) : 
-                    AnyShapeStyle(Color.slingBlue.opacity(0.1))
-            )
-                .cornerRadius(16)
+                    AnyShapeStyle(Color.white)
+                )
+                .cornerRadius(20)
+                .frame(height: 32)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: isSelected ? 0 : 1)
+                )
         }
     }
 }
@@ -8245,15 +8334,9 @@ struct EnhancedNotificationRow: View {
     
     var body: some View {
         Button(action: {
-            if notification.isUnread, let notificationId = notification.id {
-                firestoreService.markNotificationAsRead(notificationId: notificationId) { success in
-                    if success {
-                        print("✅ Notification marked as read")
-                    } else {
-                        print("❌ Failed to mark notification as read")
-                    }
-                }
-            }
+            // Notifications are automatically marked as read when they appear on screen
+            // This button can be used for future navigation or actions
+            // No manual action needed for marking as read
         }) {
             HStack(spacing: 16) {
                 // Enhanced Icon with better styling
@@ -8280,23 +8363,27 @@ struct EnhancedNotificationRow: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        if notification.isUnread {
-                            Text("• New")
+                        if let communityName = notification.communityName {
+                            Text("•")
                                 .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.blue)
+                                .foregroundColor(.secondary)
+                            
+                            if let communityIcon = notification.communityIcon {
+                                Image(systemName: communityIcon)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Text(communityName)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
                 
                 Spacer()
                 
-                // Unread indicator
-                if notification.isUnread {
-                    Circle()
-                        .fill(Color.blue)
-                        .frame(width: 10, height: 10)
-                }
+
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
@@ -8305,17 +8392,24 @@ struct EnhancedNotificationRow: View {
                     .fill(Color.white)
                     .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        notification.isUnread ? Color.blue.opacity(0.3) : Color.clear,
-                        lineWidth: 1
-                    )
-            )
+
+
         }
         .buttonStyle(PlainButtonStyle())
         .padding(.horizontal, 20)
         .padding(.vertical, 4)
+        .onAppear {
+            // Automatically mark notification as read when it appears on screen
+            if notification.isUnread, let notificationId = notification.id {
+                firestoreService.markNotificationAsRead(notificationId: notificationId) { success in
+                    if success {
+                        print("✅ Notification automatically marked as read: \(notificationId)")
+                    } else {
+                        print("❌ Failed to automatically mark notification as read: \(notificationId)")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -8328,6 +8422,8 @@ struct NotificationItem {
     let text: String
     let timestamp: String
     let isUnread: Bool
+    let communityName: String?
+    let communityIcon: String?
 }
 
 // MARK: - Edit Profile View
@@ -11252,7 +11348,9 @@ func convertToNotificationItem(_ firestoreNotification: FirestoreNotification) -
             iconColor: iconColor,
             text: firestoreNotification.message,
             timestamp: timestamp,
-            isUnread: !firestoreNotification.is_read
+            isUnread: !firestoreNotification.is_read,
+            communityName: firestoreNotification.community_name,
+            communityIcon: firestoreNotification.community_icon
         )
 }
 

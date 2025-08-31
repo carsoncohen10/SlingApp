@@ -1271,44 +1271,371 @@ class FirestoreService: ObservableObject {
     }
     
     func fetchNotifications() {
-        guard let userEmail = currentUser?.email else { return }
+        guard let userEmail = currentUser?.email else { 
+            print("🔍 fetchNotifications: No current user email available")
+            return 
+        }
+        
+        print("🔍 fetchNotifications: Fetching notifications for user: \(userEmail)")
         
         db.collection("Notification")
             .whereField("user_email", isEqualTo: userEmail)
-            .getDocuments { [weak self] snapshot, error in
+            .getDocuments(source: .default) { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching notifications: \(error.localizedDescription)")
+                    return
+                }
+                
+                print("🔍 fetchNotifications: Received snapshot with \(snapshot?.documents.count ?? 0) documents")
+                
+                let notifications: [FirestoreNotification] = snapshot?.documents.compactMap { document in
+                    do {
+                        let notification = try document.data(as: FirestoreNotification.self)
+                        print("🔍 fetchNotifications: Successfully parsed notification: \(notification.title)")
+                        return notification
+                    } catch {
+                        print("❌ fetchNotifications: Failed to parse notification document \(document.documentID): \(error)")
+                        return nil
+                    }
+                } ?? []
+                
+                print("🔍 fetchNotifications: Successfully parsed \(notifications.count) notifications")
+                
+                let sortedNotifications = notifications.sorted(by: { $0.created_date > $1.created_date })
+                
+                DispatchQueue.main.async { [weak self] in
+                    // Sort by created_date in descending order (most recent first)
+                    self?.notifications = sortedNotifications
+                    
+                    print("🔍 fetchNotifications: Updated notifications array with \(self?.notifications.count ?? 0) items")
+                    
+                    // If no notifications exist, create some sample notifications for testing
+                    if notifications.isEmpty {
+                        self?.createSampleNotifications(for: userEmail)
+                    }
+                }
+            }
+    }
+    
+    // MARK: - Notification Creation
+    
+    func createNotification(
+        for userEmail: String,
+        title: String,
+        message: String,
+        type: String,
+        icon: String,
+        actionUrl: String = "",
+        communityId: String? = nil,
+        communityName: String? = nil,
+        communityIcon: String? = nil,
+        completion: @escaping (Bool) -> Void
+    ) {
+        var notification = [
+            "title": title,
+            "message": message,
+            "type": type,
+            "created_by": "system",
+            "created_date": Date(),
+            "icon": icon,
+            "is_read": false,
+            "user_email": userEmail,
+            "timestamp": Date(),
+            "action_url": actionUrl
+        ] as [String: Any]
+        
+        // Add community information if provided
+        if let communityId = communityId {
+            notification["community_id"] = communityId
+        }
+        if let communityName = communityName {
+            notification["community_name"] = communityName
+        }
+        if let communityIcon = communityIcon {
+            notification["community_icon"] = communityIcon
+        }
+        
+        db.collection("Notification").addDocument(data: notification) { error in
+            if let error = error {
+                print("❌ Error creating notification: \(error.localizedDescription)")
                 DispatchQueue.main.async {
-                    if let error = error {
-                        print("❌ Error fetching notifications: \(error.localizedDescription)")
+                    completion(false)
+                }
+            } else {
+                print("✅ Notification created successfully for \(userEmail): \(title)")
+                DispatchQueue.main.async {
+                    completion(true)
+                }
+            }
+        }
+    }
+    
+    func createBetSettledNotification(
+        for userEmail: String,
+        betTitle: String,
+        isWinner: Bool,
+        winnings: Double,
+        communityId: String? = nil,
+        communityName: String? = nil,
+        communityIcon: String? = nil,
+        completion: @escaping (Bool) -> Void
+    ) {
+        let title = isWinner ? "You Won! 🎉" : "Bet Settled"
+        let message = isWinner 
+            ? "Congratulations! You won \(String(format: "%.2f", winnings)) points on '\(betTitle)'"
+            : "Your bet on '\(betTitle)' has been settled"
+        let icon = isWinner ? "checkmark.circle" : "chart.line.uptrend.xyaxis"
+        
+        createNotification(
+            for: userEmail,
+            title: title,
+            message: message,
+            type: "bet_settled",
+            icon: icon,
+            communityId: communityId,
+            communityName: communityName,
+            communityIcon: communityIcon,
+            completion: completion
+        )
+    }
+    
+    func createBetJoinedNotification(
+        for userEmail: String,
+        betTitle: String,
+        stakeAmount: Int,
+        communityId: String? = nil,
+        communityName: String? = nil,
+        communityIcon: String? = nil,
+        completion: @escaping (Bool) -> Void
+    ) {
+        let title = "Bet Joined! 🎯"
+        let message = "You joined '\(betTitle)' with \(stakeAmount) points"
+        let icon = "chart.line.uptrend.xyaxis"
+        
+        createNotification(
+            for: userEmail,
+            title: title,
+            message: message,
+            type: "bet_joined",
+            icon: icon,
+            communityId: communityId,
+            communityName: communityName,
+            communityIcon: communityIcon,
+            completion: completion
+        )
+    }
+    
+    func createCommunityJoinedNotification(
+        for userEmail: String,
+        communityName: String,
+        communityId: String? = nil,
+        communityIcon: String? = nil,
+        completion: @escaping (Bool) -> Void
+    ) {
+        let title = "Welcome! 👋"
+        let message = "You've joined the '\(communityName)' community"
+        let icon = "person.2"
+        
+        createNotification(
+            for: userEmail,
+            title: title,
+            message: message,
+            type: "community_joined",
+            icon: icon,
+            communityId: communityId,
+            communityName: communityName,
+            communityIcon: communityIcon,
+            completion: completion
+        )
+    }
+    
+    func createBetCreatedNotification(
+        for userEmail: String,
+        betTitle: String,
+        communityName: String,
+        communityId: String? = nil,
+        communityIcon: String? = nil,
+        completion: @escaping (Bool) -> Void
+    ) {
+        let title = "New Market! 🚀"
+        let message = "A new market '\(betTitle)' was created in '\(communityName)'"
+        let icon = "plus.circle"
+        
+        createNotification(
+            for: userEmail,
+            title: title,
+            message: message,
+            type: "bet_created",
+            icon: icon,
+            communityId: communityId,
+            communityName: communityName,
+            communityIcon: communityIcon,
+            completion: completion
+        )
+    }
+    
+    private func createBetSettledNotifications(betId: String, winnerOption: String, participants: [QueryDocumentSnapshot]) {
+        // Get bet details for title and community
+        db.collection("Bet").document(betId).getDocument(source: .default) { [weak self] document, error in
+            guard let document = document, document.exists,
+                  let data = document.data(),
+                  let betTitle = data["title"] as? String else {
+                print("❌ createBetSettledNotifications: Could not fetch bet title")
+                return
+            }
+            
+            // Get community information
+            let communityId = data["community_id"] as? String
+            let communityName = data["community_name"] as? String
+            let communityIcon = data["community_icon"] as? String ?? "person.2"
+            
+            // Create notifications for each participant
+            for participantDoc in participants {
+                guard let participantData = participantDoc.data() as [String: Any]?,
+                      let userEmail = participantData["user_email"] as? String,
+                      let chosenOption = participantData["chosen_option"] as? String,
+                      let stakeAmount = participantData["stake_amount"] as? Int else {
+                    continue
+                }
+                
+                let isWinner = chosenOption == winnerOption
+                let odds = (data["odds"] as? [String: String])?[chosenOption] ?? "-110"
+                let winnings = self?.calculatePayout(amount: Double(stakeAmount), odds: odds) ?? Double(stakeAmount)
+                
+                self?.createBetSettledNotification(
+                    for: userEmail,
+                    betTitle: betTitle,
+                    isWinner: isWinner,
+                    winnings: winnings,
+                    communityId: communityId,
+                    communityName: communityName,
+                    communityIcon: communityIcon
+                ) { success in
+                    if success {
+                        print("✅ Created bet settled notification for \(userEmail)")
+                    } else {
+                        print("❌ Failed to create bet settled notification for \(userEmail)")
+                    }
+                }
+            }
+        }
+    }
+    
+    private func createBetCreatedNotificationsForCommunity(communityId: String, betTitle: String, excludeUser: String) {
+        // Get all community members
+        db.collection("CommunityMember")
+            .whereField("community_id", isEqualTo: communityId)
+            .getDocuments(source: .default) { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ createBetCreatedNotificationsForCommunity: Error fetching community members: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    print("❌ createBetCreatedNotificationsForCommunity: No community members found")
+                    return
+                }
+                
+                // Get community name for the notification
+                self?.db.collection("community").document(communityId).getDocument { communityDoc, communityError in
+                    guard let communityDoc = communityDoc, communityDoc.exists,
+                          let communityData = communityDoc.data(),
+                          let communityName = communityData["name"] as? String else {
+                        print("❌ createBetCreatedNotificationsForCommunity: Could not fetch community name")
                         return
                     }
                     
-                    let notifications = snapshot?.documents.compactMap { document in
-                        try? document.data(as: FirestoreNotification.self)
-                    } ?? []
-                    
-                    // Sort by created_date in descending order (most recent first)
-                    self?.notifications = notifications.sorted { $0.created_date > $1.created_date }
+                    // Create notifications for all members except the creator
+                    for memberDoc in documents {
+                        guard let memberData = memberDoc.data() as [String: Any]?,
+                              let userEmail = memberData["user_email"] as? String,
+                              userEmail != excludeUser else {
+                            continue
+                        }
+                        
+                        self?.createBetCreatedNotification(
+                            for: userEmail,
+                            betTitle: betTitle,
+                            communityName: communityName,
+                            communityId: communityId,
+                            communityIcon: "plus.circle"
+                        ) { success in
+                            if success {
+                                print("✅ Created bet created notification for \(userEmail)")
+                            } else {
+                                print("❌ Failed to create bet created notification for \(userEmail)")
+                            }
+                        }
+                    }
                 }
             }
+    }
+    
+    private func createSampleNotifications(for userEmail: String) {
+        print("🔍 createSampleNotifications: Creating sample notifications for \(userEmail)")
+        
+        // Create a few sample notifications to demonstrate the system
+        let sampleNotifications = [
+            (
+                title: "Welcome to Sling! 🎉",
+                message: "Thanks for joining! Start exploring communities and placing bets.",
+                type: "welcome",
+                icon: "bell"
+            ),
+            (
+                title: "Community Update 📢",
+                message: "New members have joined your communities this week.",
+                type: "community_update",
+                icon: "person.2"
+            ),
+            (
+                title: "Betting Tip 💡",
+                message: "Remember to check the odds before placing your bets!",
+                type: "tip",
+                icon: "lightbulb"
+            )
+        ]
+        
+        for (index, notification) in sampleNotifications.enumerated() {
+            // Add a small delay between notifications to avoid overwhelming the system
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.5) {
+                self.createNotification(
+                    for: userEmail,
+                    title: notification.title,
+                    message: notification.message,
+                    type: notification.type,
+                    icon: notification.icon,
+                    communityId: nil,
+                    communityName: nil,
+                    communityIcon: nil
+                ) { success in
+                    if success {
+                        print("✅ Created sample notification: \(notification.title)")
+                    } else {
+                        print("❌ Failed to create sample notification: \(notification.title)")
+                    }
+                }
+            }
+        }
     }
     
     func fetchTransactions(communityId: String, userEmail: String, completion: @escaping ([BetParticipant]) -> Void) {
         db.collection("UserBet")
             .whereField("community_id", isEqualTo: communityId)
             .whereField("user_email", isEqualTo: userEmail)
-            .getDocuments { snapshot, error in
+            .getDocuments(source: .default) { [weak self] snapshot, error in
                 if let error = error {
                     print("❌ Error fetching transactions: \(error.localizedDescription)")
                     completion([])
                     return
                 }
                 
-                let transactions = snapshot?.documents.compactMap { document in
+                let transactions: [BetParticipant] = snapshot?.documents.compactMap { document in
                     try? document.data(as: BetParticipant.self)
                 } ?? []
                 
                 // Sort by created_date in descending order (most recent first)
-                let sortedTransactions = transactions.sorted { $0.created_date > $1.created_date }
+                let sortedTransactions = transactions.sorted(by: { $0.created_date > $1.created_date })
                 completion(sortedTransactions)
             }
     }
@@ -1316,25 +1643,31 @@ class FirestoreService: ObservableObject {
     // MARK: - Bet Management
     
     func fetchBet(by betId: String, completion: @escaping (FirestoreBet?) -> Void) {
-        db.collection("Bet").document(betId).getDocument { document, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    print("❌ Error fetching bet: \(error.localizedDescription)")
+        db.collection("Bet").document(betId).getDocument(source: .default) { [weak self] document, error in
+            if let error = error {
+                print("❌ Error fetching bet: \(error.localizedDescription)")
+                DispatchQueue.main.async {
                     completion(nil)
-                    return
                 }
-                
-                guard let document = document, document.exists else {
-                    print("❌ Bet not found with ID: \(betId)")
+                return
+            }
+            
+            guard let document = document, document.exists else {
+                print("❌ Bet not found with ID: \(betId)")
+                DispatchQueue.main.async {
                     completion(nil)
-                    return
                 }
-                
-                do {
-                    let bet = try document.data(as: FirestoreBet.self)
+                return
+            }
+            
+            do {
+                let bet = try document.data(as: FirestoreBet.self)
+                DispatchQueue.main.async {
                     completion(bet)
-                } catch {
-                    print("❌ Error parsing bet: \(error)")
+                }
+            } catch {
+                print("❌ Error parsing bet: \(error)")
+                DispatchQueue.main.async {
                     completion(nil)
                 }
             }
@@ -1349,7 +1682,7 @@ class FirestoreService: ObservableObject {
         db.collection("BetParticipant")
             .whereField("user_email", isEqualTo: userEmail)
             .whereField("community_id", isEqualTo: communityId)
-            .getDocuments { snapshot, error in
+            .getDocuments(source: .default) { snapshot, error in
                 if let error = error {
                     print("❌ Error fetching bet participations for community \(communityId): \(error.localizedDescription)")
                     completion(0.0)
@@ -1383,7 +1716,7 @@ class FirestoreService: ObservableObject {
     func calculateTotalBalance(userEmail: String, completion: @escaping (Double) -> Void) {
         db.collection("BetParticipant")
             .whereField("user_email", isEqualTo: userEmail)
-            .getDocuments { snapshot, error in
+            .getDocuments(source: .default) { snapshot, error in
                 if let error = error {
                     print("❌ Error fetching all bet participations: \(error.localizedDescription)")
                     completion(0.0)
@@ -1417,7 +1750,7 @@ class FirestoreService: ObservableObject {
         
         db.collection("BetParticipant")
             .whereField("user_email", isEqualTo: userEmail)
-            .getDocuments { snapshot, error in
+            .getDocuments(source: .default) { snapshot, error in
                 if let error = error {
                     print("❌ Error fetching user bets: \(error.localizedDescription)")
                     completion([])
@@ -1437,7 +1770,7 @@ class FirestoreService: ObservableObject {
     }
     
     func fetchBetStatus(betId: String, completion: @escaping (String?) -> Void) {
-        db.collection("Bet").document(betId).getDocument { document, error in
+        db.collection("Bet").document(betId).getDocument(source: .default) { document, error in
             if let error = error {
                 print("❌ Error fetching bet status: \(error.localizedDescription)")
                 completion(nil)
@@ -1535,7 +1868,7 @@ class FirestoreService: ObservableObject {
         )
         
         // First get the bet to get community_id
-        db.collection("Bet").document(betId).getDocument { [weak self] document, error in
+        db.collection("Bet").document(betId).getDocument(source: .default) { [weak self] document, error in
             if let error = error {
                 print("❌ joinBet: Error fetching bet document: \(error.localizedDescription)")
                 completion(false, error.localizedDescription)
@@ -1585,6 +1918,28 @@ class FirestoreService: ObservableObject {
                             self?.fetchUserBetParticipations()
                         }
                         
+                        // Create notification for joining the bet
+                        if let betTitle = data["title"] as? String {
+                            let communityId = data["community_id"] as? String
+                            let communityName = data["community_name"] as? String
+                            let communityIcon = data["community_icon"] as? String ?? "person.2"
+                            
+                            self?.createBetJoinedNotification(
+                                for: userEmail,
+                                betTitle: betTitle,
+                                stakeAmount: stakeAmount,
+                                communityId: communityId,
+                                communityName: communityName,
+                                communityIcon: communityIcon
+                            ) { success in
+                                if success {
+                                    print("✅ Created bet joined notification for \(userEmail)")
+                                } else {
+                                    print("❌ Failed to create bet joined notification for \(userEmail)")
+                                }
+                            }
+                        }
+                        
                         completion(true, nil)
                     }
                 }
@@ -1604,7 +1959,7 @@ class FirestoreService: ObservableObject {
         print("🎯 settleBet: Starting settlement for bet \(betId) with winner: \(winnerOption)")
         
         // First get all participants for this bet
-        db.collection("BetParticipant").whereField("bet_id", isEqualTo: betId).getDocuments { [weak self] snapshot, error in
+        db.collection("BetParticipant").whereField("bet_id", isEqualTo: betId).getDocuments(source: .default) { [weak self] snapshot, error in
             if let error = error {
                 print("❌ settleBet: Error fetching participants: \(error.localizedDescription)")
                 completion(false)
@@ -1639,6 +1994,10 @@ class FirestoreService: ObservableObject {
                 self?.processBetPayouts(betId: betId, winnerOption: winnerOption, participants: documents) { success in
                     if success {
                         print("✅ settleBet: All payouts processed successfully")
+                        
+                        // Create notifications for all participants
+                        self?.createBetSettledNotifications(betId: betId, winnerOption: winnerOption, participants: documents)
+                        
                         completion(true)
                     } else {
                         print("❌ settleBet: Error processing payouts")
@@ -1655,7 +2014,7 @@ class FirestoreService: ObservableObject {
         print("🎯 processBetPayouts: Processing payouts for \(participants.count) participants")
         
         // Get bet details to calculate odds
-        db.collection("Bet").document(betId).getDocument { [weak self] document, error in
+        db.collection("Bet").document(betId).getDocument(source: .default) { [weak self] document, error in
             if let error = error {
                 print("❌ processBetPayouts: Error fetching bet details: \(error.localizedDescription)")
                 completion(false)
@@ -1759,12 +2118,23 @@ class FirestoreService: ObservableObject {
         updatedBetData["id"] = betId
         
         // Create the document with the custom ID
-        db.collection("Bet").document(betId).setData(updatedBetData) { error in
+        db.collection("Bet").document(betId).setData(updatedBetData) { [weak self] error in
             if let error = error {
                 print("❌ Error creating bet: \(error.localizedDescription)")
                 completion(false, error.localizedDescription)
             } else {
                 print("✅ Bet created successfully with ID: \(betId)")
+                
+                // Create notifications for all community members about the new bet
+                if let communityId = betData["community_id"] as? String,
+                   let betTitle = betData["title"] as? String {
+                    self?.createBetCreatedNotificationsForCommunity(
+                        communityId: communityId,
+                        betTitle: betTitle,
+                        excludeUser: self?.currentUser?.email ?? ""
+                    )
+                }
+                
                 completion(true, betId)
             }
         }
@@ -1852,6 +2222,25 @@ class FirestoreService: ObservableObject {
                         if let error = error {
                             completion(false, error.localizedDescription)
                         } else {
+                            // Create notification for joining the community
+                            if let communityName = communityData["name"] as? String {
+                                let communityId = communityId
+                                let communityIcon = communityData["icon"] as? String ?? "person.2"
+                                
+                                self?.createCommunityJoinedNotification(
+                                    for: userEmail,
+                                    communityName: communityName,
+                                    communityId: communityId,
+                                    communityIcon: communityIcon
+                                ) { success in
+                                    if success {
+                                        print("✅ Created community joined notification for \(userEmail)")
+                                    } else {
+                                        print("❌ Failed to create community joined notification for \(userEmail)")
+                                    }
+                                }
+                            }
+                            
                             completion(true, nil)
                         }
                     }
@@ -2738,7 +3127,7 @@ class FirestoreService: ObservableObject {
         
         for betId in uniqueBetIds {
             group.enter()
-            db.collection("Bet").document(betId).getDocument { document, error in
+            db.collection("Bet").document(betId).getDocument(source: .default) { document, error in
                 if let document = document, document.exists,
                    let data = document.data(),
                    let title = data["title"] as? String {
@@ -2759,7 +3148,7 @@ class FirestoreService: ObservableObject {
     
     func leaveCommunity(communityId: String, userEmail: String, completion: @escaping (Bool) -> Void) {
         // Remove user from community members array
-        db.collection("community").document(communityId).getDocument { [weak self] snapshot, error in
+        db.collection("community").document(communityId).getDocument(source: .default) { [weak self] snapshot, error in
             guard let self = self else { return }
             
             if let error = error {

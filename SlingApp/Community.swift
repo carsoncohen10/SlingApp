@@ -224,6 +224,9 @@ struct FirestoreNotification: Identifiable, Codable {
     var user_email: String
     var timestamp: Date
     var action_url: String
+    var community_id: String?
+    var community_name: String?
+    var community_icon: String?
 }
 
 struct FirestoreUser: Identifiable, Codable {
