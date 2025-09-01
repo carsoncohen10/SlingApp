@@ -1328,19 +1328,15 @@ struct MyBetsView: View {
                                         Text("Create Bet")
                                             .font(.subheadline)
                                             .fontWeight(.medium)
-                                            .foregroundColor(.slingBlue)
+                                            .foregroundColor(.black)
                                         
                                         Text("Start a new bet")
                                             .font(.caption)
                                             .foregroundColor(.gray)
                                     }
-                                    .frame(width: 160, height: 160)
+                                    .frame(width: 160, height: 140)
                                     .background(Color.white)
                                     .cornerRadius(16)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 16)
-                                            .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
-                                    )
                                     .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
                                 }
                             }
