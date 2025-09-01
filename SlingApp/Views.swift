@@ -761,7 +761,7 @@ struct EmptyBetsView: View {
         }
         .padding(.horizontal, 16)
         .sheet(isPresented: $showingCreateBetModal) {
-            CreateBetView(firestoreService: firestoreService)
+            CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
         }
     }
 }
@@ -806,7 +806,7 @@ struct EmptyActiveBetsView: View {
         }
         .padding(.horizontal, 16)
         .sheet(isPresented: $showingCreateBetModal) {
-            CreateBetView(firestoreService: firestoreService)
+            CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
         }
     }
 }
@@ -851,7 +851,7 @@ struct EmptyPastBetsView: View {
         }
         .padding(.horizontal, 16)
         .sheet(isPresented: $showingCreateBetModal) {
-            CreateBetView(firestoreService: firestoreService)
+            CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
         }
     }
 }
@@ -1499,7 +1499,7 @@ struct MyBetsView: View {
             firestoreService.fetchUserCommunities()
         }
         .sheet(isPresented: $showingCreateBetModal) {
-            CreateBetView(firestoreService: firestoreService)
+            CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
         }
 
     }
@@ -6704,7 +6704,7 @@ struct CreateView: View {
             firestoreService.fetchUserCommunities()
         }
         .sheet(isPresented: $showingCreateBetModal) {
-            CreateBetView(firestoreService: firestoreService)
+            CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
         }
         .sheet(isPresented: $showingCreateCommunityModal) {
             CreateCommunityPage(firestoreService: firestoreService, onSuccess: {
@@ -8641,6 +8641,7 @@ struct EditProfileView: View {
 struct CreateBetView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var firestoreService: FirestoreService
+    let preSelectedCommunity: String? // New parameter for pre-selecting community
     @State private var currentStep = 1
     @State private var selectedMarketType = "Yes/No"
     @State private var marketQuestion = ""
@@ -8790,6 +8791,11 @@ struct CreateBetView: View {
             }
             .onAppear {
                 firestoreService.fetchCommunities()
+                
+                // Set pre-selected community if provided
+                if let preSelectedCommunity = preSelectedCommunity {
+                    selectedCommunity = preSelectedCommunity
+                }
             }
         }
     }
@@ -11075,7 +11081,7 @@ struct JoinBetView: View {
                 }
             }
             .sheet(isPresented: $showingCreateBet) {
-                CreateBetView(firestoreService: firestoreService)
+                CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
             }
             .onAppear {
                 loadBetParticipants()
@@ -13237,7 +13243,7 @@ struct EnhancedCommunityDetailView: View {
             }
             .animation(.easeInOut(duration: 0.3), value: selectedTab)
             .sheet(isPresented: $showingCreateBetModal) {
-                CreateBetView(firestoreService: firestoreService)
+                CreateBetView(firestoreService: firestoreService, preSelectedCommunity: community.name)
             }
             .sheet(isPresented: $showingInviteModal) {
                 ShareCommunityModal(

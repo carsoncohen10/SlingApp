@@ -197,7 +197,7 @@ struct MainAppView: View {
                 EditProfileView(firestoreService: firestoreService)
             }
             .sheet(isPresented: $showingCreateBetModal) {
-                CreateBetView(firestoreService: firestoreService)
+                CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
             }
             .sheet(isPresented: $showingJoinCommunityModal) {
                 JoinCommunityPage(firestoreService: firestoreService, onSuccess: {
@@ -879,7 +879,7 @@ struct HomeView: View {
             }
 
             .sheet(isPresented: $showingCreateBet) {
-                CreateBetView(firestoreService: firestoreService)
+                CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
             }
             .sheet(isPresented: $showingJoinCommunityModal) {
                 JoinCommunityPage(firestoreService: firestoreService)
