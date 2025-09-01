@@ -1252,10 +1252,10 @@ struct MyBetsView: View {
                 .padding(.vertical, 12)
                 .background(Color.white)
                 
-                // Markets to Bet On Section - Always show
+                // Dynamic Header Section - Shows "Active Bets" or "Markets to Bet On"
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Markets to Bet On")
+                        Text(activeBets.isEmpty ? "Markets to Bet On" : "Active Bets")
                             .font(.headline)
                             .fontWeight(.semibold)
                             .foregroundColor(.black)
@@ -1309,7 +1309,7 @@ struct MyBetsView: View {
                             .padding(.vertical, 8)
                         }
                     } else {
-                        // Has active bets - show horizontal scroll with Create Bet card
+                        // Has active bets - show Active Bets with Create Bet card
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 16) {
                                 ForEach(activeBets) { bet in
@@ -1439,11 +1439,6 @@ struct MyBetsView: View {
                                             .stroke(selectedPastBetFilter == "Lost" ? Color.clear : Color.slingBlue, lineWidth: 1)
                                     )
                             }
-                            
-                            // Add extra spacing to push "Lost" off-screen and require scrolling
-                            Spacer()
-                                .frame(width: 300)
-                            
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
