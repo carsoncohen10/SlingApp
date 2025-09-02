@@ -953,6 +953,7 @@ struct EnhancedBetCardView: View {
     @State private var hasRemindedCreator = false
     @State private var showingBettingInterface = false
     @State private var selectedBettingOption = ""
+    @State private var userFullNames: [String: String] = [:]
     
     private var communityName: String {
         if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
@@ -1002,7 +1003,7 @@ struct EnhancedBetCardView: View {
                                 .foregroundColor(.gray)
                             }
                             
-                            Text("• by \(currentUserEmail == bet.creator_email ? "You" : getDisplayNameFromEmail(bet.creator_email))")
+                            Text("• by \(currentUserEmail == bet.creator_email ? "You" : getUserFullName(from: bet.creator_email))")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                         }
@@ -1097,6 +1098,31 @@ struct EnhancedBetCardView: View {
             return username.prefix(1).uppercased() + username.dropFirst()
         }
         return email
+    }
+    
+    // Function to get user's full name, with caching
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // For current user, use local data
+        if let user = firestoreService.currentUser, user.email == email {
+            let fullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            userFullNames[email] = fullName
+            return fullName
+        }
+        
+        // For other users, fetch from Firestore and cache
+        firestoreService.getUserDetails(email: email) { fullName, _ in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return first name as fallback while fetching
+        return email.components(separatedBy: "@").first ?? email
     }
 }
 
@@ -1776,6 +1802,7 @@ struct ActiveBetDetailView: View {
     @ObservedObject var firestoreService: FirestoreService
     @Environment(\.dismiss) private var dismiss
     @State private var showingSettleBetModal = false
+    @State private var userFullNames: [String: String] = [:]
     
     private var communityName: String {
         if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
@@ -1892,14 +1919,28 @@ struct ActiveBetDetailView: View {
                                 ForEach(participants, id: \.id) { participant in
                                     HStack {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text(participant.user_email.components(separatedBy: "@").first ?? "User")
+                                            Text(getUserFullName(from: participant.user_email))
                                                 .font(.subheadline)
                                                 .fontWeight(.medium)
                                                 .foregroundColor(.black)
                                             
-                                            Text("Chose: \(participant.chosen_option)")
-                                                .font(.caption)
-                                                .foregroundColor(.gray)
+                                            HStack(spacing: 4) {
+                                                Text(participant.chosen_option)
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                                
+                                                Text("•")
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                                
+                                                Image(systemName: "bolt.fill")
+                                                    .font(.caption)
+                                                    .foregroundColor(.yellow)
+                                                
+                                                Text(String(participant.stake_amount))
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                            }
                                         }
                                         
                                         Spacer()
@@ -1971,6 +2012,31 @@ struct ActiveBetDetailView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
         return formatter.string(from: date)
+    }
+    
+    // Function to get user's full name, with caching
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // For current user, use local data
+        if let user = firestoreService.currentUser, user.email == email {
+            let fullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            userFullNames[email] = fullName
+            return fullName
+        }
+        
+        // For other users, fetch from Firestore and cache
+        firestoreService.getUserDetails(email: email) { fullName, _ in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return first name as fallback while fetching
+        return email.components(separatedBy: "@").first ?? email
     }
 }
 
@@ -2542,6 +2608,7 @@ struct CondensedBetCard: View {
     @State private var showingDeleteAlert = false
     @State private var selectedBettingOption = ""
     @State private var offset: CGFloat = 0
+    @State private var userFullNames: [String: String] = [:]
     
     // MARK: - Constants
     private let swipeThreshold: CGFloat = 80
@@ -2567,7 +2634,32 @@ struct CondensedBetCard: View {
         if bet.creator_email == currentUserEmail {
             return "You"
         }
-        return bet.creator_email.components(separatedBy: "@").first ?? "Unknown"
+        return getUserFullName(from: bet.creator_email)
+    }
+    
+    // Function to get user's full name, with caching
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // For current user, use local data
+        if let user = firestoreService.currentUser, user.email == email {
+            let fullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            userFullNames[email] = fullName
+            return fullName
+        }
+        
+        // For other users, fetch from Firestore and cache
+        firestoreService.getUserDetails(email: email) { fullName, _ in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return first name as fallback while fetching
+        return email.components(separatedBy: "@").first ?? email
     }
     
     private var userParticipation: BetParticipant? {
@@ -4395,6 +4487,7 @@ struct BetAnnouncementCard: View {
     @State private var isLoading = true
     @State private var communityName: String = ""
     @State private var creatorFirstName: String = ""
+    @State private var userFullNames: [String: String] = [:]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -4589,8 +4682,8 @@ struct BetAnnouncementCard: View {
                         self.fetchCommunityName(communityId: fetchedBet.community_id)
                     }
                     
-                    // Extract first name from creator email
-                    self.creatorFirstName = extractFirstName(from: fetchedBet.creator_email)
+                    // Get creator's full name
+                    self.creatorFirstName = getUserFullName(from: fetchedBet.creator_email)
                 }
             }
         }
@@ -4627,6 +4720,31 @@ struct BetAnnouncementCard: View {
         
         // Capitalize first letter
         return firstName.prefix(1).uppercased() + firstName.dropFirst().lowercased()
+    }
+    
+    // Function to get user's full name, with caching
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // For current user, use local data
+        if let user = firestoreService.currentUser, user.email == email {
+            let fullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            userFullNames[email] = fullName
+            return fullName
+        }
+        
+        // For other users, fetch from Firestore and cache
+        firestoreService.getUserDetails(email: email) { fullName, _ in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return first name as fallback while fetching
+        return email.components(separatedBy: "@").first ?? email
     }
     
     private func formatDeadline(_ date: Date) -> String {
@@ -5125,54 +5243,56 @@ struct CommunitiesView: View {
     // MARK: - Outstanding Balances Section
     private var outstandingBalancesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            Text("Outstanding Balances")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.black)
+            
+            // Main Outstanding Balances Card
+            HStack(spacing: 16) {
+                // Status Indicator (Left)
                 HStack(spacing: 8) {
-                    Text("Outstanding Balances")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.black)
+                    // Green checkmark circle
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Image(systemName: "checkmark")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                        )
                     
-                    if outstandingBalances.isEmpty {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.slingBlue)
-                            Text("All caught up")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.slingBlue)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.slingBlue.opacity(0.1))
-                        .cornerRadius(8)
-                    }
+                    // Status text
+                    Text("All Bets Settled 🎉")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
                 }
                 
                 Spacer()
                 
+                // View All button
                 Button(action: {
                     showingAllBalances = true
                 }) {
                     Text("View All")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(.slingBlue)
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.white)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
                 }
             }
-            
-            if !outstandingBalances.isEmpty {
-                // Outstanding balances cards
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(outstandingBalances) { balance in
-                            OutstandingBalanceCard(balance: balance)
-                        }
-                    }
-                    .padding(.horizontal, 4)
-                }
-                .background(Color.white)
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.green.opacity(0.1))
+            .cornerRadius(12)
         }
     }
     
@@ -6309,21 +6429,21 @@ struct ModernCommunityCard: View {
         Button(action: {
             showingCommunityDetail = true
         }) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 // Header with community info and admin badge
-                HStack(alignment: .center, spacing: 12) {
+                HStack(alignment: .center, spacing: 10) {
                     // Community Avatar
                     Circle()
                         .fill(AnyShapeStyle(Color.slingGradient))
-                        .frame(width: 56, height: 56)
+                        .frame(width: 48, height: 48)
                         .overlay(
                             Text(String(community.name.prefix(1)).uppercased())
-                                .font(.title2)
+                                .font(.title3)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
                         )
                     
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
                             Text(community.name)
                                 .font(.title3)
@@ -6372,15 +6492,18 @@ struct ModernCommunityCard: View {
                     Image(systemName: "chevron.right")
                             .font(.subheadline)
                                     .foregroundColor(.gray)
-                            .frame(width: 24, height: 24)
+                            .frame(width: 20, height: 20)
                 }
                 
 
             }
-            .padding(20)
+            .padding(16)
             .background(Color.white)
             .cornerRadius(20)
-            .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+            )
                     }
                     .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showingCommunityDetail) {
@@ -6523,7 +6646,10 @@ struct CommunityCard: View {
         .padding(16)
         .background(Color.white)
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
         }
         .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showingCommunityDetail) {
@@ -7408,6 +7534,113 @@ struct ProfileView: View {
 
 }
 
+// MARK: - User Activity Models and Views
+
+enum UserActivityType {
+    case betPlaced
+    case betWon
+    case betLost
+    case betCreated
+    case communityJoined
+}
+
+struct UserActivityItem: Identifiable {
+    let id: String
+    let type: UserActivityType
+    let title: String
+    let subtitle: String
+    let communityName: String?
+    let timestamp: Date
+    let icon: String
+    let iconColor: Color
+}
+
+struct ActivityRow: View {
+    let activityItem: UserActivityItem
+    
+    private func formatTimestamp(_ date: Date) -> String {
+        let now = Date()
+        let timeInterval = now.timeIntervalSince(date)
+        
+        if timeInterval < 60 {
+            return "Just now"
+        } else if timeInterval < 3600 {
+            let minutes = Int(timeInterval / 60)
+            return "\(minutes)m ago"
+        } else if timeInterval < 86400 {
+            let hours = Int(timeInterval / 3600)
+            return "\(hours)h ago"
+        } else if timeInterval < 2592000 {
+            let days = Int(timeInterval / 86400)
+            return "\(days)d ago"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM d"
+            return formatter.string(from: date)
+        }
+    }
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Activity Icon
+            ZStack {
+                Circle()
+                    .fill(activityItem.iconColor.opacity(0.15))
+                    .frame(width: 48, height: 48)
+                
+                Image(systemName: activityItem.icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(activityItem.iconColor)
+            }
+            
+            // Activity Content
+            VStack(alignment: .leading, spacing: 6) {
+                Text(activityItem.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                
+                Text(activityItem.subtitle)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                
+                HStack(spacing: 8) {
+                    Text(formatTimestamp(activityItem.timestamp))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    if let communityName = activityItem.communityName {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Image(systemName: "person.2")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text(communityName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        )
+        .padding(.horizontal, 20)
+        .padding(.vertical, 4)
+    }
+}
 
 // MARK: - Community Balance Row
 
@@ -10671,6 +10904,7 @@ struct JoinBetView: View {
     @State private var selectedBetForDetail: FirestoreBet? = nil
     @State private var showingCommunityDetails = false
     @State private var showingCreateBet = false
+    @State private var userFullNames: [String: String] = [:]
     
     private var communityName: String {
         if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
@@ -10679,18 +10913,37 @@ struct JoinBetView: View {
         return "Community"
     }
     
+    // Function to get user's full name, with caching
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // For current user, use local data
+        if let user = firestoreService.currentUser, user.email == email {
+            let fullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            userFullNames[email] = fullName
+            return fullName
+        }
+        
+        // For other users, fetch from Firestore and cache
+        firestoreService.getUserDetails(email: email) { fullName, _ in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return first name as fallback while fetching
+        return email.components(separatedBy: "@").first ?? email
+    }
+    
     private var creatorName: String {
         let creatorEmail = bet.creator_email
         if let currentUserEmail = firestoreService.currentUser?.email, creatorEmail == currentUserEmail {
             return "You"
         } else {
-            // Extract first name from email (everything before @)
-            let components = creatorEmail.components(separatedBy: "@")
-            if let username = components.first {
-                // Capitalize first letter and return
-                return username.prefix(1).uppercased() + username.dropFirst()
-            }
-            return "Unknown"
+            return getUserFullName(from: creatorEmail)
         }
     }
     
@@ -10763,17 +11016,23 @@ struct JoinBetView: View {
                                     }
                                     .buttonStyle(.plain)
                                     
-                                    Text("• Created by \(creatorName)")
+                                    Text("• by \(creatorName)")
                                         .font(.subheadline)
                                         .foregroundColor(.gray)
                                 }
                                 
-                                Text("Deadline: \(formattedDeadline)")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "calendar")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    
+                                    Text("Deadline: \(formattedDeadline)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.gray)
+                                }
                             }
                         }
-                        .padding(.horizontal, 16)
+                        .padding(.leading, 16)
                         
                         // Outcome Selection Section
                         VStack(alignment: .leading, spacing: 12) {
@@ -10854,14 +11113,28 @@ struct JoinBetView: View {
                                                     )
                                                 
                                                 VStack(alignment: .leading, spacing: 2) {
-                                                    Text(extractUsername(from: participant.user_email))
+                                                    Text(getUserFullName(from: participant.user_email))
                                                         .font(.subheadline)
                                                         .fontWeight(.medium)
                                                         .foregroundColor(.black)
                                                     
-                                                    Text("\(participant.chosen_option) • \(String(format: "%.2f", Double(participant.stake_amount))) Sling")
-                                                        .font(.caption)
-                                                        .foregroundColor(.gray)
+                                                    HStack(spacing: 4) {
+                                                        Text(participant.chosen_option)
+                                                            .font(.caption)
+                                                            .foregroundColor(.gray)
+                                                        
+                                                        Text("•")
+                                                            .font(.caption)
+                                                            .foregroundColor(.gray)
+                                                        
+                                                        Image(systemName: "bolt.fill")
+                                                            .font(.caption)
+                                                            .foregroundColor(.yellow)
+                                                        
+                                                        Text(String(format: "%.2f", Double(participant.stake_amount)))
+                                                            .font(.caption)
+                                                            .foregroundColor(.gray)
+                                                    }
                                                 }
                                                 
                                                 Spacer()
@@ -10939,26 +11212,6 @@ struct JoinBetView: View {
                                             .font(.subheadline)
                                             .foregroundColor(.gray)
                                             .fontWeight(.medium)
-                                        
-                                        Button(action: {
-                                            showingCreateBet = true
-                                        }) {
-                                            HStack(spacing: 8) {
-                                                Image(systemName: "plus")
-                                                    .font(.subheadline)
-                                                    .foregroundColor(.white)
-                                                
-                                                Text("Create a Bet")
-                                                    .font(.subheadline)
-                                                    .fontWeight(.medium)
-                                                    .foregroundColor(.white)
-                                            }
-                                            .frame(maxWidth: .infinity)
-                                            .frame(height: 44)
-                                            .background(AnyShapeStyle(Color.slingGradient))
-                                            .cornerRadius(10)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 24)
@@ -11023,26 +11276,6 @@ struct JoinBetView: View {
                                         .font(.subheadline)
                                         .foregroundColor(.gray)
                                         .fontWeight(.medium)
-                                    
-                                    Button(action: {
-                                        showingCreateBet = true
-                                    }) {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "plus")
-                                                .font(.subheadline)
-                                                .foregroundColor(.white)
-                                            
-                                            Text("Create a Bet")
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
-                                                .foregroundColor(.white)
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 44)
-                                        .background(AnyShapeStyle(Color.slingGradient))
-                                        .cornerRadius(10)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 24)
@@ -11116,7 +11349,7 @@ struct JoinBetView: View {
         if let currentUserEmail = firestoreService.currentUser?.email, creatorEmail == currentUserEmail {
             return "You"
         } else {
-            return extractUsername(from: creatorEmail)
+            return getUserFullName(from: creatorEmail)
         }
     }
     
@@ -11393,6 +11626,7 @@ struct BettingInterfaceView: View {
     @State private var showSuccess = false
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var userFullNames: [String: String] = [:]
     
     // Pre-set bet amounts
     private let presetAmounts = [10, 25, 50, 100]
@@ -11572,6 +11806,31 @@ struct BettingInterfaceView: View {
         return String(email.split(separator: "@").first ?? "Unknown")
     }
     
+    // Function to get user's full name, with caching
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // For current user, use local data
+        if let user = firestoreService.currentUser, user.email == email {
+            let fullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            userFullNames[email] = fullName
+            return fullName
+        }
+        
+        // For other users, fetch from Firestore and cache
+        firestoreService.getUserDetails(email: email) { fullName, _ in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return first name as fallback while fetching
+        return email.components(separatedBy: "@").first ?? email
+    }
+    
     private func appendToBetAmount(_ character: String) {
         // Add haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
@@ -11685,7 +11944,7 @@ struct BettingInterfaceView: View {
                             .foregroundColor(.gray)
                     }
                     
-                    Text("• by \(extractUsername(from: bet.creator_email))")
+                    Text("• by \(getUserFullName(from: bet.creator_email))")
                         .font(.caption)
                         .foregroundColor(.gray)
                 }
@@ -12147,6 +12406,7 @@ struct SwipeableBetCard: View {
     @State private var hasRemindedCreator = false
     @State private var optionCounts: [String: Int] = [:]
     @State private var creatorName: String = ""
+    @State private var userFullNames: [String: String] = [:]
     
     // MARK: - Constants
     private let swipeThreshold: CGFloat = 80
@@ -12211,40 +12471,46 @@ struct SwipeableBetCard: View {
     // Helper function to get creator initials
     private func getCreatorInitials() -> String {
         if isCreator {
-            // Use current user initials if this user is the creator
-            let user = firestoreService.currentUser
-            if let firstName = user?.first_name, let lastName = user?.last_name, !firstName.isEmpty, !lastName.isEmpty {
-                let firstInitial = String(firstName.prefix(1)).uppercased()
-                let lastInitial = String(lastName.prefix(1)).uppercased()
-                return "\(firstInitial)\(lastInitial)"
-            } else if let displayName = user?.display_name, !displayName.isEmpty {
-                let components = displayName.components(separatedBy: " ")
-                if components.count >= 2 {
-                    let firstInitial = String(components[0].prefix(1)).uppercased()
-                    let lastInitial = String(components[1].prefix(1)).uppercased()
-                    return "\(firstInitial)\(lastInitial)"
-                } else if components.count == 1 {
-                    return String(components[0].prefix(1)).uppercased()
-                }
-            } else if let email = user?.email {
-                return String(email.prefix(1)).uppercased()
-            }
-            return "U"
+            return getCurrentUserInitials()
         } else {
-            // For other creators, use their name initials or email
-            if !creatorName.isEmpty && creatorName != "You" {
-                let components = creatorName.components(separatedBy: " ")
-                if components.count >= 2 {
-                    let firstInitial = String(components[0].prefix(1)).uppercased()
-                    let lastInitial = String(components[1].prefix(1)).uppercased()
-                    return "\(firstInitial)\(lastInitial)"
-                } else if components.count == 1 {
-                    return String(components[0].prefix(1)).uppercased()
-                }
-            }
-            // Fallback to email initial
-            return String(bet.creator_email.prefix(1)).uppercased()
+            return getOtherCreatorInitials()
         }
+    }
+    
+    private func getCurrentUserInitials() -> String {
+        let user = firestoreService.currentUser
+        if let firstName = user?.first_name, let lastName = user?.last_name, !firstName.isEmpty, !lastName.isEmpty {
+            let firstInitial = String(firstName.prefix(1)).uppercased()
+            let lastInitial = String(lastName.prefix(1)).uppercased()
+            return "\(firstInitial)\(lastInitial)"
+        } else if let displayName = user?.display_name, !displayName.isEmpty {
+            let components = displayName.components(separatedBy: " ")
+            if components.count >= 2 {
+                let firstInitial = String(components[0].prefix(1)).uppercased()
+                let lastInitial = String(components[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else if components.count == 1 {
+                return String(components[0].prefix(1)).uppercased()
+            }
+        } else if let email = user?.email {
+            return String(email.prefix(1)).uppercased()
+        }
+        return "U"
+    }
+    
+    private func getOtherCreatorInitials() -> String {
+        if !creatorName.isEmpty && creatorName != "You" {
+            let components = creatorName.components(separatedBy: " ")
+            if components.count >= 2 {
+                let firstInitial = String(components[0].prefix(1)).uppercased()
+                let lastInitial = String(components[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else if components.count == 1 {
+                return String(components[0].prefix(1)).uppercased()
+            }
+        }
+        // Fallback to email initial
+        return String(bet.creator_email.prefix(1)).uppercased()
     }
     
     // MARK: - Body
@@ -12314,7 +12580,7 @@ struct SwipeableBetCard: View {
                                     .font(.caption)
                                     .foregroundColor(.gray)
                                 
-                                Text("\(communityName) • by \(isCreator ? "You" : (creatorName.isEmpty ? extractUsername(from: bet.creator_email) : creatorName))")
+                                Text("\(communityName) • by \(isCreator ? "You" : (creatorName.isEmpty ? getUserFullName(from: bet.creator_email) : creatorName))")
                                     .font(.subheadline)
                                     .foregroundColor(.gray)
                                 
@@ -12613,8 +12879,33 @@ struct SwipeableBetCard: View {
         return String(email.split(separator: "@").first ?? "Unknown")
     }
     
+    // Function to get user's full name, with caching
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // For current user, use local data
+        if let user = firestoreService.currentUser, user.email == email {
+            let fullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            userFullNames[email] = fullName
+            return fullName
+        }
+        
+        // For other users, fetch from Firestore and cache
+        firestoreService.getUserDetails(email: email) { fullName, _ in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return first name as fallback while fetching
+        return email.components(separatedBy: "@").first ?? email
+    }
+    
     private func generateShareText() -> String {
-        let creatorName = isCreator ? "I" : extractUsername(from: bet.creator_email)
+        let creatorName = isCreator ? "I" : getUserFullName(from: bet.creator_email)
         return "Check out this bet on Sling: \"\(bet.title)\" created by \(creatorName). Join the action!"
     }
     
@@ -12721,6 +13012,7 @@ struct EnhancedBetCard: View {
     @State private var hasAnyBets: Bool = false
     @State private var hasRemindedCreator = false
     @State private var optionCounts: [String: Int] = [:]
+    @State private var userFullNames: [String: String] = [:]
     
     // MARK: - Initialization
     init(bet: FirestoreBet,
@@ -12772,6 +13064,31 @@ struct EnhancedBetCard: View {
         return formatter.string(from: bet.deadline)
     }
     
+    // Function to get user's full name, with caching
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // For current user, use local data
+        if let user = firestoreService.currentUser, user.email == email {
+            let fullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+            userFullNames[email] = fullName
+            return fullName
+        }
+        
+        // For other users, fetch from Firestore and cache
+        firestoreService.getUserDetails(email: email) { fullName, _ in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return first name as fallback while fetching
+        return email.components(separatedBy: "@").first ?? email
+    }
+    
     // MARK: - Body
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -12789,7 +13106,7 @@ struct EnhancedBetCard: View {
                             Image(systemName: "person.2")
                                 .font(.caption)
                                 .foregroundColor(.gray)
-                            Text("\(communityName) • by \(isCreator ? "You" : getDisplayNameFromEmail(bet.creator_email))")
+                            Text("\(communityName) • by \(isCreator ? "You" : getUserFullName(from: bet.creator_email))")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                         }
@@ -14389,12 +14706,14 @@ struct TradingProfileView: View {
     let isCurrentUser: Bool
     let firestoreService: FirestoreService
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedTab = 0 // 0 = Overview, 1 = Recent Bets
+    @State private var selectedTab = 0 // 0 = Activity, 1 = Recent Bets
     @State private var userBets: [FirestoreBet] = []
     @State private var isLoadingBets = false
     @State private var userData: FirestoreUser?
     @State private var isLoadingUserData = false
     @State private var showingUserSettings = false
+    @State private var userActivityItems: [UserActivityItem] = []
+    @State private var isLoadingActivity = false
     
     var body: some View {
         NavigationView {
@@ -14410,10 +14729,11 @@ struct TradingProfileView: View {
             .onAppear {
                 loadUserData()
                 loadUserBets()
+                loadUserActivity()
             }
             .onChange(of: selectedTab) { oldValue, newValue in
-                if newValue == 0 { // Overview tab
-                    loadUserBets()
+                if newValue == 0 { // Activity tab
+                    loadUserActivity()
                 }
             }
             .sheet(isPresented: $showingUserSettings) {
@@ -14550,7 +14870,7 @@ struct TradingProfileView: View {
             HStack(spacing: 0) {
                 Button(action: { selectedTab = 0 }) {
                     VStack(spacing: 4) {
-                        Text("Overview")
+                        Text("Activity")
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundColor(selectedTab == 0 ? .slingBlue : .gray)
@@ -14599,26 +14919,47 @@ struct TradingProfileView: View {
     // MARK: - Tab Content Views
     private var overviewTab: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Overview content can be added here
-                VStack(spacing: 16) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 48))
-                        .foregroundColor(.gray.opacity(0.6))
-                    
-                    Text("Profile Overview")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.black)
-                    
-                    Text("Your trading performance and community activity")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                        .multilineTextAlignment(.center)
+            VStack(spacing: 0) {
+                if userActivityItems.isEmpty {
+                    // Empty State
+                    VStack(spacing: 20) {
+                        Spacer()
+                        
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray.opacity(0.5))
+                        
+                        VStack(spacing: 8) {
+                            Text("No activity yet")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            
+                            Text("Your betting activity will appear here")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 40)
+                    .padding(.top, 60)
+                } else {
+                    // Activity List
+                    LazyVStack(spacing: 1) {
+                        ForEach(userActivityItems) { activityItem in
+                            ActivityRow(activityItem: activityItem)
+                                .transition(.opacity.combined(with: .move(edge: .leading)))
+                        }
+                    }
+                    .padding(.top, 8)
+                    .animation(.easeInOut(duration: 0.3), value: userActivityItems.count)
                 }
-                .padding(.top, 60)
-                .padding(.horizontal, 16)
             }
+        }
+        .refreshable {
+            loadUserActivity()
         }
     }
     
@@ -14666,6 +15007,64 @@ struct TradingProfileView: View {
             self.userBets = sortedBets
             self.isLoadingBets = false
         }
+    }
+    
+    private func loadUserActivity() {
+        isLoadingActivity = true
+        
+        // Create activity items from user's betting history
+        var activityItems: [UserActivityItem] = []
+        
+        // Get user's bet participations
+        let userParticipations = firestoreService.userBetParticipations.filter { $0.user_email == userId }
+        
+        for participation in userParticipations {
+            if let bet = firestoreService.bets.first(where: { $0.id == participation.bet_id }) {
+                // Create activity item for placing a bet
+                let activityItem = UserActivityItem(
+                    id: "\(participation.bet_id ?? "")_\(participation.user_email)_placed",
+                    type: .betPlaced,
+                    title: "Placed bet on '\(bet.title)'",
+                    subtitle: "Chose: \(participation.chosen_option) • ⚡ \(participation.stake_amount)",
+                    communityName: getCommunityName(for: bet.community_id),
+                    timestamp: bet.created_date,
+                    icon: "bolt.fill",
+                    iconColor: .yellow
+                )
+                activityItems.append(activityItem)
+                
+                // If bet is settled, create activity item for result
+                if bet.status == "settled", let winnerOption = bet.winner_option {
+                    let isWinner = participation.chosen_option == winnerOption
+                    let resultActivityItem = UserActivityItem(
+                        id: "\(participation.bet_id ?? "")_\(participation.user_email)_result",
+                        type: isWinner ? .betWon : .betLost,
+                        title: isWinner ? "Won bet on '\(bet.title)'" : "Lost bet on '\(bet.title)'",
+                        subtitle: isWinner ? "Won ⚡ \(participation.stake_amount)" : "Lost ⚡ \(participation.stake_amount)",
+                        communityName: getCommunityName(for: bet.community_id),
+                        timestamp: bet.deadline, // Use deadline as settlement time
+                        icon: isWinner ? "trophy.fill" : "xmark.circle.fill",
+                        iconColor: isWinner ? .green : .red
+                    )
+                    activityItems.append(resultActivityItem)
+                }
+            }
+        }
+        
+        // Sort by timestamp (most recent first)
+        activityItems.sort { $0.timestamp > $1.timestamp }
+        
+        DispatchQueue.main.async {
+            self.userActivityItems = activityItems
+            self.isLoadingActivity = false
+        }
+    }
+    
+    private func getCommunityName(for communityId: String) -> String? {
+        if let community = firestoreService.userCommunities.first(where: { $0.id == communityId }) {
+            return community.name
+        }
+        return nil
     }
     
     private func refreshBets() async {
