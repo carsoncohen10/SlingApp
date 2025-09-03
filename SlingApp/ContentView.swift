@@ -72,6 +72,11 @@ struct AuthenticationView: View {
         }
     }
     
+    // Function to format display name by removing spaces
+    private func formatDisplayName(_ name: String) -> String {
+        return name.replacingOccurrences(of: " ", with: "")
+    }
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -469,7 +474,8 @@ struct AuthenticationView: View {
         let fullName = appleIDCredential.fullName
         let firstName = fullName?.givenName ?? ""
         let lastName = fullName?.familyName ?? ""
-        let displayName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawDisplayName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = formatDisplayName(rawDisplayName.isEmpty ? "User" : rawDisplayName)
         
         // Apple Sign-In doesn't provide gender or profile picture
         let gender: String? = nil
@@ -779,7 +785,8 @@ struct AuthenticationView: View {
         let fullName = googleUser.profile?.name ?? ""
         let firstName = googleUser.profile?.givenName ?? ""
         let lastName = googleUser.profile?.familyName ?? ""
-        let displayName = fullName.isEmpty ? "User" : fullName
+        let rawDisplayName = fullName.isEmpty ? "User" : fullName
+        let displayName = formatDisplayName(rawDisplayName)
         
         // Get profile picture URL if available
         // Profile picture not available in current Google Sign-In SDK version
@@ -1163,7 +1170,7 @@ struct EmailAuthenticationView: View {
                 password: password,
                 firstName: firstName,
                 lastName: lastName,
-                displayName: displayName
+                displayName: formatDisplayName(displayName)
             ) { success, error in
                 DispatchQueue.main.async {
                     isLoading = false
@@ -1428,7 +1435,12 @@ struct UserDetailsStepView: View {
                             .textFieldStyle(ModernTextFieldStyle())
                             .padding(.leading, 8)
                             .onChange(of: displayName) { newValue in
-                                checkUsernameAvailability(newValue)
+                                // Remove spaces from display name
+                                let formattedName = formatDisplayName(newValue)
+                                if formattedName != newValue {
+                                    displayName = formattedName
+                                }
+                                checkUsernameAvailability(formattedName)
                             }
                             .overlay(
                                 HStack {

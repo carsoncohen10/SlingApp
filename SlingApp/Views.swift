@@ -8796,6 +8796,13 @@ struct EditProfileView: View {
                                     TextField("username", text: $displayName)
                                         .textFieldStyle(ModernTextFieldStyle())
                                         .padding(.leading, 8)
+                                        .onChange(of: displayName) { newValue in
+                                            // Remove spaces from display name
+                                            let formattedName = newValue.replacingOccurrences(of: " ", with: "")
+                                            if formattedName != newValue {
+                                                displayName = formattedName
+                                            }
+                                        }
                                 }
                             }
                             
@@ -8889,6 +8896,15 @@ struct CreateBetView: View {
     @State private var showingAdjustOdds = false
     @State private var selectedOutcomeIndex = 0
     @State private var newOptionText = ""
+    
+    // Mention system state
+    @State private var showingMentions = false
+    @State private var mentionSearchText = ""
+    @State private var mentionedUsers: [String] = []
+    @State private var currentMentionPosition: Int = 0
+    @State private var allCommunityMembers: [CommunityMemberInfo] = []
+    @State private var userFullNames: [String: String] = [:] // Cache for user full names
+    @State private var userDisplayNames: [String: String] = [:] // Cache for user display names
     
     let marketTypes = [
         ("Yes/No", "target", "Binary outcome", "Perfect for simple predictions"),
@@ -9029,6 +9045,9 @@ struct CreateBetView: View {
                 if let preSelectedCommunity = preSelectedCommunity {
                     selectedCommunity = preSelectedCommunity
                 }
+                
+                // Load community members for mention system
+                loadAllCommunityMembers()
             }
         }
     }
@@ -9131,7 +9150,7 @@ struct CreateBetView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.black)
                         
-                        Text("Be specific and engaging")
+                        Text("Use @ to mention users (hides bet from them)")
                             .font(.caption)
                             .foregroundColor(.gray)
                     }
@@ -9139,13 +9158,25 @@ struct CreateBetView: View {
                     Spacer()
                 }
                 
-                TextField("e.g., Who will win the championship?", text: $marketQuestion)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .font(.subheadline)
+                VStack(spacing: 0) {
+                    ColoredTextView(
+                        text: $marketQuestion,
+                        placeholder: "e.g., Who will win the championship?",
+                        onTextChange: { oldValue, newValue in
+                            handleMentionInput(oldValue: oldValue, newValue: newValue)
+                        }
+                    )
+                    .frame(minHeight: 44, maxHeight: 120)
                     .padding(.vertical, 12)
                     .padding(.horizontal, 12)
                     .background(Color(.systemGray6))
                     .cornerRadius(12)
+                    
+                    // Mention suggestions list
+                    if showingMentions {
+                        mentionSuggestionsView
+                    }
+                }
                 
                 HStack {
                     Spacer()
@@ -9523,9 +9554,8 @@ struct CreateBetView: View {
                             .font(.subheadline)
                             .foregroundColor(.gray)
                         
-                        Text(marketQuestion)
+                        Text(attributedText)
                             .font(.subheadline)
-                            .foregroundColor(.black)
                     }
                     
                     Spacer()
@@ -9603,6 +9633,33 @@ struct CreateBetView: View {
                     }
                     
                     Spacer()
+                }
+                
+                // Mentioned Users Section (only show if there are mentions)
+                if !mentionedUsers.isEmpty {
+                    HStack(spacing: 12) {
+                        Image(systemName: "at")
+                            .font(.title2)
+                            .foregroundColor(.slingBlue)
+                            .frame(width: 24, height: 24)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Hidden Users")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                ForEach(mentionedUsers, id: \.self) { email in
+                                    Text(getUserFullName(from: email))
+                                        .font(.subheadline)
+                                        .foregroundColor(.black)
+                                        .fontWeight(.medium)
+                                }
+                            }
+                        }
+                        
+                        Spacer()
+                    }
                 }
             }
             .padding(20)
@@ -9827,7 +9884,9 @@ struct CreateBetView: View {
             "total_participants": NSNull(), // Initialize total participants to null
             "winner_option": NSNull(), // Will be set when bet is settled
             "created_date": Date(),
-            "updated_date": Date()
+            "updated_date": Date(),
+            "mentioned_users": mentionedUsers, // Users who are mentioned and should not see the bet until it expires
+            "hidden_from_users": mentionedUsers // Alternative field name for clarity
         ]
         
         print("🔍 CreateBet: Bet data - Title: \(marketQuestion), Community ID: \(community.id ?? "nil")")
@@ -9870,6 +9929,522 @@ struct CreateBetView: View {
             } else {
                 print("⚠️ No image found for bet: \(betTitle)")
             }
+        }
+    }
+    
+    // MARK: - Mention System
+    
+    private var attributedText: AttributedString {
+        var attributedString = AttributedString(marketQuestion)
+        
+        // Only color actual user names that were inserted from dropdown
+        // Look for patterns like @FirstName LastName (with proper capitalization)
+        let mentionPattern = "@[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+"
+        let regex = try? NSRegularExpression(pattern: mentionPattern)
+        let range = NSRange(location: 0, length: marketQuestion.utf16.count)
+        
+        if let matches = regex?.matches(in: marketQuestion, range: range) {
+            for match in matches.reversed() {
+                let matchRange = Range(match.range, in: marketQuestion)!
+                let mentionText = String(marketQuestion[matchRange])
+                
+                if let mentionRange = attributedString.range(of: mentionText) {
+                    // Apply sling gradient color
+                    attributedString[mentionRange].foregroundColor = .slingBlue
+                    attributedString[mentionRange].font = .subheadline.weight(.medium)
+                }
+            }
+        }
+        
+        return attributedString
+    }
+    
+    private func handleMentionInput(oldValue: String, newValue: String) {
+        // Check if user typed "@"
+        if newValue.count > oldValue.count && newValue.last == "@" {
+            showingMentions = true
+            mentionSearchText = ""
+            currentMentionPosition = newValue.count - 1
+        } else if showingMentions {
+            // Check if user is typing after "@"
+            if let atIndex = newValue.lastIndex(of: "@") {
+                let afterAt = String(newValue[newValue.index(after: atIndex)...])
+                if afterAt.contains(" ") || afterAt.contains("\n") {
+                    // User typed space or newline, hide mentions
+                    showingMentions = false
+                } else {
+                    // Update search text
+                    mentionSearchText = afterAt
+                }
+            } else {
+                // No "@" found, hide mentions
+                showingMentions = false
+            }
+        }
+        
+        // Check if any mentions were deleted and remove them from mentionedUsers list
+        let oldMentions = extractMentions(from: oldValue)
+        let newMentions = extractMentions(from: newValue)
+        
+        // Find mentions that were removed
+        let removedMentions = oldMentions.filter { !newMentions.contains($0) }
+        
+        // Remove corresponding users from mentionedUsers list
+        for removedMention in removedMentions {
+            // Find the user email for this mention
+            for (index, email) in mentionedUsers.enumerated().reversed() {
+                let fullName = getUserFullName(from: email)
+                if removedMention == "@\(fullName)" {
+                    mentionedUsers.remove(at: index)
+                    break
+                }
+            }
+        }
+    }
+    
+    private func extractMentions(from text: String) -> [String] {
+        let mentionPattern = "@[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+"
+        let regex = try? NSRegularExpression(pattern: mentionPattern)
+        let range = NSRange(location: 0, length: text.utf16.count)
+        
+        var mentions: [String] = []
+        if let matches = regex?.matches(in: text, range: range) {
+            for match in matches {
+                let mentionText = (text as NSString).substring(with: match.range)
+                mentions.append(mentionText)
+            }
+        }
+        
+        return mentions
+    }
+    
+    private var mentionSuggestionsView: some View {
+        VStack(spacing: 0) {
+            // Use the loaded community members
+            let filteredMembers = filterMembers(allCommunityMembers, searchText: mentionSearchText)
+            
+            if filteredMembers.isEmpty {
+                HStack {
+                    Spacer()
+                    Text("No members found")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .padding(.vertical, 12)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(filteredMembers, id: \.email) { member in
+                            Button(action: {
+                                selectMention(member: member)
+                            }) {
+                                HStack(spacing: 12) {
+                                    // Member avatar
+                                    Circle()
+                                        .fill(Color.slingGradient)
+                                        .frame(width: 32, height: 32)
+                                        .overlay(
+                                            Text(getMemberInitials(member))
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.white)
+                                        )
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(getMemberFullName(member))
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.black)
+                                        
+                                        Text(getUserDisplayName(from: member.email))
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                    
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(Color.white)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            if member.email != filteredMembers.last?.email {
+                                Divider()
+                                    .padding(.leading, 60)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 200)
+            }
+        }
+        .background(Color.white)
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+    
+    private func loadAllCommunityMembers() {
+        var allMembers: [CommunityMemberInfo] = []
+        let group = DispatchGroup()
+        
+        for community in firestoreService.userCommunities {
+            if let communityId = community.id {
+                group.enter()
+                firestoreService.fetchCommunityMembers(communityId: communityId) { members in
+                    allMembers.append(contentsOf: members)
+                    group.leave()
+                }
+            }
+        }
+        
+        group.notify(queue: .main) {
+            // Remove duplicates based on email
+            let uniqueMembers = Dictionary(grouping: allMembers, by: { $0.email })
+                .compactMapValues { $0.first }
+                .values
+                .sorted { $0.name < $1.name }
+            
+            self.allCommunityMembers = Array(uniqueMembers)
+        }
+    }
+    
+    private func filterMembers(_ members: [CommunityMemberInfo], searchText: String) -> [CommunityMemberInfo] {
+        if searchText.isEmpty {
+            return members
+        }
+        
+        return members.filter { member in
+            // Search by display name from Firestore
+            getUserDisplayName(from: member.email).localizedCaseInsensitiveContains(searchText) ||
+            // Search by email (which contains username)
+            member.email.localizedCaseInsensitiveContains(searchText) ||
+            // Search by full name from Firestore
+            getMemberFullName(member).localizedCaseInsensitiveContains(searchText)
+        }
+    }
+    
+    private func getUserFullName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userFullNames[email] {
+            return cachedName
+        }
+        
+        // Fetch from Firestore
+        firestoreService.getUserDetails(email: email) { fullName, username in
+            DispatchQueue.main.async {
+                self.userFullNames[email] = fullName
+            }
+        }
+        
+        // Return email as fallback while fetching
+        return email
+    }
+    
+    private func getUserDisplayName(from email: String) -> String {
+        // Check cache first
+        if let cachedName = userDisplayNames[email] {
+            return cachedName
+        }
+        
+        // Fetch from Firestore
+        firestoreService.getUserDetails(email: email) { fullName, username in
+            DispatchQueue.main.async {
+                // Extract display name from the username (remove @)
+                let displayName = username.hasPrefix("@") ? String(username.dropFirst()) : username
+                self.userDisplayNames[email] = displayName
+            }
+        }
+        
+        // Return email username as fallback while fetching
+        let emailUsername = email.components(separatedBy: "@").first ?? email
+        return emailUsername
+    }
+    
+    private func getMemberFullName(_ member: CommunityMemberInfo) -> String {
+        return getUserFullName(from: member.email)
+    }
+    
+    private func getMemberInitials(_ member: CommunityMemberInfo) -> String {
+        let components = member.name.components(separatedBy: " ")
+        if components.count >= 2 {
+            let firstInitial = String(components[0].prefix(1)).uppercased()
+            let lastInitial = String(components[1].prefix(1)).uppercased()
+            return "\(firstInitial)\(lastInitial)"
+        } else if components.count == 1 {
+            return String(components[0].prefix(1)).uppercased()
+        } else {
+            return String(member.email.prefix(1)).uppercased()
+        }
+    }
+    
+    private func selectMention(member: CommunityMemberInfo) {
+        // Replace the "@" and search text with @FullName
+        let fullName = getMemberFullName(member)
+        let mentionText = "@\(fullName)"
+        
+        // Find the position of the "@" in the current text
+        if let atIndex = marketQuestion.lastIndex(of: "@") {
+            let beforeAt = String(marketQuestion[..<atIndex])
+            let afterMention = String(marketQuestion[marketQuestion.index(after: atIndex)...])
+            
+            // Remove any text after "@" that was part of the search
+            if let spaceIndex = afterMention.firstIndex(of: " ") {
+                let afterSpace = String(afterMention[spaceIndex...])
+                marketQuestion = beforeAt + mentionText + afterSpace
+            } else {
+                marketQuestion = beforeAt + mentionText
+            }
+        }
+        
+        // Add to mentioned users list
+        if !mentionedUsers.contains(member.email) {
+            mentionedUsers.append(member.email)
+        }
+        
+        // Hide mentions
+        showingMentions = false
+        mentionSearchText = ""
+    }
+}
+
+// MARK: - Colored TextField
+
+struct ColoredTextField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let onTextChange: (String, String) -> Void
+    
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField()
+        textField.placeholder = placeholder
+        textField.font = UIFont.systemFont(ofSize: 16)
+        textField.delegate = context.coordinator
+        textField.backgroundColor = UIColor.clear
+        textField.borderStyle = .none
+        return textField
+    }
+    
+    func updateUIView(_ uiView: UITextField, context: Context) {
+        uiView.text = text
+        updateTextColor(uiView)
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    private func updateTextColor(_ textField: UITextField) {
+        let attributedString = NSMutableAttributedString(string: text)
+        
+        // Only color actual user names that were inserted from dropdown
+        // Look for patterns like @FirstName LastName (with proper capitalization)
+        let mentionPattern = "@[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+"
+        let regex = try? NSRegularExpression(pattern: mentionPattern)
+        let range = NSRange(location: 0, length: text.utf16.count)
+        
+        if let matches = regex?.matches(in: text, range: range) {
+            for match in matches.reversed() {
+                let matchRange = match.range
+                let mentionText = (text as NSString).substring(with: matchRange)
+                
+                // Apply sling blue color to mentions
+                let slingBlueColor = UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)
+                attributedString.addAttribute(.foregroundColor, value: slingBlueColor, range: matchRange)
+                attributedString.addAttribute(.font, value: UIFont.systemFont(ofSize: 16, weight: .medium), range: matchRange)
+            }
+        }
+        
+        // Set default color for non-mention text
+        attributedString.addAttribute(.foregroundColor, value: UIColor.label, range: NSRange(location: 0, length: text.utf16.count))
+        
+        textField.attributedText = attributedString
+    }
+    
+    class Coordinator: NSObject, UITextFieldDelegate {
+        let parent: ColoredTextField
+        
+        init(_ parent: ColoredTextField) {
+            self.parent = parent
+        }
+        
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+            let oldText = textField.text ?? ""
+            
+            // If user is deleting (string is empty), check if they're deleting part of a mention
+            if string.isEmpty && range.length > 0 {
+                let mentionPattern = "@[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+"
+                let regex = try? NSRegularExpression(pattern: mentionPattern)
+                let textRange = NSRange(location: 0, length: oldText.utf16.count)
+                
+                if let matches = regex?.matches(in: oldText, range: textRange) {
+                    for match in matches {
+                        let mentionRange = match.range
+                        // Check if the deletion range overlaps with any mention
+                        if NSIntersectionRange(range, mentionRange).length > 0 {
+                            // Delete the entire mention instead
+                            let beforeMention = (oldText as NSString).substring(to: mentionRange.location)
+                            let afterMention = (oldText as NSString).substring(from: mentionRange.location + mentionRange.length)
+                            let newText = beforeMention + afterMention
+                            
+                            DispatchQueue.main.async {
+                                self.parent.text = newText
+                                self.parent.onTextChange(oldText, newText)
+                            }
+                            
+                            return false // Prevent the original deletion
+                        }
+                    }
+                }
+            }
+            
+            let newText = (oldText as NSString).replacingCharacters(in: range, with: string)
+            
+            DispatchQueue.main.async {
+                self.parent.text = newText
+                self.parent.onTextChange(oldText, newText)
+            }
+            
+            return true
+        }
+    }
+}
+
+// MARK: - Colored Text View
+
+struct ColoredTextView: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let onTextChange: (String, String) -> Void
+    
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.font = UIFont.systemFont(ofSize: 16)
+        textView.delegate = context.coordinator
+        textView.backgroundColor = UIColor.clear
+        textView.textContainerInset = UIEdgeInsets.zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.isScrollEnabled = true
+        textView.showsVerticalScrollIndicator = false
+        return textView
+    }
+    
+    func updateUIView(_ uiView: UITextView, context: Context) {
+        // Handle placeholder
+        if text.isEmpty {
+            uiView.text = placeholder
+            uiView.textColor = UIColor.placeholderText
+        } else {
+            if uiView.text != text {
+                uiView.text = text
+                updateTextColor(uiView)
+            }
+        }
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    private func updateTextColor(_ textView: UITextView) {
+        let attributedString = NSMutableAttributedString(string: text)
+        
+        // Only color actual user names that were inserted from dropdown
+        // Look for patterns like @FirstName LastName (with proper capitalization)
+        let mentionPattern = "@[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+"
+        let regex = try? NSRegularExpression(pattern: mentionPattern)
+        let range = NSRange(location: 0, length: text.utf16.count)
+        
+        if let matches = regex?.matches(in: text, range: range) {
+            for match in matches.reversed() {
+                let matchRange = match.range
+                let mentionText = (text as NSString).substring(with: matchRange)
+                
+                // Apply sling blue color to mentions
+                let slingBlueColor = UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)
+                attributedString.addAttribute(.foregroundColor, value: slingBlueColor, range: matchRange)
+                attributedString.addAttribute(.font, value: UIFont.systemFont(ofSize: 16, weight: .medium), range: matchRange)
+            }
+        }
+        
+        // Set default color for non-mention text
+        attributedString.addAttribute(.foregroundColor, value: UIColor.label, range: NSRange(location: 0, length: text.utf16.count))
+        
+        textView.attributedText = attributedString
+    }
+    
+    class Coordinator: NSObject, UITextViewDelegate {
+        let parent: ColoredTextView
+        
+        init(_ parent: ColoredTextView) {
+            self.parent = parent
+        }
+        
+        func textViewDidChange(_ textView: UITextView) {
+            let newText = textView.text ?? ""
+            let oldText = parent.text
+            
+            DispatchQueue.main.async {
+                self.parent.text = newText
+                self.parent.onTextChange(oldText, newText)
+            }
+        }
+        
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            // Clear placeholder when user starts typing
+            if textView.text == parent.placeholder {
+                textView.text = ""
+                textView.textColor = UIColor.label
+                parent.text = ""
+            }
+        }
+        
+        func textViewDidEndEditing(_ textView: UITextView) {
+            // Show placeholder if empty
+            if textView.text.isEmpty {
+                textView.text = parent.placeholder
+                textView.textColor = UIColor.placeholderText
+            }
+        }
+        
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            let oldText = textView.text ?? ""
+            
+            // If user is deleting (text is empty), check if they're deleting part of a mention
+            if text.isEmpty && range.length > 0 {
+                let mentionPattern = "@[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+"
+                let regex = try? NSRegularExpression(pattern: mentionPattern)
+                let textRange = NSRange(location: 0, length: oldText.utf16.count)
+                
+                if let matches = regex?.matches(in: oldText, range: textRange) {
+                    for match in matches {
+                        let mentionRange = match.range
+                        // Check if the deletion range overlaps with any mention
+                        if NSIntersectionRange(range, mentionRange).length > 0 {
+                            // Delete the entire mention instead
+                            let beforeMention = (oldText as NSString).substring(to: mentionRange.location)
+                            let afterMention = (oldText as NSString).substring(from: mentionRange.location + mentionRange.length)
+                            let newText = beforeMention + afterMention
+                            
+                            DispatchQueue.main.async {
+                                self.parent.text = newText
+                                self.parent.onTextChange(oldText, newText)
+                            }
+                            
+                            return false // Prevent the original deletion
+                        }
+                    }
+                }
+            }
+            
+            return true
         }
     }
 }

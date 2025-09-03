@@ -132,7 +132,9 @@ class FirestoreService: ObservableObject {
                                     // Load user communities (this will also fetch last messages)
                                     self?.fetchUserCommunities()
                                 } else {
-                                    print("❌ User document not found by UID either")
+                                    print("❌ User document not found by email or UID - Forcing sign out")
+                                    // Force sign out when user document is not found in either location
+                                    self?.signOut()
                                 }
                             }
                         }
@@ -223,8 +225,12 @@ class FirestoreService: ObservableObject {
                 }
                 
                 guard let document = document, document.exists else {
-                    print("❌ User document not found for ID: \(userId)")
-                    let notFoundError = NSError(domain: "FirestoreService", code: 404, userInfo: [NSLocalizedDescriptionKey: "User not found"])
+                    print("❌ User document not found for ID: \(userId) - Forcing sign out")
+                    // Force sign out when user document is not found
+                    DispatchQueue.main.async {
+                        self.signOut()
+                    }
+                    let notFoundError = NSError(domain: "FirestoreService", code: 404, userInfo: [NSLocalizedDescriptionKey: "User not found - signed out automatically"])
                     continuation.resume(throwing: notFoundError)
                     return
                 }
