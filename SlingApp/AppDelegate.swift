@@ -44,6 +44,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             }
         }
         
+        // Setup Error Logging System
+        ErrorLogger.shared.setupErrorLogging()
+        
         return true
     }
     
@@ -144,4 +147,149 @@ class DeepLinkManager: ObservableObject {
 struct DeepLink {
     let type: String // "bet" or "community"
     let id: String
+}
+
+// MARK: - Error Logger
+
+class ErrorLogger {
+    static let shared = ErrorLogger()
+    private var firestoreService: FirestoreService?
+    
+    private init() {}
+    
+    func setupErrorLogging() {
+        print("🔧 Setting up error logging system...")
+        
+        // Setup global exception handler
+        NSSetUncaughtExceptionHandler { exception in
+            ErrorLogger.shared.logCriticalError(
+                message: "Uncaught Exception: \(exception.name.rawValue)",
+                stackTrace: exception.callStackSymbols.joined(separator: "\n")
+            )
+        }
+        
+        // Setup signal handler for crashes
+        signal(SIGABRT) { signal in
+            ErrorLogger.shared.logCriticalError(message: "SIGABRT signal received")
+        }
+        signal(SIGILL) { signal in
+            ErrorLogger.shared.logCriticalError(message: "SIGILL signal received")
+        }
+        signal(SIGSEGV) { signal in
+            ErrorLogger.shared.logCriticalError(message: "SIGSEGV signal received")
+        }
+        signal(SIGFPE) { signal in
+            ErrorLogger.shared.logCriticalError(message: "SIGFPE signal received")
+        }
+        signal(SIGBUS) { signal in
+            ErrorLogger.shared.logCriticalError(message: "SIGBUS signal received")
+        }
+        signal(SIGPIPE) { signal in
+            ErrorLogger.shared.logCriticalError(message: "SIGPIPE signal received")
+        }
+        
+        // Override print function to capture console logs
+        setupConsoleCaptureIfNeeded()
+        
+        print("✅ Error logging system setup complete")
+    }
+    
+    func setFirestoreService(_ service: FirestoreService) {
+        self.firestoreService = service
+    }
+    
+    private func setupConsoleCaptureIfNeeded() {
+        // Create a custom log handler that captures print statements
+        // This is a simplified approach - for production you might want to use os_log
+        
+        // Override Swift's print function would be complex, so instead we'll
+        // provide helper functions that apps can use
+        print("📝 Console capture ready - use SlingLog functions for automatic logging")
+    }
+    
+    private func logCriticalError(message: String, stackTrace: String? = nil) {
+        print("🚨 CRITICAL ERROR: \(message)")
+        
+        // Store the error for later upload if FirestoreService isn't available yet
+        if let firestoreService = firestoreService {
+            firestoreService.logError(
+                message: message,
+                type: "critical_error",
+                level: "critical",
+                stackTrace: stackTrace
+            )
+        } else {
+            // Store for later if service not available
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if let firestoreService = self.firestoreService {
+                    firestoreService.logError(
+                        message: message,
+                        type: "critical_error",
+                        level: "critical",
+                        stackTrace: stackTrace
+                    )
+                }
+            }
+        }
+    }
+    
+    // Public logging functions that apps can use instead of print
+    func logInfo(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        print("ℹ️ \(message)")
+        firestoreService?.logConsoleMessage(
+            message: message,
+            level: "info",
+            functionName: function,
+            fileName: file,
+            lineNumber: line
+        )
+    }
+    
+    func logWarning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        print("⚠️ WARNING: \(message)")
+        firestoreService?.logConsoleMessage(
+            message: message,
+            level: "warning",
+            functionName: function,
+            fileName: file,
+            lineNumber: line
+        )
+    }
+    
+    func logError(_ message: String, error: Error? = nil, file: String = #file, function: String = #function, line: Int = #line) {
+        print("❌ ERROR: \(message)")
+        if let error = error {
+            print("   Details: \(error.localizedDescription)")
+        }
+        
+        var context: [String: String] = [:]
+        if let error = error {
+            context["error_details"] = error.localizedDescription
+        }
+        
+        firestoreService?.logError(
+            message: message,
+            type: "runtime_error",
+            level: "error",
+            functionName: function,
+            fileName: file,
+            lineNumber: line,
+            additionalContext: context
+        )
+    }
+}
+
+// MARK: - Global Logging Functions
+
+// Global convenience functions for easy logging throughout the app
+func SlingLogInfo(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    ErrorLogger.shared.logInfo(message, file: file, function: function, line: line)
+}
+
+func SlingLogWarning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    ErrorLogger.shared.logWarning(message, file: file, function: function, line: line)
+}
+
+func SlingLogError(_ message: String, error: Error? = nil, file: String = #file, function: String = #function, line: Int = #line) {
+    ErrorLogger.shared.logError(message, error: error, file: file, function: function, line: line)
 }

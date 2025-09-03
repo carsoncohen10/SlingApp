@@ -59,6 +59,7 @@ struct FirestoreCommunity: Identifiable, Codable, Equatable {
     var is_private: Bool?
     var updated_date: Date?
     var chat_history: [String: FirestoreCommunityMessage]? // Messages stored as a map with message ID as key
+    var profile_image_url: String? // URL to community's profile image (optional)
     
     // Custom initializer to handle both Int and Bool for is_active field, and Int/Double for member_count
     init(from decoder: Decoder) throws {
@@ -89,6 +90,7 @@ struct FirestoreCommunity: Identifiable, Codable, Equatable {
         is_private = try container.decodeIfPresent(Bool.self, forKey: .is_private)
         updated_date = try container.decodeIfPresent(Date.self, forKey: .updated_date)
         chat_history = try container.decodeIfPresent([String: FirestoreCommunityMessage].self, forKey: .chat_history)
+        profile_image_url = try container.decodeIfPresent(String.self, forKey: .profile_image_url)
         
         // Handle is_active field that might be Int or Bool
         if let isActiveBool = try? container.decode(Bool.self, forKey: .is_active) {
@@ -101,7 +103,7 @@ struct FirestoreCommunity: Identifiable, Codable, Equatable {
     }
     
     // Custom initializer for fallback community creation
-    init(documentId: String?, id: String?, name: String, description: String?, created_by: String, created_date: Date, invite_code: String, member_count: Int, bet_count: Int?, total_bets: Int, members: [String]?, admin_email: String?, created_by_id: String?, is_active: Bool?, is_private: Bool?, updated_date: Date?, chat_history: [String: FirestoreCommunityMessage]?) {
+    init(documentId: String?, id: String?, name: String, description: String?, created_by: String, created_date: Date, invite_code: String, member_count: Int, bet_count: Int?, total_bets: Int, members: [String]?, admin_email: String?, created_by_id: String?, is_active: Bool?, is_private: Bool?, updated_date: Date?, chat_history: [String: FirestoreCommunityMessage]?, profile_image_url: String?) {
         self.documentId = documentId
         self.id = id
         self.name = name
@@ -119,13 +121,14 @@ struct FirestoreCommunity: Identifiable, Codable, Equatable {
         self.is_private = is_private
         self.updated_date = updated_date
         self.chat_history = chat_history
+        self.profile_image_url = profile_image_url
     }
     
     // Coding keys for custom initializer
     private enum CodingKeys: String, CodingKey {
         case documentId, id, name, description, created_by, created_date, invite_code
         case member_count, bet_count, total_bets, members, admin_email, created_by_id
-        case is_active, is_private, updated_date, chat_history
+        case is_active, is_private, updated_date, chat_history, profile_image_url
     }
 }
 
@@ -412,5 +415,74 @@ struct FirestoreCommunityMessage: Identifiable, Codable, Equatable {
             reactions: [:], // Initialize with empty reactions
             readBy: read_by
         )
+    }
+}
+
+// MARK: - Error Log Model
+
+struct FirestoreErrorLog: Identifiable, Codable {
+    @DocumentID var id: String?
+    var error_message: String
+    var error_type: String // "console_log", "runtime_error", "network_error", "firebase_error", etc.
+    var log_level: String // "info", "warning", "error", "critical"
+    var timestamp: Date
+    var user_email: String?
+    var user_id: String?
+    var user_display_name: String?
+    var user_full_name: String?
+    var app_version: String?
+    var ios_version: String
+    var device_model: String
+    var device_name: String
+    var stack_trace: String?
+    var function_name: String?
+    var file_name: String?
+    var line_number: Int?
+    var additional_context: [String: String]? // Any extra context data
+    var session_id: String // Unique session identifier
+    var created_date: Date
+    
+    init(
+        id: String? = nil,
+        error_message: String,
+        error_type: String,
+        log_level: String,
+        timestamp: Date = Date(),
+        user_email: String? = nil,
+        user_id: String? = nil,
+        user_display_name: String? = nil,
+        user_full_name: String? = nil,
+        app_version: String? = nil,
+        ios_version: String,
+        device_model: String,
+        device_name: String,
+        stack_trace: String? = nil,
+        function_name: String? = nil,
+        file_name: String? = nil,
+        line_number: Int? = nil,
+        additional_context: [String: String]? = nil,
+        session_id: String,
+        created_date: Date = Date()
+    ) {
+        self.id = id
+        self.error_message = error_message
+        self.error_type = error_type
+        self.log_level = log_level
+        self.timestamp = timestamp
+        self.user_email = user_email
+        self.user_id = user_id
+        self.user_display_name = user_display_name
+        self.user_full_name = user_full_name
+        self.app_version = app_version
+        self.ios_version = ios_version
+        self.device_model = device_model
+        self.device_name = device_name
+        self.stack_trace = stack_trace
+        self.function_name = function_name
+        self.file_name = file_name
+        self.line_number = line_number
+        self.additional_context = additional_context
+        self.session_id = session_id
+        self.created_date = created_date
     }
 }

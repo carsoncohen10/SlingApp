@@ -2,6 +2,8 @@ import Foundation
 import FirebaseFirestore
 import FirebaseFirestoreSwift
 import FirebaseAuth
+import FirebaseStorage
+import UIKit
 
 struct CommunityMemberInfo: Identifiable, Hashable {
     let id: String
@@ -101,6 +103,7 @@ class FirestoreService: ObservableObject {
                             self?.currentUser = user
                         } catch {
                             print("❌ Error decoding user: \(error)")
+                            self?.logFirebaseError(message: "Failed to decode user from Firestore", firebaseError: error)
                         }
                         
                         // Fetch user bet participations when user is loaded
@@ -362,6 +365,7 @@ class FirestoreService: ObservableObject {
             print("✅ User signed out successfully and local state cleaned up")
         } catch {
             print("❌ Error signing out: \(error.localizedDescription)")
+            logFirebaseError(message: "Failed to sign out user", firebaseError: error)
             
             // If there was an error, restore the authentication state
             DispatchQueue.main.async {
@@ -485,6 +489,7 @@ class FirestoreService: ObservableObject {
         db.collection("community").getDocuments { snapshot, error in
             if let error = error {
                 print("❌ Error fetching communities: \(error.localizedDescription)")
+                self.logFirebaseError(message: "Failed to fetch communities", firebaseError: error)
                 return
             }
 
@@ -629,7 +634,8 @@ class FirestoreService: ObservableObject {
                                         is_active: nil,
                                         is_private: nil,
                                         updated_date: data["updated_date"] as? Date,
-                                        chat_history: nil
+                                        chat_history: nil,
+                                        profile_image_url: data["profile_image_url"] as? String
                                     )
                                     fetchedCommunities.append(fallbackCommunity)
                                 }
@@ -1633,7 +1639,7 @@ class FirestoreService: ObservableObject {
         db.collection("UserBet")
             .whereField("community_id", isEqualTo: communityId)
             .whereField("user_email", isEqualTo: userEmail)
-            .getDocuments(source: .default) { [weak self] snapshot, error in
+            .getDocuments(source: .default) { snapshot, error in
                 if let error = error {
                     print("❌ Error fetching transactions: \(error.localizedDescription)")
                     completion([])
@@ -1653,7 +1659,7 @@ class FirestoreService: ObservableObject {
     // MARK: - Bet Management
     
     func fetchBet(by betId: String, completion: @escaping (FirestoreBet?) -> Void) {
-        db.collection("Bet").document(betId).getDocument(source: .default) { [weak self] document, error in
+        db.collection("Bet").document(betId).getDocument(source: .default) { document, error in
                 if let error = error {
                     print("❌ Error fetching bet: \(error.localizedDescription)")
                 DispatchQueue.main.async {
@@ -3542,6 +3548,352 @@ class FirestoreService: ObservableObject {
                 completion(true)
             }
         }
+    }
+    
+    // MARK: - Community Image Upload
+    
+    func uploadCommunityImage(_ image: UIImage, communityId: String, completion: @escaping (Bool, String?) -> Void) {
+        // Check if user has permission to update community image
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false, "User not authenticated")
+            return
+        }
+        
+        // Check if user is admin or has permission to change community image
+        isUserAdminInCommunity(communityId: communityId, userEmail: currentUserEmail) { isAdmin in
+            // For now, allow any community member to change the profile image
+            // You can modify this to restrict to admins only by changing the condition
+            guard isAdmin || true else { // Allow all members for now
+                completion(false, "Only admins can change community profile image")
+                return
+            }
+            
+            // Compress and upload image
+            guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+                completion(false, "Failed to process image")
+                return
+            }
+            
+            let storage = Storage.storage()
+            let storageRef = storage.reference()
+            let imageRef = storageRef.child("community_images/\(communityId)_\(UUID().uuidString).jpg")
+            
+            // Upload image
+            imageRef.putData(imageData, metadata: nil) { [weak self] metadata, error in
+                if let error = error {
+                    print("❌ Error uploading community image: \(error)")
+                    self?.logFirebaseError(message: "Failed to upload community image to Firebase Storage", firebaseError: error)
+                    completion(false, "Failed to upload image: \(error.localizedDescription)")
+                    return
+                }
+                
+                // Get download URL
+                imageRef.downloadURL { [weak self] url, error in
+                    if let error = error {
+                        print("❌ Error getting download URL: \(error)")
+                        self?.logFirebaseError(message: "Failed to get download URL for community image", firebaseError: error)
+                        completion(false, "Failed to get image URL: \(error.localizedDescription)")
+                        return
+                    }
+                    
+                    guard let downloadURL = url?.absoluteString else {
+                        completion(false, "Failed to get image URL")
+                        return
+                    }
+                    
+                    // Update community document with new image URL
+                    self?.updateCommunityProfileImage(communityId: communityId, imageUrl: downloadURL, completion: completion)
+                }
+            }
+        }
+    }
+    
+    private func updateCommunityProfileImage(communityId: String, imageUrl: String, completion: @escaping (Bool, String?) -> Void) {
+        db.collection("community").document(communityId).updateData([
+            "profile_image_url": imageUrl,
+            "updated_date": Date()
+        ]) { [weak self] error in
+            if let error = error {
+                print("❌ Error updating community profile image: \(error)")
+                self?.logFirebaseError(message: "Failed to update community profile image in Firestore", firebaseError: error)
+                completion(false, "Failed to update community: \(error.localizedDescription)")
+                return
+            }
+            
+            print("✅ Successfully updated community profile image")
+            self?.logUserAction(action: "Updated community profile image", details: "Community ID: \(communityId)")
+            
+            // Update local community data
+            DispatchQueue.main.async {
+                if let index = self?.userCommunities.firstIndex(where: { $0.id == communityId }) {
+                    self?.userCommunities[index].profile_image_url = imageUrl
+                }
+                if let index = self?.communities.firstIndex(where: { $0.id == communityId }) {
+                    self?.communities[index].profile_image_url = imageUrl
+                }
+            }
+            
+            completion(true, nil)
+        }
+    }
+    
+    // MARK: - User Profile Image Upload
+    
+    func uploadUserProfileImage(_ image: UIImage, completion: @escaping (Bool, String?) -> Void) {
+        // Check if user is authenticated
+        guard let currentUserEmail = currentUser?.email,
+              let userId = currentUser?.id else {
+            completion(false, "User not authenticated")
+            return
+        }
+        
+        // Compress image
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            completion(false, "Failed to process image")
+            return
+        }
+        
+        let storage = Storage.storage()
+        let storageRef = storage.reference()
+        let imageRef = storageRef.child("user_profile_images/\(userId)_\(UUID().uuidString).jpg")
+        
+        // Upload image
+        imageRef.putData(imageData, metadata: nil) { [weak self] metadata, error in
+            if let error = error {
+                print("❌ Error uploading user profile image: \(error)")
+                self?.logFirebaseError(message: "User profile image upload failed", firebaseError: error)
+                completion(false, error.localizedDescription)
+                return
+            }
+            
+            // Get download URL
+            imageRef.downloadURL { [weak self] url, error in
+                if let error = error {
+                    print("❌ Error getting user profile image download URL: \(error)")
+                    self?.logFirebaseError(message: "Getting user profile image URL failed", firebaseError: error)
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                guard let downloadURL = url else {
+                    completion(false, "Failed to get image URL")
+                    return
+                }
+                
+                let imageUrlString = downloadURL.absoluteString
+                print("✅ User profile image uploaded successfully: \(imageUrlString)")
+                
+                // Update user profile with new image URL
+                self?.updateUserProfileImage(imageUrl: imageUrlString, completion: completion)
+            }
+        }
+    }
+    
+    private func updateUserProfileImage(imageUrl: String, completion: @escaping (Bool, String?) -> Void) {
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false, "User not authenticated")
+            return
+        }
+        
+        // Update user document in Firestore
+        db.collection("user").document(currentUserEmail).updateData([
+            "profile_picture_url": imageUrl,
+            "updated_date": Date()
+        ]) { [weak self] error in
+            if let error = error {
+                print("❌ Error updating user profile image in Firestore: \(error)")
+                self?.logFirebaseError(message: "User profile image update failed", firebaseError: error)
+                completion(false, error.localizedDescription)
+                return
+            }
+            
+            print("✅ User profile image updated in Firestore successfully")
+            self?.logUserAction(action: "Updated user profile image", details: "User: \(currentUserEmail)")
+            
+            // Update local user data
+            DispatchQueue.main.async {
+                self?.currentUser?.profile_picture_url = imageUrl
+            }
+            
+            completion(true, nil)
+        }
+    }
+    
+    // MARK: - Error Logging System
+    
+    // Session ID for this app session
+    private var sessionId: String = UUID().uuidString
+    
+    // Device information cache
+    private lazy var deviceInfo: (model: String, name: String, iosVersion: String, appVersion: String) = {
+        let device = UIDevice.current
+        let deviceModel = getDeviceModel()
+        let deviceName = device.name
+        let iosVersion = device.systemVersion
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        
+        return (deviceModel, deviceName, iosVersion, appVersion)
+    }()
+    
+    private func getDeviceModel() -> String {
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let machineMirror = Mirror(reflecting: systemInfo.machine)
+        let identifier = machineMirror.children.reduce("") { identifier, element in
+            guard let value = element.value as? Int8, value != 0 else { return identifier }
+            let scalar = UnicodeScalar(UInt8(value))
+            return identifier + String(scalar)
+        }
+        return identifier
+    }
+    
+    func logError(
+        message: String,
+        type: String = "runtime_error",
+        level: String = "error",
+        functionName: String = #function,
+        fileName: String = #file,
+        lineNumber: Int = #line,
+        stackTrace: String? = nil,
+        additionalContext: [String: String]? = nil
+    ) {
+        let errorLog = FirestoreErrorLog(
+            error_message: message,
+            error_type: type,
+            log_level: level,
+            timestamp: Date(),
+            user_email: currentUser?.email,
+            user_id: currentUser?.id,
+            user_display_name: currentUser?.display_name,
+            user_full_name: currentUser?.full_name,
+            app_version: deviceInfo.appVersion,
+            ios_version: deviceInfo.iosVersion,
+            device_model: deviceInfo.model,
+            device_name: deviceInfo.name,
+            stack_trace: stackTrace,
+            function_name: functionName,
+            file_name: URL(fileURLWithPath: fileName).lastPathComponent,
+            line_number: lineNumber,
+            additional_context: additionalContext,
+            session_id: sessionId,
+            created_date: Date()
+        )
+        
+        // Log to console for debugging
+        print("🚨 ERROR LOG: [\(level.uppercased())] [\(type)] \(message)")
+        if let context = additionalContext {
+            print("   Context: \(context)")
+        }
+        
+        // Store in Firestore
+        do {
+            _ = try db.collection("error_logs").addDocument(from: errorLog) { error in
+                if let error = error {
+                    print("❌ Failed to log error to Firestore: \(error)")
+                } else {
+                    print("✅ Error logged to Firestore successfully")
+                }
+            }
+        } catch {
+            print("❌ Failed to encode error log: \(error)")
+        }
+    }
+    
+    func logConsoleMessage(
+        message: String,
+        level: String = "info",
+        functionName: String = #function,
+        fileName: String = #file,
+        lineNumber: Int = #line,
+        additionalContext: [String: String]? = nil
+    ) {
+        // Only log warnings and errors to reduce database usage
+        guard level == "warning" || level == "error" || level == "critical" else { return }
+        
+        logError(
+            message: message,
+            type: "console_log",
+            level: level,
+            functionName: functionName,
+            fileName: fileName,
+            lineNumber: lineNumber,
+            additionalContext: additionalContext
+        )
+    }
+    
+    func logNetworkError(
+        message: String,
+        endpoint: String? = nil,
+        statusCode: Int? = nil,
+        functionName: String = #function,
+        fileName: String = #file,
+        lineNumber: Int = #line
+    ) {
+        var context: [String: String] = [:]
+        if let endpoint = endpoint {
+            context["endpoint"] = endpoint
+        }
+        if let statusCode = statusCode {
+            context["status_code"] = String(statusCode)
+        }
+        
+        logError(
+            message: message,
+            type: "network_error",
+            level: "error",
+            functionName: functionName,
+            fileName: fileName,
+            lineNumber: lineNumber,
+            additionalContext: context
+        )
+    }
+    
+    func logFirebaseError(
+        message: String,
+        firebaseError: Error? = nil,
+        functionName: String = #function,
+        fileName: String = #file,
+        lineNumber: Int = #line
+    ) {
+        var context: [String: String] = [:]
+        if let firebaseError = firebaseError {
+            context["firebase_error"] = firebaseError.localizedDescription
+            context["error_code"] = String((firebaseError as NSError).code)
+            context["error_domain"] = (firebaseError as NSError).domain
+        }
+        
+        logError(
+            message: message,
+            type: "firebase_error",
+            level: "error",
+            functionName: functionName,
+            fileName: fileName,
+            lineNumber: lineNumber,
+            additionalContext: context
+        )
+    }
+    
+    func logUserAction(
+        action: String,
+        details: String? = nil,
+        functionName: String = #function,
+        fileName: String = #file,
+        lineNumber: Int = #line
+    ) {
+        var context: [String: String] = [:]
+        if let details = details {
+            context["action_details"] = details
+        }
+        
+        logError(
+            message: "User Action: \(action)",
+            type: "user_action",
+            level: "info",
+            functionName: functionName,
+            fileName: fileName,
+            lineNumber: lineNumber,
+            additionalContext: context
+        )
     }
 
 }

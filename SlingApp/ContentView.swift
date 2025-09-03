@@ -21,6 +21,12 @@ struct ContentView: View {
             if !hasShownLoading {
                 LoadingScreenView()
                     .onAppear {
+                        // Initialize error logging with FirestoreService
+                        ErrorLogger.shared.setFirestoreService(firestoreService)
+                        
+                        // Test the error logging system (you can remove this in production)
+                        SlingLogInfo("App started successfully - Error logging system initialized")
+                        
                         // Show loading screen for at least 1.5 seconds, then check auth state
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             withAnimation(.easeInOut(duration: 0.5)) {
@@ -285,8 +291,7 @@ struct AuthenticationView: View {
                                 HStack(spacing: 2) {
                                     Text("terms of service")
                                         .font(.caption)
-                                        .foregroundColor(.slingBlue)
-                                        .underline()
+                                        .foregroundColor(.gray.opacity(0.6))
                                     
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption2)
@@ -296,9 +301,9 @@ struct AuthenticationView: View {
                         }
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
-                        .padding(.top, 24)
+                        .padding(.top, 60)
                         
-                        Spacer(minLength: 40)
+                        Spacer(minLength: 80)
                     }
                     .padding(.top, 60) // Move everything down more
                 }
@@ -1100,8 +1105,7 @@ struct EmailAuthenticationView: View {
                                 HStack(spacing: 2) {
                                     Text("terms of service")
                                         .font(.caption)
-                                        .foregroundColor(.slingBlue)
-                                        .underline()
+                                        .foregroundColor(.gray.opacity(0.6))
                                     
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption2)
@@ -1111,8 +1115,8 @@ struct EmailAuthenticationView: View {
                         }
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
-                        .padding(.top, 16)
-                        .padding(.bottom, 40)
+                        .padding(.top, 60)
+                        .padding(.bottom, 80)
                     }
                 }
                 
@@ -1230,8 +1234,11 @@ struct EmailAuthenticationView: View {
                 DispatchQueue.main.async {
                     isLoading = false
                     if !success {
-                        errorMessage = error ?? "Failed to create account. Please try again."
+                        let errorMsg = error ?? "Failed to create account. Please try again."
+                        errorMessage = errorMsg
+                        SlingLogError("User sign up failed", error: nil)
                     } else {
+                        SlingLogInfo("User successfully created account")
                         onDismiss()
                     }
                 }
@@ -1241,8 +1248,11 @@ struct EmailAuthenticationView: View {
                 DispatchQueue.main.async {
                     isLoading = false
                     if !success {
-                        errorMessage = error ?? "Failed to sign in. Please try again."
+                        let errorMsg = error ?? "Failed to sign in. Please try again."
+                        errorMessage = errorMsg
+                        SlingLogError("User sign in failed", error: nil)
                     } else {
+                        SlingLogInfo("User successfully signed in")
                         onDismiss()
                     }
                 }

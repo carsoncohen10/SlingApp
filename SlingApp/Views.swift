@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import FirebaseFirestore
 import Network
+import PhotosUI
 
 // MARK: - Custom Colors Extension
 extension Color {
@@ -4227,15 +4228,35 @@ struct CommunityInfoModal: View {
                 VStack(spacing: 8) {
                     // Community icon and name centered
                     VStack(spacing: 8) {
-                        Circle()
-                            .fill(AnyShapeStyle(Color.slingGradient))
+                        if let profileImageUrl = community.profile_image_url {
+                            // Show custom community image
+                            AsyncImage(url: URL(string: profileImageUrl)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Circle()
+                                    .fill(AnyShapeStyle(Color.slingGradient))
+                                    .overlay(
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    )
+                            }
                             .frame(width: 48, height: 48)
-                            .overlay(
-                                Text(String(community.name.prefix(1)).uppercased())
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                            )
+                            .clipShape(Circle())
+                        } else {
+                            // Show community initials
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .frame(width: 48, height: 48)
+                                .overlay(
+                                    Text(String(community.name.prefix(1)).uppercased())
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                )
+                        }
                         
                         Text(community.name)
                             .font(.title2)
@@ -5227,7 +5248,7 @@ struct CommunitiesView: View {
                     // Status text
                     Text("All Bets Settled 🎉")
                         .font(.subheadline)
-                        .fontWeight(.bold)
+                        .fontWeight(.medium)
                         .foregroundColor(.black)
                 }
                 
@@ -6395,15 +6416,35 @@ struct ModernCommunityCard: View {
                 // Header with community info and admin badge
                 HStack(alignment: .center, spacing: 10) {
                     // Community Avatar
-                    Circle()
-                        .fill(AnyShapeStyle(Color.slingGradient))
+                    if let profileImageUrl = community.profile_image_url {
+                        // Show custom community image
+                        AsyncImage(url: URL(string: profileImageUrl)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .overlay(
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                )
+                        }
                         .frame(width: 48, height: 48)
-                        .overlay(
-                            Text(String(community.name.prefix(1)).uppercased())
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                        )
+                        .clipShape(Circle())
+                    } else {
+                        // Show community initials
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .frame(width: 48, height: 48)
+                            .overlay(
+                                Text(String(community.name.prefix(1)).uppercased())
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                    }
                     
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
@@ -6909,6 +6950,9 @@ struct GeneralSettingsTab: View {
     @State private var isSaving = false
     @State private var errorMessage = ""
     @State private var showingCopyFeedback = false
+    @State private var showingDeleteAlert = false
+    @State private var showingLeaveAlert = false
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         ScrollView {
@@ -7094,12 +7138,142 @@ struct GeneralSettingsTab: View {
                     .cornerRadius(8)
                 }
                 .padding(.horizontal, 16)
+                
+                // Actions Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Actions")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    VStack(spacing: 0) {
+                        if isAdmin {
+                            // Admin-only: Delete Community
+                            Button(action: {
+                                showDeleteCommunityAlert()
+                            }) {
+                                HStack {
+                                    Image(systemName: "trash")
+                                        .font(.title3)
+                                        .foregroundColor(.red)
+                                        .frame(width: 24, height: 24)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Delete Community")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.red)
+                                        Text("Permanently delete this community for all members")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 12)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            Divider()
+                                .padding(.horizontal, 12)
+                        }
+                        
+                        // Leave Community (available to all members)
+                        Button(action: {
+                            showLeaveCommunityAlert()
+                        }) {
+                            HStack {
+                                Image(systemName: "person.badge.minus")
+                                    .font(.title3)
+                                    .foregroundColor(.orange)
+                                    .frame(width: 24, height: 24)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Leave Community")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.orange)
+                                    Text("You can rejoin later using the invite code")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 12)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                }
+                .padding(.horizontal, 16)
             }
             .padding(.bottom, 20)
         }
         .background(Color.white)
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(activityItems: ["Join my community on Sling! Use invite code: \(community.invite_code)"])
+        }
+        .alert("Leave Community", isPresented: $showingLeaveAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Leave", role: .destructive) {
+                leaveCommunity()
+            }
+        } message: {
+            Text("Are you sure you want to leave this community? You can rejoin later using the invite code.")
+        }
+        .alert("Delete Community", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteCommunity()
+            }
+        } message: {
+            Text("Are you sure you want to delete this community? This action cannot be undone and all data will be permanently lost.")
+        }
+    }
+    
+    private func showLeaveCommunityAlert() {
+        showingLeaveAlert = true
+    }
+    
+    private func showDeleteCommunityAlert() {
+        showingDeleteAlert = true
+    }
+    
+    private func leaveCommunity() {
+        guard let userEmail = firestoreService.currentUser?.email else { return }
+        
+        firestoreService.leaveCommunity(communityId: community.id ?? "", userEmail: userEmail) { success in
+            DispatchQueue.main.async {
+                if success {
+                    SlingLogInfo("User left community: \(self.community.name)")
+                    // Dismiss the settings view
+                    dismiss()
+                }
+            }
+        }
+    }
+    
+    private func deleteCommunity() {
+        firestoreService.deleteCommunity(communityId: community.id ?? "") { success in
+            DispatchQueue.main.async {
+                if success {
+                    SlingLogInfo("Admin deleted community: \(self.community.name)")
+                    // Dismiss the settings view
+                    dismiss()
+                }
+            }
         }
     }
     
@@ -7134,6 +7308,8 @@ struct MembersTab: View {
     @Binding var members: [CommunityMemberInfo]
     @Binding var isLoading: Bool
     @State private var showingShareSheet = false
+    @State private var memberToKick: CommunityMemberInfo?
+    @State private var showingKickAlert = false
     
     var body: some View {
         VStack {
@@ -7192,9 +7368,10 @@ struct MembersTab: View {
                             
                             Spacer()
                             
-                            if isAdmin && !member.isAdmin {
+                            if isAdmin && !member.isAdmin && member.email != firestoreService.currentUser?.email {
                                 Button(action: {
-                                    // Kick member action
+                                    memberToKick = member
+                                    showingKickAlert = true
                                 }) {
                                     Image(systemName: "xmark")
                                         .font(.caption)
@@ -7243,6 +7420,31 @@ struct MembersTab: View {
         .background(Color.white)
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(activityItems: ["Join my community on Sling! Use invite code: \(community.invite_code)"])
+        }
+        .alert("Remove Member", isPresented: $showingKickAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Remove", role: .destructive) {
+                if let member = memberToKick {
+                    kickMember(member)
+                }
+            }
+        } message: {
+            if let member = memberToKick {
+                Text("Are you sure you want to remove \(member.name) from this community? They can rejoin later using the invite code.")
+            }
+        }
+    }
+    
+    private func kickMember(_ member: CommunityMemberInfo) {
+        firestoreService.kickMemberFromCommunity(communityId: community.id ?? "", memberEmail: member.email) { success in
+            DispatchQueue.main.async {
+                if success {
+                    // Remove member from local list
+                    members.removeAll { $0.email == member.email }
+                    SlingLogInfo("Admin removed member from community", file: #file, function: #function, line: #line)
+                }
+                memberToKick = nil
+            }
         }
     }
 }
@@ -7296,15 +7498,36 @@ struct ProfileView: View {
                 VStack(spacing: 24) {
                     // Profile Summary
                     HStack(spacing: 16) {
-                        Circle()
-                            .fill(Color.slingGradient)
+                        // Profile Picture or Initials
+                        if let profilePictureUrl = firestoreService.currentUser?.profile_picture_url {
+                            // Show user's profile picture
+                            AsyncImage(url: URL(string: profilePictureUrl)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Circle()
+                                    .fill(Color.slingGradient)
+                                    .overlay(
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    )
+                            }
                             .frame(width: 64, height: 64)
-                            .overlay(
-                                Text(getUserInitials())
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                            )
+                            .clipShape(Circle())
+                        } else {
+                            // Fallback to initials
+                            Circle()
+                                .fill(Color.slingGradient)
+                                .frame(width: 64, height: 64)
+                                .overlay(
+                                    Text(getUserInitials())
+                                        .font(.title2)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                )
+                        }
                         
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
@@ -8652,12 +8875,16 @@ struct EditProfileView: View {
     @State private var isLoading = false
     @State private var showingSaveSuccess = false
     @State private var showingUnsavedChangesAlert = false
+    @State private var showingImagePicker = false
+    @State private var selectedImage: UIImage?
+    @State private var profileImageUrl: String?
     
     init(firestoreService: FirestoreService) {
         self.firestoreService = firestoreService
         self._displayName = State(initialValue: firestoreService.currentUser?.display_name ?? "")
         self._firstName = State(initialValue: firestoreService.currentUser?.first_name ?? "")
         self._lastName = State(initialValue: firestoreService.currentUser?.last_name ?? "")
+        self._profileImageUrl = State(initialValue: firestoreService.currentUser?.profile_picture_url)
     }
     
     var body: some View {
@@ -8720,6 +8947,93 @@ struct EditProfileView: View {
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
+                        
+                        // Profile Picture Section
+                        VStack(spacing: 16) {
+                            Text("Profile Picture")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.black)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 20)
+                            
+                            // Profile Picture Display and Edit Button
+                            Button(action: {
+                                showingImagePicker = true
+                            }) {
+                                ZStack {
+                                    if let selectedImage = selectedImage {
+                                        // Show selected image
+                                        Image(uiImage: selectedImage)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 120, height: 120)
+                                            .clipShape(Circle())
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.slingBlue, lineWidth: 3)
+                                            )
+                                    } else if let profileImageUrl = profileImageUrl {
+                                        // Show current profile image
+                                        AsyncImage(url: URL(string: profileImageUrl)) { image in
+                                            image
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
+                                        } placeholder: {
+                                            Circle()
+                                                .fill(Color.slingGradient)
+                                                .overlay(
+                                                    ProgressView()
+                                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                                        .scaleEffect(0.8)
+                                                )
+                                        }
+                                        .frame(width: 120, height: 120)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                        )
+                                    } else {
+                                        // Show initials fallback
+                                        Circle()
+                                            .fill(Color.slingGradient)
+                                            .frame(width: 120, height: 120)
+                                            .overlay(
+                                                Text(getUserInitials())
+                                                    .font(.largeTitle)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.white)
+                                            )
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                            )
+                                    }
+                                    
+                                    // Edit overlay icon
+                                    VStack {
+                                        Spacer()
+                                        HStack {
+                                            Spacer()
+                                            Circle()
+                                                .fill(Color.slingBlue)
+                                                .frame(width: 36, height: 36)
+                                                .overlay(
+                                                    Image(systemName: "camera.fill")
+                                                        .font(.system(size: 16, weight: .medium))
+                                                        .foregroundColor(.white)
+                                                )
+                                                .offset(x: -8, y: -8)
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            Text("Tap to change your profile picture")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
                         
                         // User details input fields
                         VStack(alignment: .leading, spacing: 16) {
@@ -8791,7 +9105,30 @@ struct EditProfileView: View {
             } message: {
                 Text("You have unsaved changes. Are you sure you want to leave?")
             }
+            .sheet(isPresented: $showingImagePicker) {
+                UserImagePicker(selectedImage: $selectedImage)
+            }
         }
+    }
+    
+    private func getUserInitials() -> String {
+        if let firstName = firestoreService.currentUser?.first_name, let lastName = firestoreService.currentUser?.last_name, !firstName.isEmpty, !lastName.isEmpty {
+            let firstInitial = String(firstName.prefix(1)).uppercased()
+            let lastInitial = String(lastName.prefix(1)).uppercased()
+            return "\(firstInitial)\(lastInitial)"
+        } else if let displayName = firestoreService.currentUser?.display_name, !displayName.isEmpty {
+            let components = displayName.components(separatedBy: " ")
+            if components.count >= 2 {
+                let firstInitial = String(components[0].prefix(1)).uppercased()
+                let lastInitial = String(components[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else if components.count == 1 {
+                return String(components[0].prefix(1)).uppercased()
+            }
+        } else if let email = firestoreService.currentUser?.email {
+            return String(email.prefix(1)).uppercased()
+        }
+        return "U"
     }
     
     private func hasUnsavedChanges() -> Bool {
@@ -8801,7 +9138,8 @@ struct EditProfileView: View {
         
         return displayName != originalDisplayName || 
                firstName != originalFirstName || 
-               lastName != originalLastName
+               lastName != originalLastName ||
+               selectedImage != nil
     }
     
     private func saveChanges() {
@@ -8813,7 +9151,32 @@ struct EditProfileView: View {
             return
         }
         
-        // Update user profile in Firestore
+        // If there's a new profile image, upload it first
+        if let selectedImage = selectedImage {
+            firestoreService.uploadUserProfileImage(selectedImage) { success, error in
+                DispatchQueue.main.async {
+                    if success {
+                        print("✅ Profile image uploaded successfully")
+                        // Clear the selected image and update local URL
+                        self.selectedImage = nil
+                        self.profileImageUrl = self.firestoreService.currentUser?.profile_picture_url
+                        // Now update the text fields
+                        self.updateTextFields()
+                    } else {
+                        print("❌ Failed to upload profile image: \(error ?? "Unknown error")")
+                        self.isLoading = false
+                        // You could show an error alert here
+                    }
+                }
+            }
+        } else {
+            // No new image, just update text fields
+            updateTextFields()
+        }
+    }
+    
+    private func updateTextFields() {
+        // Update user profile text fields in Firestore
         let updateData: [String: Any] = [
             "display_name": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
             "first_name": firstName.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -11074,12 +11437,16 @@ struct CreateCommunityPage: View {
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
+        let inviteCode = UUID().uuidString.prefix(6).uppercased()
+        
+        SlingLogInfo("Generated 6-character invite code for community: \(trimmedName)")
+        
         let communityData: [String: Any] = [
             "name": trimmedName,
             "description": "A new betting community",
             "created_by": firestoreService.currentUser?.email ?? "",
             "created_date": Date(),
-            "invite_code": UUID().uuidString.prefix(8).uppercased(),
+            "invite_code": inviteCode,
             "member_count": 1,
             "bet_count": 0,
             "total_bets": 0,
@@ -14082,6 +14449,9 @@ struct EnhancedCommunityDetailView: View {
     @State private var showingLeaveAlert = false
     @State private var showingDeleteAlert = false
     
+    // Image picker state
+    @State private var showingImagePicker = false
+    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -14124,6 +14494,12 @@ struct EnhancedCommunityDetailView: View {
                     )
                 }
             }
+            .sheet(isPresented: $showingImagePicker) {
+                CommunityImagePicker(
+                    community: community,
+                    firestoreService: firestoreService
+                )
+            }
         }
     }
     
@@ -14164,16 +14540,57 @@ struct EnhancedCommunityDetailView: View {
                 
                 // Community Info - compact layout
                 VStack(spacing: 6) {
-                    // Avatar
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 56, height: 56)
-                        .overlay(
-                            Text(String(community.name.prefix(1)).uppercased())
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.slingBlue)
-                        )
+                    // Avatar - Tappable to change profile image
+                    Button(action: {
+                        showingImagePicker = true
+                    }) {
+                        ZStack {
+                            if let profileImageUrl = community.profile_image_url {
+                                // Show custom community image
+                                AsyncImage(url: URL(string: profileImageUrl)) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Circle()
+                                        .fill(Color.white)
+                                        .overlay(
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
+                                        )
+                                }
+                                .frame(width: 56, height: 56)
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                            } else {
+                                // Show community initials
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 56, height: 56)
+                                    .overlay(
+                                        Text(String(community.name.prefix(1)).uppercased())
+                                            .font(.title2)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.slingBlue)
+                                    )
+                            }
+                            
+                            // Camera overlay indicator
+                            Circle()
+                                .fill(Color.black.opacity(0.5))
+                                .frame(width: 56, height: 56)
+                                .overlay(
+                                    Image(systemName: "camera.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                )
+                                .opacity(0) // Hidden by default, could add hover effect later
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
                     
                     // Community Name with Admin Badge
                     HStack(spacing: 8) {
@@ -14483,62 +14900,120 @@ struct EnhancedCommunityDetailView: View {
         private var membersTab: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
+                // Leaderboard Header
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Leaderboard")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                        
+                        Text("Members ranked by net points")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "trophy.fill")
+                        .font(.title2)
+                        .foregroundColor(.slingBlue)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+                
                 if let membersWithPoints = membersWithPoints {
                     let sortedMembers = membersWithPoints.sorted { $0.netPoints > $1.netPoints }
-                    ForEach(Array(sortedMembers.enumerated()), id: \.element.id) { index, memberWithPoints in
-                        MemberRowView(
-                            memberWithPoints: memberWithPoints,
-                            rank: index + 1,
-                            onTap: {
-                                selectedMemberForProfile = memberWithPoints
-                                showingTradingProfile = true
-                            }
-                        )
+                    // Always show leaderboard even with just one member
+                    if !sortedMembers.isEmpty {
+                        ForEach(Array(sortedMembers.enumerated()), id: \.element.id) { index, memberWithPoints in
+                            MemberRowView(
+                                memberWithPoints: memberWithPoints,
+                                rank: index + 1,
+                                onTap: {
+                                    selectedMemberForProfile = memberWithPoints
+                                    showingTradingProfile = true
+                                }
+                            )
+                        }
+                    } else {
+                        // Show empty state if no members loaded
+                        VStack(spacing: 16) {
+                            Image(systemName: "person.2")
+                                .font(.system(size: 48))
+                                .foregroundColor(Color.slingBlue.opacity(0.6))
+                            
+                            Text("Loading Members...")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.black)
+                        }
+                        .padding(.top, 60)
                     }
                 } else {
                     // Fallback to basic member display if advanced loading fails
-                ForEach(0..<community.member_count, id: \.self) { index in
-                        HStack(spacing: 12) {
+                    // Always show leaderboard even with just one member
+                    ForEach(0..<max(1, community.member_count), id: \.self) { index in
+                        HStack(spacing: 16) {
+                            // Rank Badge
+                            ZStack {
+                                Circle()
+                                    .fill(index == 0 ? Color.slingBlue : Color.gray.opacity(0.3))
+                                    .frame(width: 32, height: 32)
+                                
+                                Text("\(index + 1)")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(index == 0 ? .white : .gray)
+                            }
+                            
                             // Profile Picture
                             Circle()
                                 .fill(AnyShapeStyle(Color.slingGradient))
-                                .frame(width: 40, height: 40)
+                                .frame(width: 48, height: 48)
                                 .overlay(
                                     Text("M\(index + 1)")
-                                        .font(.caption)
+                                        .font(.subheadline)
                                         .fontWeight(.semibold)
                                         .foregroundColor(.white)
                                 )
                             
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 4) {
                                 Text("Member \(index + 1)")
-                                    .font(.subheadline)
+                                    .font(.headline)
                                     .fontWeight(.medium)
                                     .foregroundColor(.black)
+                                
+                                Text("Loading points...")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
                             }
                             
                             Spacer()
                             
                             // Placeholder for net points
-                            HStack(spacing: 4) {
-                                Image(systemName: "bolt.fill")
+                            VStack(alignment: .trailing, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "bolt.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.slingBlue)
+                                    
+                                    Text("--")
+                                        .font(.headline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                Text("Net Points")
                                     .font(.caption)
                                     .foregroundColor(.gray)
-                                
-                                Text("--")
-                                    .font(.subheadline)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.gray)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.gray.opacity(0.1))
-                            .cornerRadius(8)
                         }
                         .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 16)
                         .background(Color.white)
                         .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
                     }
                 }
             }
@@ -15331,16 +15806,36 @@ struct TradingProfileView: View {
             // User Info Card
                     VStack(spacing: 16) {
                 HStack(spacing: 16) {
-                    // Avatar
+                    // Avatar - User Profile Picture or Initials
+                    if let profilePictureUrl = userData?.profile_picture_url {
+                        // Show user's profile picture
+                        AsyncImage(url: URL(string: profilePictureUrl)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
                             Circle()
                                 .fill(Color.white)
-                        .frame(width: 56, height: 56)
                                 .overlay(
-                                    Text(String(userName.prefix(1)).uppercased())
-                                .font(.title2)
-                                        .fontWeight(.bold)
-                                .foregroundColor(.slingBlue)
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
+                                        .scaleEffect(0.8)
                                 )
+                        }
+                        .frame(width: 56, height: 56)
+                        .clipShape(Circle())
+                    } else {
+                        // Fallback to initials
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 56, height: 56)
+                            .overlay(
+                                Text(String(userName.prefix(1)).uppercased())
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.slingBlue)
+                            )
+                    }
                             
                     VStack(alignment: .leading, spacing: 4) {
                         // User Name
@@ -19287,6 +19782,454 @@ struct NotificationSettingsView: View {
                     self.isNotificationsMuted.toggle()
                 }
             }
+        }
+    }
+}
+
+// MARK: - Community Image Picker Component
+
+struct CommunityImagePicker: View {
+    let community: FirestoreCommunity
+    @ObservedObject var firestoreService: FirestoreService
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedItem: PhotosPickerItem? = nil
+    @State private var selectedImage: UIImage? = nil
+    @State private var isUploading = false
+    @State private var showingCamera = false
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                
+                // Header
+                VStack(spacing: 16) {
+                    Text("Change Community Icon")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Text("Choose a new profile picture for \(community.name)")
+                        .font(.body)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+                .padding(.top, 20)
+                
+                // Current Image Preview
+                VStack(spacing: 16) {
+                    if let selectedImage = selectedImage {
+                        // Show selected image
+                        Image(uiImage: selectedImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 120, height: 120)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                    } else if let profileImageUrl = community.profile_image_url {
+                        // Show current community image
+                        AsyncImage(url: URL(string: profileImageUrl)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.gray.opacity(0.2))
+                                .overlay(
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .gray))
+                                )
+                        }
+                        .frame(width: 120, height: 120)
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    } else {
+                        // Show community initials
+                        Circle()
+                            .fill(Color.slingLightBlue)
+                            .frame(width: 120, height: 120)
+                            .overlay(
+                                Text(String(community.name.prefix(1)).uppercased())
+                                    .font(.title)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.slingBlue)
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                    
+                    Text("Current Profile Picture")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                // Image Selection Options
+                VStack(spacing: 16) {
+                    // Photo Library Button
+                    PhotosPicker(
+                        selection: $selectedItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        HStack(spacing: 16) {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.title2)
+                                .foregroundColor(.slingBlue)
+                                .frame(width: 24, height: 24)
+                            
+                            Text("Choose from Photo Library")
+                                .font(.headline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.headline)
+                                .foregroundColor(.gray.opacity(0.6))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    }
+                    
+                    // Camera Button
+                    Button(action: {
+                        showingCamera = true
+                    }) {
+                        HStack(spacing: 16) {
+                            Image(systemName: "camera")
+                                .font(.title2)
+                                .foregroundColor(.slingBlue)
+                                .frame(width: 24, height: 24)
+                            
+                            Text("Take a Photo")
+                                .font(.headline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.headline)
+                                .foregroundColor(.gray.opacity(0.6))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    }
+                }
+                .padding(.horizontal, 24)
+                
+                Spacer()
+                
+                // Upload Button
+                if selectedImage != nil {
+                    Button(action: uploadImage) {
+                        HStack(spacing: 8) {
+                            if isUploading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.2)
+                            } else {
+                                Text("Update Profile Picture")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(Color.slingGradient)
+                    .cornerRadius(16)
+                    .shadow(color: Color.slingBlue.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .disabled(isUploading)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 20)
+                }
+            }
+            .background(Color.gray.opacity(0.05))
+            .navigationBarHidden(true)
+            .overlay(
+                // Custom navigation bar
+                VStack {
+                    HStack {
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.title2)
+                                .foregroundColor(.black)
+                                .frame(width: 44, height: 44)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    
+                    Spacer()
+                },
+                alignment: .top
+            )
+        }
+        .onChange(of: selectedItem) { newItem in
+            Task {
+                if let newItem = newItem {
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       let uiImage = UIImage(data: data) {
+                        selectedImage = uiImage
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingCamera) {
+            CameraView { image in
+                selectedImage = image
+                showingCamera = false
+            }
+        }
+        .alert("Error", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
+        }
+    }
+    
+    private func uploadImage() {
+        guard let image = selectedImage,
+              let communityId = community.id else { return }
+        
+        isUploading = true
+        
+        firestoreService.uploadCommunityImage(image, communityId: communityId) { success, error in
+            DispatchQueue.main.async {
+                isUploading = false
+                
+                if success {
+                    dismiss()
+                } else {
+                    errorMessage = error ?? "Failed to upload image"
+                    showingErrorAlert = true
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Camera View
+
+struct CameraView: UIViewControllerRepresentable {
+    let onImageCaptured: (UIImage) -> Void
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: CameraView
+        
+        init(_ parent: CameraView) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImageCaptured(image)
+            }
+        }
+        
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            picker.dismiss(animated: true)
+        }
+    }
+}
+
+// MARK: - User Image Picker
+
+struct UserImagePicker: View {
+    @Binding var selectedImage: UIImage?
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedItem: PhotosPickerItem? = nil
+    @State private var showingCamera = false
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 32) {
+                // Header
+                VStack(spacing: 16) {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(.slingBlue)
+                    
+                    Text("Choose Profile Picture")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Text("Select from your photos or take a new picture")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 20)
+                
+                // Preview section
+                if let selectedImage = selectedImage {
+                    VStack(spacing: 16) {
+                        Text("Preview")
+                            .font(.headline)
+                            .foregroundColor(.black)
+                        
+                        Image(uiImage: selectedImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 120, height: 120)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.slingBlue, lineWidth: 3)
+                            )
+                    }
+                }
+                
+                // Action buttons
+                VStack(spacing: 16) {
+                    // Photo Library Button
+                    PhotosPicker(selection: $selectedItem, matching: .images, photoLibrary: .shared()) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.title3)
+                                .foregroundColor(.slingBlue)
+                            
+                            Text("Choose from Photos")
+                                .font(.headline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(
+                            RoundedRectangle(cornerRadius: 28)
+                                .fill(Color.slingLightBlue)
+                        )
+                    }
+                    
+                    // Camera Button
+                    Button(action: {
+                        showingCamera = true
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "camera")
+                                .font(.title3)
+                                .foregroundColor(.white)
+                            
+                            Text("Take Photo")
+                                .font(.headline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(
+                            RoundedRectangle(cornerRadius: 28)
+                                .fill(Color.slingBlue)
+                        )
+                    }
+                }
+                .padding(.horizontal, 20)
+                
+                Spacer()
+            }
+            .padding(.top, 20)
+            .background(Color.white)
+            .navigationBarHidden(true)
+            .overlay(
+                // Close button
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: { dismiss() }) {
+                            Image(systemName: "xmark")
+                                .font(.title3)
+                                .fontWeight(.medium)
+                                .foregroundColor(.gray)
+                                .frame(width: 32, height: 32)
+                                .background(Circle().fill(Color.gray.opacity(0.1)))
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.top, 20)
+                    }
+                    Spacer()
+                },
+                alignment: .top
+            )
+        }
+        .onChange(of: selectedItem) { _ in
+            Task {
+                if let newItem = selectedItem {
+                    do {
+                        if let data = try await newItem.loadTransferable(type: Data.self),
+                           let image = UIImage(data: data) {
+                            await MainActor.run {
+                                selectedImage = image
+                                dismiss()
+                            }
+                        }
+                    } catch {
+                        await MainActor.run {
+                            errorMessage = "Failed to load image"
+                            showingErrorAlert = true
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingCamera) {
+            CameraView { image in
+                selectedImage = image
+                showingCamera = false
+                dismiss()
+            }
+        }
+        .alert("Error", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
         }
     }
 }
