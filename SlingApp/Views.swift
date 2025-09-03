@@ -618,7 +618,7 @@ struct WelcomeCard: View {
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                 
-                Text("Get started by joining or creating a community. Connect with friends and start predicting!")
+                Text("Get started by joining or creating your first community!")
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.9))
                     .multilineTextAlignment(.center)
@@ -858,70 +858,32 @@ struct EmptyPastBetsView: View {
 
 struct EmptyCommunitiesView: View {
     let firestoreService: FirestoreService
-    @State private var showingJoinCommunityModal = false
-    @State private var showingCreateCommunityModal = false
     
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "person.2")
-                .font(.system(size: 48))
-                .foregroundColor(.gray.opacity(0.6))
+        VStack(spacing: 0) {
+            Spacer()
             
-            Text("No communities yet")
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.black)
-            
-            Text("Create your first community or join an existing one to get started.")
-                .font(.subheadline)
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-            
-            VStack(spacing: 12) {
-                Button(action: {
-                    showingCreateCommunityModal = true
-                }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus")
-                            .font(.subheadline)
-                        Text("Create Community")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.slingGradient)
-                    .cornerRadius(10)
-                }
+            VStack(spacing: 16) {
+                Image(systemName: "person.2")
+                    .font(.system(size: 48))
+                    .foregroundColor(.gray.opacity(0.6))
                 
-                Button(action: {
-                    showingJoinCommunityModal = true
-                }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "person.2")
-                            .font(.subheadline)
-                        Text("Join Community")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.slingGradient)
-                    .cornerRadius(10)
-                }
+                Text("No communities yet")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                
+                Text("Create your first community or join an existing one to get started.")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
             }
+            
+            Spacer()
         }
-        .padding(.horizontal, 16)
-        .sheet(isPresented: $showingJoinCommunityModal) {
-            JoinCommunityPage(firestoreService: firestoreService)
-        }
-        .sheet(isPresented: $showingCreateCommunityModal) {
-            CreateCommunityPage(firestoreService: firestoreService)
-        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
     }
 }
 

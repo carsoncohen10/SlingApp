@@ -383,15 +383,34 @@ struct HomeHeaderView: View {
             
             // Profile Avatar
             Button(action: onProfileTap) {
-                Circle()
-                    .fill(AnyShapeStyle(Color.slingGradient))
+                if let profilePictureURL = firestoreService.currentUser?.profile_picture_url, !profilePictureURL.isEmpty {
+                    AsyncImage(url: URL(string: profilePictureURL)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .overlay(
+                                Text(getUserInitials())
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                    }
                     .frame(width: 32, height: 32)
-                    .overlay(
-                        Text(getUserInitials())
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                    )
+                    .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(AnyShapeStyle(Color.slingGradient))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Text(getUserInitials())
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        )
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -530,7 +549,7 @@ struct HomeView: View {
                                         .fontWeight(.bold)
                                         .foregroundColor(.black)
                                     
-                                    Text("Get started by joining or creating a community. Connect with friends and start predicting!")
+                                    Text("Get started by joining or creating your first community!")
                                         .font(.subheadline)
                                         .foregroundColor(.gray)
                                         .multilineTextAlignment(.center)
@@ -679,8 +698,8 @@ struct HomeView: View {
                                 }
                             }
                             
-                            // Show separator and other community bets if filtering by a specific community
-                            if selectedFilter != "All Bets" {
+                            // Show separator and other community bets if filtering by a specific community AND there are primary bets
+                            if selectedFilter != "All Bets" && !primaryBets.isEmpty {
                                 // Separator
                                 VStack(spacing: 12) {
                                     HStack {

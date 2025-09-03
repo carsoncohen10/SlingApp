@@ -5,6 +5,13 @@ import AuthenticationServices
 import CryptoKit
 import GoogleSignIn
 
+// MARK: - Global Utility Functions
+
+// Function to format display name by removing spaces
+func formatDisplayName(_ name: String) -> String {
+    return name.replacingOccurrences(of: " ", with: "")
+}
+
 struct ContentView: View {
     @StateObject var firestoreService = FirestoreService()
     @State private var hasShownLoading = false
@@ -70,11 +77,6 @@ struct AuthenticationView: View {
                 errorMessage = ""
             }
         }
-    }
-    
-    // Function to format display name by removing spaces
-    private func formatDisplayName(_ name: String) -> String {
-        return name.replacingOccurrences(of: " ", with: "")
     }
     
     var body: some View {
@@ -268,15 +270,35 @@ struct AuthenticationView: View {
                         }
                         .padding(.top, 8)
                         
-                        Spacer()
+                        // Legal disclaimer - moved up and improved
+                        HStack(spacing: 4) {
+                            Text("By continuing, you agree to our")
+                                .font(.caption)
+                                .foregroundColor(.gray.opacity(0.6))
+                            
+                            Button(action: {
+                                // Open terms of service
+                                if let url = URL(string: "https://slingapp.com/terms") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }) {
+                                HStack(spacing: 2) {
+                                    Text("terms of service")
+                                        .font(.caption)
+                                        .foregroundColor(.slingBlue)
+                                        .underline()
+                                    
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray.opacity(0.6))
+                                }
+                            }
+                        }
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 24)
                         
-                        // Legal disclaimer moved much further down
-                        Text("By continuing, you acknowledge and agree to Sling's terms of service")
-                            .font(.caption)
-                            .foregroundColor(.gray.opacity(0.5))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                            .padding(.bottom, 40)
+                        Spacer(minLength: 40)
                     }
                     .padding(.top, 60) // Move everything down more
                 }
@@ -477,9 +499,15 @@ struct AuthenticationView: View {
         let rawDisplayName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = formatDisplayName(rawDisplayName.isEmpty ? "User" : rawDisplayName)
         
-        // Apple Sign-In doesn't provide gender or profile picture
+        // Apple Sign-In doesn't provide gender, and rarely provides profile picture
         let gender: String? = nil
-        let profilePictureURL: String? = nil
+        var profilePictureURL: String? = nil
+        
+        // Check if Firebase user has a photoURL (rarely available with Apple Sign-In)
+        if let photoURL = firebaseUser.photoURL?.absoluteString {
+            profilePictureURL = photoURL
+            print("🍎 Apple profile picture URL: \(profilePictureURL ?? "nil")")
+        }
         
         // Log the data being collected from Apple
         print("🍎 Apple Sign-In Data Collected:")
@@ -494,16 +522,16 @@ struct AuthenticationView: View {
         
         let userProfile = FirestoreUser(
             documentId: nil,
-            blitz_points: nil,
+            blitz_points: 10000, // Give new users starting points
             display_name: displayName.isEmpty ? "User" : displayName,
             email: firebaseUser.email ?? "",
             first_name: firstName,
-            full_name: displayName.isEmpty ? "User" : displayName,
+            full_name: rawDisplayName.isEmpty ? "User" : rawDisplayName,
             last_name: lastName,
             gender: gender,
             profile_picture_url: profilePictureURL,
-            total_bets: nil,
-            total_winnings: nil,
+            total_bets: 0, // Initialize betting statistics
+            total_winnings: 0, // Initialize winnings
             id: firebaseUser.uid,
             uid: firebaseUser.uid,
             sling_points: nil
@@ -789,8 +817,14 @@ struct AuthenticationView: View {
         let displayName = formatDisplayName(rawDisplayName)
         
         // Get profile picture URL if available
-        // Profile picture not available in current Google Sign-In SDK version
-        let profilePictureURL: String? = nil
+        var profilePictureURL: String? = nil
+        
+        // Check if Firebase user has a photoURL (this comes from Google Sign-In)
+        if let photoURL = firebaseUser.photoURL?.absoluteString {
+            // Request higher resolution by replacing s96-c with s400-c for better quality
+            profilePictureURL = photoURL.replacingOccurrences(of: "s96-c", with: "s400-c")
+            print("🔗 Google profile picture URL: \(profilePictureURL ?? "nil")")
+        }
         
         // Note: Google doesn't provide gender information through their basic profile
         // This will remain nil for Google Sign-In users
@@ -809,16 +843,16 @@ struct AuthenticationView: View {
         
         let userProfile = FirestoreUser(
             documentId: nil,
-            blitz_points: nil,
+            blitz_points: 10000, // Give new users starting points
             display_name: displayName,
             email: firebaseUser.email ?? "",
             first_name: firstName,
-            full_name: displayName,
+            full_name: fullName.isEmpty ? "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces) : fullName,
             last_name: lastName,
             gender: gender,
             profile_picture_url: profilePictureURL,
-            total_bets: nil,
-            total_winnings: nil,
+            total_bets: 0, // Initialize betting statistics
+            total_winnings: 0, // Initialize winnings
             id: firebaseUser.uid,
             uid: firebaseUser.uid,
             sling_points: nil
@@ -1051,13 +1085,34 @@ struct EmailAuthenticationView: View {
                         .padding(.horizontal, 24)
                         .padding(.bottom, 20)
                         
-                        // Terms of service text
-                        Text("By continuing, you acknowledge and agree to Sling's terms of service")
-                            .font(.caption)
-                            .foregroundColor(.gray.opacity(0.6))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                            .padding(.bottom, 40)
+                        // Legal disclaimer - moved up and improved
+                        HStack(spacing: 4) {
+                            Text("By continuing, you agree to our")
+                                .font(.caption)
+                                .foregroundColor(.gray.opacity(0.6))
+                            
+                            Button(action: {
+                                // Open terms of service
+                                if let url = URL(string: "https://slingapp.com/terms") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }) {
+                                HStack(spacing: 2) {
+                                    Text("terms of service")
+                                        .font(.caption)
+                                        .foregroundColor(.slingBlue)
+                                        .underline()
+                                    
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray.opacity(0.6))
+                                }
+                            }
+                        }
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 16)
+                        .padding(.bottom, 40)
                     }
                 }
                 

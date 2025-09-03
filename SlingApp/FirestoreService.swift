@@ -250,6 +250,9 @@ class FirestoreService: ObservableObject {
     // MARK: - Authentication Methods
     
     func signUp(email: String, password: String, firstName: String, lastName: String, displayName: String, completion: @escaping (Bool, String?) -> Void) {
+        // Format display name to remove spaces
+        let formattedDisplayName = displayName.replacingOccurrences(of: " ", with: "")
+        
         Auth.auth().createUser(withEmail: email, password: password) { [weak self] result, error in
             if let error = error {
                 completion(false, error.localizedDescription)
@@ -265,7 +268,7 @@ class FirestoreService: ObservableObject {
             let userData = FirestoreUser(
                 documentId: user.uid,
                 blitz_points: 10000,
-                display_name: displayName,
+                display_name: formattedDisplayName,
                 email: email,
                 first_name: firstName,
                 full_name: "\(firstName) \(lastName)",
@@ -1597,51 +1600,33 @@ class FirestoreService: ObservableObject {
     }
     
     private func createSampleNotifications(for userEmail: String) {
-        print("🔍 createSampleNotifications: Creating sample notifications for \(userEmail)")
+        print("🔍 createSampleNotifications: Creating welcome notification for \(userEmail)")
         
-        // Create a few sample notifications to demonstrate the system
-        let sampleNotifications = [
-            (
-                title: "Welcome to Sling! 🎉",
-                message: "Thanks for joining! Start exploring communities and placing bets.",
-                type: "welcome",
-                icon: "bell"
-            ),
-            (
-                title: "Community Update 📢",
-                message: "New members have joined your communities this week.",
-                type: "community_update",
-                icon: "person.2"
-            ),
-            (
-                title: "Betting Tip 💡",
-                message: "Remember to check the odds before placing your bets!",
-                type: "tip",
-                icon: "lightbulb"
-            )
-        ]
+        // Create a focused welcome notification for new users
+        let welcomeNotification = (
+            title: "Welcome to Sling! 🎉",
+            message: "Join or create a community to start placing bets with friends!",
+            type: "welcome",
+            icon: "person.2.circle"
+        )
         
-        for (index, notification) in sampleNotifications.enumerated() {
-            // Add a small delay between notifications to avoid overwhelming the system
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.5) {
-                self.createNotification(
-                    for: userEmail,
-                    title: notification.title,
-                    message: notification.message,
-                    type: notification.type,
-                    icon: notification.icon,
-                    communityId: nil,
-                    communityName: nil,
-                    communityIcon: nil
-                ) { success in
-                    if success {
-                        print("✅ Created sample notification: \(notification.title)")
-                    } else {
-                        print("❌ Failed to create sample notification: \(notification.title)")
-                    }
-                }
-                }
+        // Create the single welcome notification
+        self.createNotification(
+            for: userEmail,
+            title: welcomeNotification.title,
+            message: welcomeNotification.message,
+            type: welcomeNotification.type,
+            icon: welcomeNotification.icon,
+            communityId: nil,
+            communityName: nil,
+            communityIcon: nil
+        ) { success in
+            if success {
+                print("✅ Created welcome notification: \(welcomeNotification.title)")
+            } else {
+                print("❌ Failed to create welcome notification: \(welcomeNotification.title)")
             }
+        }
     }
     
     func fetchTransactions(communityId: String, userEmail: String, completion: @escaping ([BetParticipant]) -> Void) {
