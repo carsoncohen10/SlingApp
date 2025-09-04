@@ -384,22 +384,48 @@ struct HomeHeaderView: View {
             // Profile Avatar
             Button(action: onProfileTap) {
                 if let profilePictureURL = firestoreService.currentUser?.profile_picture_url, !profilePictureURL.isEmpty {
-                    AsyncImage(url: URL(string: profilePictureURL)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Circle()
-                            .fill(AnyShapeStyle(Color.slingGradient))
-                            .overlay(
-                                Text(getUserInitials())
-                                    .font(.subheadline)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                            )
+                    AsyncImage(url: URL(string: profilePictureURL)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 32, height: 32)
+                                .clipShape(Circle())
+                        case .failure(_):
+                            // Fallback to initials on error
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Text(getUserInitials())
+                                        .font(.subheadline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                )
+                        case .empty:
+                            // Show initials while loading
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Text(getUserInitials())
+                                        .font(.subheadline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                )
+                        @unknown default:
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Text(getUserInitials())
+                                        .font(.subheadline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                )
+                        }
                     }
-                    .frame(width: 32, height: 32)
-                    .clipShape(Circle())
                 } else {
                     Circle()
                         .fill(AnyShapeStyle(Color.slingGradient))

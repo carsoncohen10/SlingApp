@@ -103,7 +103,7 @@ class FirestoreService: ObservableObject {
                             self?.currentUser = user
                         } catch {
                             print("❌ Error decoding user: \(error)")
-                            self?.logFirebaseError(message: "Failed to decode user from Firestore", firebaseError: error)
+                            SlingLogError("Failed to decode user from Firestore", error: error)
                         }
                         
                         // Fetch user bet participations when user is loaded
@@ -365,7 +365,7 @@ class FirestoreService: ObservableObject {
             print("✅ User signed out successfully and local state cleaned up")
         } catch {
             print("❌ Error signing out: \(error.localizedDescription)")
-            logFirebaseError(message: "Failed to sign out user", firebaseError: error)
+            SlingLogError("Failed to sign out user", error: error)
             
             // If there was an error, restore the authentication state
             DispatchQueue.main.async {
@@ -489,7 +489,7 @@ class FirestoreService: ObservableObject {
         db.collection("community").getDocuments { snapshot, error in
             if let error = error {
                 print("❌ Error fetching communities: \(error.localizedDescription)")
-                self.logFirebaseError(message: "Failed to fetch communities", firebaseError: error)
+                SlingLogError("Failed to fetch communities", error: error)
                 return
             }
 
@@ -1556,6 +1556,12 @@ class FirestoreService: ObservableObject {
     }
     
     private func createBetCreatedNotificationsForCommunity(communityId: String, betTitle: String, excludeUser: String) {
+        // Safety check to prevent empty document path
+        guard !communityId.isEmpty else {
+            print("❌ createBetCreatedNotificationsForCommunity: Community ID is empty")
+            return
+        }
+        
         // Get all community members
         db.collection("CommunityMember")
             .whereField("community_id", isEqualTo: communityId)
@@ -1571,6 +1577,11 @@ class FirestoreService: ObservableObject {
                 }
                 
                 // Get community name for the notification
+                guard !communityId.isEmpty else {
+                    print("❌ createBetCreatedNotificationsForCommunity: Cannot fetch community with empty ID")
+                    return
+                }
+                
                 self?.db.collection("community").document(communityId).getDocument { communityDoc, communityError in
                     guard let communityDoc = communityDoc, communityDoc.exists,
                           let communityData = communityDoc.data(),
@@ -2143,12 +2154,15 @@ class FirestoreService: ObservableObject {
                 
                 // Create notifications for all community members about the new bet
                 if let communityId = betData["community_id"] as? String,
-                   let betTitle = betData["title"] as? String {
+                   let betTitle = betData["title"] as? String,
+                   !communityId.isEmpty {
                     self?.createBetCreatedNotificationsForCommunity(
                         communityId: communityId,
                         betTitle: betTitle,
                         excludeUser: self?.currentUser?.email ?? ""
                     )
+                } else {
+                    print("⚠️ Warning: Cannot create bet notifications - community ID is missing or empty")
                 }
                 
                 completion(true, betId)
@@ -2174,38 +2188,57 @@ class FirestoreService: ObservableObject {
     }
     
     func joinCommunity(inviteCode: String, completion: @escaping (Bool, String?) -> Void) {
+        print("🔍 FirestoreService.joinCommunity: Starting with code: '\(inviteCode)'")
+        
         guard let userEmail = currentUser?.email,
               let userId = currentUser?.id else {
+            print("❌ FirestoreService.joinCommunity: User not authenticated")
             completion(false, "User not authenticated")
             return
         }
         
+        print("🔍 FirestoreService.joinCommunity: User authenticated - Email: \(userEmail), ID: \(userId)")
+        
         // Validate invite code length
         guard inviteCode.count == 6 else {
+            print("❌ FirestoreService.joinCommunity: Invalid code length - \(inviteCode.count) characters")
             completion(false, "Invite code must be exactly 6 characters")
             return
         }
+        
+        print("🔍 FirestoreService.joinCommunity: Searching for community with invite code: '\(inviteCode)'")
         
         // Find community by invite code
         db.collection("community")
             .whereField("invite_code", isEqualTo: inviteCode)
             .getDocuments { [weak self] snapshot, error in
                 if let error = error {
+                    print("❌ FirestoreService.joinCommunity: Firestore query error: \(error.localizedDescription)")
                     completion(false, error.localizedDescription)
                     return
                 }
                 
+                print("🔍 FirestoreService.joinCommunity: Query returned \(snapshot?.documents.count ?? 0) documents")
+                
                 guard let document = snapshot?.documents.first else {
+                    print("❌ FirestoreService.joinCommunity: No community found with invite code: '\(inviteCode)'")
                     completion(false, "Invalid invite code")
                     return
                 }
                 
+                print("✅ FirestoreService.joinCommunity: Found community document: \(document.documentID)")
+                
                 // Extract the actual community ID from the document data, not the document ID
                 let communityData = document.data()
+                print("🔍 FirestoreService.joinCommunity: Community data: \(communityData)")
+                
                 guard let communityId = communityData["id"] as? String else {
+                    print("❌ FirestoreService.joinCommunity: Community document missing ID field")
                     completion(false, "Community document missing ID field")
                     return
                 }
+                
+                print("🔍 FirestoreService.joinCommunity: Community ID: \(communityId)")
                 
                 // Check if user is already a member of this community
                 let documentId = "\(communityId)_\(userEmail)"
@@ -2274,6 +2307,16 @@ class FirestoreService: ObservableObject {
         // Create the community document
         let documentRef = db.collection("community").addDocument(data: communityData)
         let communityId = documentRef.documentID
+        
+        // Update the document to include the community ID
+        documentRef.updateData(["id": communityId]) { updateError in
+            if let updateError = updateError {
+                print("⚠️ Warning: Could not update community with ID field: \(updateError.localizedDescription)")
+                // Continue anyway as this is not critical
+            } else {
+                print("✅ Community document updated with ID: \(communityId)")
+            }
+        }
         
         // Automatically add the creator as a member with admin privileges
         let memberData: [String: Any] = [
@@ -2655,11 +2698,21 @@ class FirestoreService: ObservableObject {
     }
     
     func markNotificationAsRead(notificationId: String, completion: @escaping (Bool) -> Void) {
-        db.collection("Notification").document(notificationId).updateData(["is_read": true]) { error in
+        db.collection("Notification").document(notificationId).updateData(["is_read": true]) { [weak self] error in
             if let error = error {
                 print("❌ Error marking notification as read: \(error.localizedDescription)")
                 completion(false)
             } else {
+                print("✅ Successfully marked notification as read: \(notificationId)")
+                
+                // Update the local notifications array to reflect the read status
+                DispatchQueue.main.async {
+                    if let index = self?.notifications.firstIndex(where: { $0.id == notificationId }) {
+                        self?.notifications[index].is_read = true
+                        print("🔍 Updated local notification array - marked notification \(notificationId) as read")
+                    }
+                }
+                
                 completion(true)
             }
         }
@@ -3576,13 +3629,16 @@ class FirestoreService: ObservableObject {
             
             let storage = Storage.storage()
             let storageRef = storage.reference()
+            
             let imageRef = storageRef.child("community_images/\(communityId)_\(UUID().uuidString).jpg")
+            print("🔍 Community storage bucket: \(storageRef.bucket)")
+            print("🔍 Community full path: \(imageRef.fullPath)")
             
             // Upload image
             imageRef.putData(imageData, metadata: nil) { [weak self] metadata, error in
                 if let error = error {
                     print("❌ Error uploading community image: \(error)")
-                    self?.logFirebaseError(message: "Failed to upload community image to Firebase Storage", firebaseError: error)
+                    SlingLogError("Failed to upload community image to Firebase Storage", error: error)
                     completion(false, "Failed to upload image: \(error.localizedDescription)")
                     return
                 }
@@ -3591,7 +3647,7 @@ class FirestoreService: ObservableObject {
                 imageRef.downloadURL { [weak self] url, error in
                     if let error = error {
                         print("❌ Error getting download URL: \(error)")
-                        self?.logFirebaseError(message: "Failed to get download URL for community image", firebaseError: error)
+                        SlingLogError("Failed to get download URL for community image", error: error)
                         completion(false, "Failed to get image URL: \(error.localizedDescription)")
                         return
                     }
@@ -3615,13 +3671,13 @@ class FirestoreService: ObservableObject {
         ]) { [weak self] error in
             if let error = error {
                 print("❌ Error updating community profile image: \(error)")
-                self?.logFirebaseError(message: "Failed to update community profile image in Firestore", firebaseError: error)
+                SlingLogError("Failed to update community profile image in Firestore", error: error)
                 completion(false, "Failed to update community: \(error.localizedDescription)")
                 return
             }
             
             print("✅ Successfully updated community profile image")
-            self?.logUserAction(action: "Updated community profile image", details: "Community ID: \(communityId)")
+            SlingLogInfo("User Action: Updated community profile image - Community ID: \(communityId)")
             
             // Update local community data
             DispatchQueue.main.async {
@@ -3647,30 +3703,68 @@ class FirestoreService: ObservableObject {
             return
         }
         
+        print("🔍 Starting user profile image upload for user: \(currentUserEmail)")
+        
+        // Debug: Check Firebase Auth state
+        if let authUser = Auth.auth().currentUser {
+            print("🔒 Firebase Auth - User: \(authUser.email ?? "no email"), UID: \(authUser.uid)")
+            print("🔒 Firebase Auth - Is anonymous: \(authUser.isAnonymous)")
+            print("🔒 Firebase Auth - Email verified: \(authUser.isEmailVerified)")
+        } else {
+            print("❌ No Firebase Auth user found - uploads will fail!")
+        }
+        
         // Compress image
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {
             completion(false, "Failed to process image")
             return
         }
         
+        print("📷 Image compressed successfully, size: \(imageData.count) bytes")
+        
         let storage = Storage.storage()
         let storageRef = storage.reference()
-        let imageRef = storageRef.child("user_profile_images/\(userId)_\(UUID().uuidString).jpg")
         
-        // Upload image
-        imageRef.putData(imageData, metadata: nil) { [weak self] metadata, error in
-            if let error = error {
-                print("❌ Error uploading user profile image: \(error)")
-                self?.logFirebaseError(message: "User profile image upload failed", firebaseError: error)
-                completion(false, error.localizedDescription)
-                return
-            }
+        let fileName = "\(userId)_\(UUID().uuidString).jpg"
+        let imageRef = storageRef.child("user_profile_images/\(fileName)")
+        
+        print("📤 Uploading to path: user_profile_images/\(fileName)")
+        print("🔍 Storage bucket: \(storageRef.bucket)")
+        print("🔍 Full path: \(imageRef.fullPath)")
+        
+        // Create metadata
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        
+        // Upload image with retry logic
+        func attemptUpload(retryCount: Int = 0) {
+            let uploadTask = imageRef.putData(imageData, metadata: metadata) { [weak self] metadata, error in
+                if let error = error {
+                    print("❌ Error uploading user profile image (attempt \(retryCount + 1)): \(error)")
+                    print("🔍 Error domain: \(error._domain), code: \(error._code)")
+                    
+                    // If it's a 404 error and we haven't retried yet, try once more
+                    if error._code == -13010 && retryCount < 1 {
+                        print("🔄 Retrying upload due to 404 error...")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            attemptUpload(retryCount: retryCount + 1)
+                        }
+                        return
+                    }
+                    
+                    SlingLogError("User profile image upload failed", error: error)
+                    completion(false, error.localizedDescription)
+                    return
+                }
+            
+            print("✅ Image uploaded successfully, getting download URL...")
             
             // Get download URL
             imageRef.downloadURL { [weak self] url, error in
                 if let error = error {
                     print("❌ Error getting user profile image download URL: \(error)")
-                    self?.logFirebaseError(message: "Getting user profile image URL failed", firebaseError: error)
+                    print("🔍 Download URL error domain: \(error._domain), code: \(error._code)")
+                    SlingLogError("Getting user profile image URL failed", error: error)
                     completion(false, error.localizedDescription)
                     return
                 }
@@ -3687,28 +3781,74 @@ class FirestoreService: ObservableObject {
                 self?.updateUserProfileImage(imageUrl: imageUrlString, completion: completion)
             }
         }
+        
+        // Monitor upload progress
+        uploadTask.observe(.progress) { snapshot in
+            let percentComplete = 100.0 * Double(snapshot.progress!.completedUnitCount) / Double(snapshot.progress!.totalUnitCount)
+            print("📊 Upload progress: \(percentComplete)%")
+        }
+        
+        uploadTask.observe(.success) { snapshot in
+            print("🎉 Upload completed successfully")
+        }
+        
+        uploadTask.observe(.failure) { snapshot in
+            if let error = snapshot.error {
+                print("💥 Upload task failed: \(error)")
+            }
+        }
+        }
+        
+        // Start the upload
+        attemptUpload()
     }
     
     private func updateUserProfileImage(imageUrl: String, completion: @escaping (Bool, String?) -> Void) {
-        guard let currentUserEmail = currentUser?.email else {
+        guard let currentUserEmail = currentUser?.email,
+              let userId = currentUser?.id else {
             completion(false, "User not authenticated")
             return
         }
         
-        // Update user document in Firestore
-        db.collection("user").document(currentUserEmail).updateData([
+        print("🔍 Updating user profile image - Email: \(currentUserEmail), User ID: \(userId)")
+        
+        // Try updating by email first (original approach)
+        db.collection("Users").document(currentUserEmail).updateData([
             "profile_picture_url": imageUrl,
             "updated_date": Date()
         ]) { [weak self] error in
             if let error = error {
-                print("❌ Error updating user profile image in Firestore: \(error)")
-                self?.logFirebaseError(message: "User profile image update failed", firebaseError: error)
-                completion(false, error.localizedDescription)
+                print("❌ Failed to update by email, trying by user ID...")
+                print("🔍 Error: \(error.localizedDescription)")
+                
+                // Fallback: Try updating by user ID
+                self?.db.collection("Users").document(userId).updateData([
+                    "profile_picture_url": imageUrl,
+                    "updated_date": Date()
+                ]) { [weak self] fallbackError in
+                    if let fallbackError = fallbackError {
+                        print("❌ Error updating user profile image in Firestore (both attempts failed): \(fallbackError)")
+                        SlingLogError("User profile image update failed", error: fallbackError)
+                        completion(false, fallbackError.localizedDescription)
+                        return
+                    }
+                    
+                    print("✅ User profile image updated in Firestore successfully (by user ID)")
+                    SlingLogInfo("User Action: Updated user profile image - User: \(currentUserEmail)")
+                    
+                    // Update local user data
+                    DispatchQueue.main.async {
+                        self?.currentUser?.profile_picture_url = imageUrl
+                    }
+                    
+                    completion(true, nil)
+                }
                 return
             }
             
-            print("✅ User profile image updated in Firestore successfully")
-            self?.logUserAction(action: "Updated user profile image", details: "User: \(currentUserEmail)")
+            // Success with email-based update
+            print("✅ User profile image updated in Firestore successfully (by email)")
+            SlingLogInfo("User Action: Updated user profile image - User: \(currentUserEmail)")
             
             // Update local user data
             DispatchQueue.main.async {
@@ -3829,23 +3969,15 @@ class FirestoreService: ObservableObject {
         fileName: String = #file,
         lineNumber: Int = #line
     ) {
-        var context: [String: String] = [:]
+        var fullMessage = message
         if let endpoint = endpoint {
-            context["endpoint"] = endpoint
+            fullMessage += " (Endpoint: \(endpoint))"
         }
         if let statusCode = statusCode {
-            context["status_code"] = String(statusCode)
+            fullMessage += " (Status: \(statusCode))"
         }
         
-        logError(
-            message: message,
-            type: "network_error",
-            level: "error",
-            functionName: functionName,
-            fileName: fileName,
-            lineNumber: lineNumber,
-            additionalContext: context
-        )
+        SlingLogError(fullMessage, file: fileName, function: functionName, line: lineNumber)
     }
     
     func logFirebaseError(
@@ -3855,22 +3987,7 @@ class FirestoreService: ObservableObject {
         fileName: String = #file,
         lineNumber: Int = #line
     ) {
-        var context: [String: String] = [:]
-        if let firebaseError = firebaseError {
-            context["firebase_error"] = firebaseError.localizedDescription
-            context["error_code"] = String((firebaseError as NSError).code)
-            context["error_domain"] = (firebaseError as NSError).domain
-        }
-        
-        logError(
-            message: message,
-            type: "firebase_error",
-            level: "error",
-            functionName: functionName,
-            fileName: fileName,
-            lineNumber: lineNumber,
-            additionalContext: context
-        )
+        SlingLogError(message, error: firebaseError, file: fileName, function: functionName, line: lineNumber)
     }
     
     func logUserAction(
@@ -3880,20 +3997,12 @@ class FirestoreService: ObservableObject {
         fileName: String = #file,
         lineNumber: Int = #line
     ) {
-        var context: [String: String] = [:]
+        var message = "User Action: \(action)"
         if let details = details {
-            context["action_details"] = details
+            message += " - \(details)"
         }
         
-        logError(
-            message: "User Action: \(action)",
-            type: "user_action",
-            level: "info",
-            functionName: functionName,
-            fileName: fileName,
-            lineNumber: lineNumber,
-            additionalContext: context
-        )
+        SlingLogInfo(message, file: fileName, function: functionName, line: lineNumber)
     }
 
 }

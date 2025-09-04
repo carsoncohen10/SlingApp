@@ -1255,14 +1255,49 @@ struct MyBetsView: View {
                     
                     if activeBets.isEmpty {
                         // No active bets - show Markets to Bet On section
+                        let availableBets = getAvailableBetsToBetOn()
+                        
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 16) {
                                 // Show available bets from user's communities
-                                ForEach(getAvailableBetsToBetOn(), id: \.id) { bet in
+                                ForEach(availableBets, id: \.id) { bet in
                                     AvailableBetCard(bet: bet, firestoreService: firestoreService)
                                 }
                                 
-                                // View More Markets Card
+                                // Show Create Bet card if no bets exist, otherwise show View More Markets
+                                if availableBets.isEmpty {
+                                    // Create Bet Card - when no bets exist at all
+                                    Button(action: {
+                                        showingCreateBetModal = true
+                                    }) {
+                                        VStack(spacing: 8) {
+                                            Text("Create a Bet")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                                .foregroundColor(.slingBlue)
+                                                .multilineTextAlignment(.center)
+                                            
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.slingBlue)
+                                                    .frame(width: 32, height: 32)
+                                                
+                                                Image(systemName: "plus")
+                                                    .font(.system(size: 16))
+                                                    .foregroundColor(.white)
+                                            }
+                                        }
+                                        .frame(width: 160, height: 160)
+                                        .background(Color.white)
+                                        .cornerRadius(16)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
+                                        )
+                                        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                                    }
+                                } else {
+                                    // View More Markets Card - when some bets exist
                                 Button(action: {
                                     // Navigate to home page by changing the selected tab
                                     selectedTab = 0
@@ -1292,6 +1327,7 @@ struct MyBetsView: View {
                                             .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
                                     )
                                     .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                                    }
                                 }
                             }
                             .padding(.horizontal, 16)
@@ -4247,15 +4283,15 @@ struct CommunityInfoModal: View {
                             .clipShape(Circle())
                         } else {
                             // Show community initials
-                            Circle()
-                                .fill(AnyShapeStyle(Color.slingGradient))
-                                .frame(width: 48, height: 48)
-                                .overlay(
-                                    Text(String(community.name.prefix(1)).uppercased())
-                                        .font(.title2)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                )
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .frame(width: 48, height: 48)
+                            .overlay(
+                                Text(String(community.name.prefix(1)).uppercased())
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
                         }
                         
                         Text(community.name)
@@ -6435,15 +6471,15 @@ struct ModernCommunityCard: View {
                         .clipShape(Circle())
                     } else {
                         // Show community initials
-                        Circle()
-                            .fill(AnyShapeStyle(Color.slingGradient))
-                            .frame(width: 48, height: 48)
-                            .overlay(
-                                Text(String(community.name.prefix(1)).uppercased())
-                                    .font(.title3)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                            )
+                    Circle()
+                        .fill(AnyShapeStyle(Color.slingGradient))
+                        .frame(width: 48, height: 48)
+                        .overlay(
+                            Text(String(community.name.prefix(1)).uppercased())
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        )
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
@@ -7501,31 +7537,78 @@ struct ProfileView: View {
                         // Profile Picture or Initials
                         if let profilePictureUrl = firestoreService.currentUser?.profile_picture_url {
                             // Show user's profile picture
-                            AsyncImage(url: URL(string: profilePictureUrl)) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                Circle()
-                                    .fill(Color.slingGradient)
-                                    .overlay(
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                            .scaleEffect(0.8)
-                                    )
+                            AsyncImage(url: URL(string: profilePictureUrl)) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 64, height: 64)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 4)
+                                        )
+                                case .failure(_):
+                                    // Fallback to initials on error
+                                    Circle()
+                                        .fill(Color.slingGradient)
+                                        .frame(width: 64, height: 64)
+                                        .overlay(
+                                            Text(getUserInitials())
+                                                .font(.title2)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.white)
+                                        )
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 4)
+                                        )
+                                case .empty:
+                                    // Show initials while loading
+                                    Circle()
+                                        .fill(Color.slingGradient)
+                                        .frame(width: 64, height: 64)
+                                        .overlay(
+                                            Text(getUserInitials())
+                                                .font(.title2)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.white)
+                                        )
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 4)
+                                        )
+                                @unknown default:
+                                    Circle()
+                                        .fill(Color.slingGradient)
+                                        .frame(width: 64, height: 64)
+                                        .overlay(
+                                            Text(getUserInitials())
+                                                .font(.title2)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.white)
+                                        )
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 4)
+                                        )
+                                }
                             }
-                            .frame(width: 64, height: 64)
-                            .clipShape(Circle())
                         } else {
                             // Fallback to initials
                             Circle()
                                 .fill(Color.slingGradient)
-                                .frame(width: 64, height: 64)
+                            .frame(width: 64, height: 64)
+                            .overlay(
+                                Text(getUserInitials())
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                            )
                                 .overlay(
-                                    Text(getUserInitials())
-                                        .font(.title2)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.white)
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 4)
                                 )
                         }
                         
@@ -8576,6 +8659,7 @@ struct NotificationsView: View {
     let firestoreService: FirestoreService
     @State private var isLoadingNotifications = false
     @State private var selectedFilter: NotificationFilter = .all
+    @State private var hasMarkedAllAsRead = false
     
     // Computed property to filter notifications based on selected filter
     private var filteredNotifications: [FirestoreNotification] {
@@ -8719,16 +8803,42 @@ struct NotificationsView: View {
                 print("🔍 NotificationsView: onAppear triggered")
                 print("🔍 NotificationsView: Current user email: \(firestoreService.currentUser?.email ?? "nil")")
                 print("🔍 NotificationsView: Current notifications count: \(firestoreService.notifications.count)")
+                
                 // Fetch notifications if none exist
                 if firestoreService.notifications.isEmpty {
                     isLoadingNotifications = true
                     firestoreService.fetchNotifications()
+                }
+                
+                // Mark all unread notifications as read when the notification page is opened
+                if !hasMarkedAllAsRead {
+                    markAllUnreadNotificationsAsRead()
+                    hasMarkedAllAsRead = true
                 }
             }
             .onReceive(firestoreService.$notifications) { notifications in
                 print("🔍 NotificationsView: Notifications updated, count: \(notifications.count)")
                 // Notifications are automatically marked as read when they appear on screen
                 isLoadingNotifications = false
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func markAllUnreadNotificationsAsRead() {
+        let unreadNotifications = firestoreService.notifications.filter { !$0.is_read }
+        print("🔍 NotificationsView: Marking \(unreadNotifications.count) unread notifications as read")
+        
+        for notification in unreadNotifications {
+            if let notificationId = notification.id {
+                firestoreService.markNotificationAsRead(notificationId: notificationId) { success in
+                    if success {
+                        print("✅ NotificationsView: Marked notification as read: \(notificationId)")
+                    } else {
+                        print("❌ NotificationsView: Failed to mark notification as read: \(notificationId)")
+                    }
+                }
             }
         }
     }
@@ -8876,6 +8986,10 @@ struct EditProfileView: View {
     @State private var showingSaveSuccess = false
     @State private var showingUnsavedChangesAlert = false
     @State private var showingImagePicker = false
+    @State private var showingPhotoOptions = false
+    @State private var showingPhotoPicker = false
+    @State private var showingCamera = false
+    @State private var selectedItem: PhotosPickerItem? = nil
     @State private var selectedImage: UIImage?
     @State private var profileImageUrl: String?
     
@@ -8933,33 +9047,18 @@ struct EditProfileView: View {
                     
                     // Content
                     VStack(spacing: 32) {
-                        // Title
-                        Text("Update Your Profile")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
-                        
-                        // Subtitle
-                        Text("Keep your information up to date")
-                            .font(.body)
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
-                        
                         // Profile Picture Section
                         VStack(spacing: 16) {
                             Text("Profile Picture")
                                 .font(.headline)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.black)
+                            .foregroundColor(.black)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 20)
-                            
+                            .padding(.horizontal, 20)
+                        
                             // Profile Picture Display and Edit Button
                             Button(action: {
-                                showingImagePicker = true
+                                showingPhotoOptions = true
                             }) {
                                 ZStack {
                                     if let selectedImage = selectedImage {
@@ -9011,28 +9110,26 @@ struct EditProfileView: View {
                                             )
                                     }
                                     
-                                    // Edit overlay icon
-                                    VStack {
-                                        Spacer()
-                                        HStack {
-                                            Spacer()
+                                    // Swap icon overlay at 3-6 o'clock position
+                                    Circle()
+                                        .fill(Color.slingBlue)
+                                        .frame(width: 36, height: 36)
+                                        .overlay(
+                                            Image(systemName: "arrow.2.squarepath")
+                                                .font(.system(size: 16, weight: .medium))
+                                                .foregroundColor(.white)
+                                        )
+                                        .overlay(
                                             Circle()
-                                                .fill(Color.slingBlue)
-                                                .frame(width: 36, height: 36)
-                                                .overlay(
-                                                    Image(systemName: "camera.fill")
-                                                        .font(.system(size: 16, weight: .medium))
-                                                        .foregroundColor(.white)
-                                                )
-                                                .offset(x: -8, y: -8)
-                                        }
-                                    }
+                                                .stroke(Color.white, lineWidth: 2)
+                                        )
+                                        .offset(x: 42, y: 42) // Position at 3-6 o'clock (half on, half off)
                                 }
                             }
                             
                             Text("Tap to change your profile picture")
                                 .font(.caption)
-                                .foregroundColor(.gray)
+                            .foregroundColor(.gray)
                         }
                         
                         // User details input fields
@@ -9105,18 +9202,37 @@ struct EditProfileView: View {
             } message: {
                 Text("You have unsaved changes. Are you sure you want to leave?")
             }
-            .sheet(isPresented: $showingImagePicker) {
-                UserImagePicker(selectedImage: $selectedImage)
+            .confirmationDialog("Choose Profile Picture", isPresented: $showingPhotoOptions, titleVisibility: .visible) {
+                Button("Choose from Photos") {
+                    showingPhotoPicker = true
+                }
+                
+                Button("Take Photo") {
+                    showingCamera = true
+                }
+                
+                Button("Cancel", role: .cancel) { }
+            }
+            .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedItem, matching: .images, photoLibrary: .shared())
+            .sheet(isPresented: $showingCamera) {
+                CameraView { image in
+                    selectedImage = image
+                    showingCamera = false
+                }
+            }
+            .onChange(of: selectedItem) { _ in
+                loadPhotoFromPicker()
             }
         }
     }
     
     private func getUserInitials() -> String {
-        if let firstName = firestoreService.currentUser?.first_name, let lastName = firestoreService.currentUser?.last_name, !firstName.isEmpty, !lastName.isEmpty {
+        let user = firestoreService.currentUser
+        if let firstName = user?.first_name, let lastName = user?.last_name, !firstName.isEmpty, !lastName.isEmpty {
             let firstInitial = String(firstName.prefix(1)).uppercased()
             let lastInitial = String(lastName.prefix(1)).uppercased()
             return "\(firstInitial)\(lastInitial)"
-        } else if let displayName = firestoreService.currentUser?.display_name, !displayName.isEmpty {
+        } else if let displayName = user?.display_name, !displayName.isEmpty {
             let components = displayName.components(separatedBy: " ")
             if components.count >= 2 {
                 let firstInitial = String(components[0].prefix(1)).uppercased()
@@ -9125,10 +9241,27 @@ struct EditProfileView: View {
             } else if components.count == 1 {
                 return String(components[0].prefix(1)).uppercased()
             }
-        } else if let email = firestoreService.currentUser?.email {
+        } else if let email = user?.email {
             return String(email.prefix(1)).uppercased()
         }
         return "U"
+    }
+    
+    private func loadPhotoFromPicker() {
+        guard let selectedItem = selectedItem else { return }
+        
+        Task {
+            do {
+                if let data = try await selectedItem.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    await MainActor.run {
+                        self.selectedImage = image
+                    }
+                }
+            } catch {
+                print("❌ Error loading photo: \(error)")
+            }
+        }
     }
     
     private func hasUnsavedChanges() -> Bool {
@@ -9143,6 +9276,12 @@ struct EditProfileView: View {
     }
     
     private func saveChanges() {
+        // Prevent multiple simultaneous save operations
+        guard !isLoading else {
+            print("⚠️ Save operation already in progress")
+            return
+        }
+        
         isLoading = true
         
         // Validate input
@@ -9151,26 +9290,39 @@ struct EditProfileView: View {
             return
         }
         
+        print("💾 Starting profile save process...")
+        
         // If there's a new profile image, upload it first
         if let selectedImage = selectedImage {
+            print("📷 Uploading new profile image...")
             firestoreService.uploadUserProfileImage(selectedImage) { success, error in
                 DispatchQueue.main.async {
+                    
                     if success {
                         print("✅ Profile image uploaded successfully")
                         // Clear the selected image and update local URL
                         self.selectedImage = nil
                         self.profileImageUrl = self.firestoreService.currentUser?.profile_picture_url
+                        
+                        // Force UI refresh by updating the published property
+                        print("🔄 Refreshing UI with new profile picture URL: \(self.firestoreService.currentUser?.profile_picture_url ?? "nil")")
+                        
+                        // Force UI refresh by triggering objectWillChange
+                        self.firestoreService.objectWillChange.send()
+                        
                         // Now update the text fields
                         self.updateTextFields()
                     } else {
                         print("❌ Failed to upload profile image: \(error ?? "Unknown error")")
                         self.isLoading = false
-                        // You could show an error alert here
+                        // Show error feedback to user
+                        // You could add an error state here
                     }
                 }
             }
         } else {
             // No new image, just update text fields
+            print("📝 No new image, updating text fields only...")
             updateTextFields()
         }
     }
@@ -10157,7 +10309,10 @@ struct CreateBetView: View {
             return
         }
         
-        print("🔍 CreateBet: Selected community - Name: \(community.name), ID: \(community.id ?? "nil")")
+        // Use community.id if available, otherwise use documentId as fallback
+        let communityId = community.id ?? community.documentId ?? ""
+        
+        print("🔍 CreateBet: Selected community - Name: \(community.name), ID: \(community.id ?? "nil"), DocumentID: \(community.documentId ?? "nil"), Final ID: \(communityId)")
         
         // Convert odds array to dictionary
         var oddsDict: [String: String] = [:]
@@ -10191,7 +10346,7 @@ struct CreateBetView: View {
         
         let betData: [String: Any] = [
             "title": marketQuestion,
-            "community_id": community.id ?? "",
+            "community_id": communityId,
             "options": outcomes,
             "odds": oddsDict,
             "deadline": finalDeadline,
@@ -10214,7 +10369,7 @@ struct CreateBetView: View {
             "hidden_from_users": mentionedUsers // Alternative field name for clarity
         ]
         
-        print("🔍 CreateBet: Bet data - Title: \(marketQuestion), Community ID: \(community.id ?? "nil")")
+        print("🔍 CreateBet: Bet data - Title: \(marketQuestion), Community ID: \(communityId)")
         print("🔍 CreateBet: Original deadline: \(bettingCloseDate)")
         print("🔍 CreateBet: Current date: \(currentDate)")
         print("🔍 CreateBet: Minimum deadline: \(minimumDeadline)")
@@ -11067,71 +11222,65 @@ struct JoinCommunityPage: View {
     }
     
     var body: some View {
-        NavigationView {
             VStack(spacing: 0) {
-                // Header
+            // Modern Header - like Sign Up pages
                 HStack {
                     Button(action: { dismiss() }) {
-                        Image(systemName: "chevron.left")
+                    Image(systemName: "arrow.left")
                             .font(.title2)
                             .fontWeight(.medium)
                             .foregroundColor(.black)
+                        .frame(width: 44, height: 44)
                     }
                     
                     Spacer()
-                    
-                    Text("Join Community")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.black)
-                    
-                    Spacer()
-                    
-                    // Invisible spacer to center title
-                    Image(systemName: "chevron.left")
-                        .font(.title2)
-                        .foregroundColor(.clear)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
-                .padding(.bottom, 32)
-                
-                // Main content
-                VStack(spacing: 32) {
-                    // Icon and title
+            
+            // Main Content with modern spacing
+            VStack(spacing: 40) {
+                // Title Section - modern style like Sign Up
                     VStack(spacing: 16) {
-                        Image(systemName: "person.2.circle.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.blue)
-                        
-                        Text("Join an Existing Community")
-                            .font(.title2)
+                    Text("Join Community")
+                        .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.black)
                             .multilineTextAlignment(.center)
                         
                         Text("Enter the 6-character invite code to join a betting group")
-                            .font(.subheadline)
+                        .font(.body)
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
-                    }
                     .padding(.horizontal, 20)
+                }
+                .padding(.top, 40)
                     
-                    // Input field
+                // Input Section with modern styling
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Invite Code")
                             .font(.headline)
                             .fontWeight(.semibold)
                             .foregroundColor(.black)
                         
-                        HStack {
-                            TextField("Enter 6-digit code", text: $inviteCode)
+                        ZStack(alignment: .trailing) {
+                            TextField("ENTER 6-DIGIT CODE", text: $inviteCode)
                                 .font(.title3)
                                 .fontWeight(.medium)
                                 .foregroundColor(.black)
                                 .textCase(.uppercase)
                                 .autocapitalization(.allCharacters)
                                 .disableAutocorrection(true)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.gray.opacity(0.05))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(borderColor, lineWidth: 2)
+                                        )
+                                )
                                 .onChange(of: inviteCode) { _, newValue in
                                     // Limit to 6 characters
                                     if newValue.count > 6 {
@@ -11153,42 +11302,44 @@ struct JoinCommunityPage: View {
                                         }
                                     }
                                 }
+                                .focused($isTextFieldFocused)
+                                .onAppear {
+                                    isTextFieldFocused = true
+                                }
                             
                             // Character counter
                             Text("\(inviteCode.count)/6")
                                 .font(.caption)
                                 .foregroundColor(inviteCode.count == 6 ? .green : .gray)
                                 .fontWeight(.medium)
+                                .padding(.trailing, 16)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.gray.opacity(0.1))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(borderColor, lineWidth: 2)
-                        )
-                        .focused($isTextFieldFocused)
-                        .onAppear {
-                            isTextFieldFocused = true
-                        }
-                    }
-                    .padding(.horizontal, 20)
                     
-                    // Error message
+                    // Validation message - modern style
+                    if !validationMessage.isEmpty {
+                        Text(validationMessage)
+                            .font(.caption)
+                            .foregroundColor(inviteCode.count == 6 ? .green : .gray)
+                            .animation(.easeInOut(duration: 0.2), value: validationMessage)
+                    }
+                }
+                .padding(.horizontal, 24)
+                
+                // Error message - modern style
                     if !errorMessage.isEmpty {
                         Text(errorMessage)
                             .font(.subheadline)
                             .foregroundColor(.red)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
+                        .padding(.horizontal, 24)
+                        .animation(.easeInOut(duration: 0.2), value: errorMessage)
                     }
                     
                     Spacer()
+            }
                     
-                    // Join button
+            // Bottom Button Section - like Sign Up pages
+            VStack(spacing: 16) {
                     Button(action: joinCommunity) {
                         HStack {
                             if isLoading {
@@ -11210,17 +11361,16 @@ struct JoinCommunityPage: View {
                         .frame(height: 56)
                         .background(
                             RoundedRectangle(cornerRadius: 28)
-                                .fill(isValidInviteCode && !isLoading ? Color.blue : Color.gray.opacity(0.3))
+                            .fill(isValidInviteCode && !isLoading ? Color.slingBlue : Color.gray.opacity(0.3))
                         )
                     }
                     .disabled(!isValidInviteCode || isLoading)
-                    .padding(.horizontal, 20)
+                .padding(.horizontal, 24)
                     .padding(.bottom, 32)
                 }
             }
             .background(Color.white)
             .navigationBarHidden(true)
-        }
     }
     
     // MARK: - Actions
@@ -11228,17 +11378,24 @@ struct JoinCommunityPage: View {
     private func joinCommunity() {
         let trimmedCode = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
         
+        print("🔍 JoinCommunity: Attempting to join with code: '\(trimmedCode)'")
+        print("🔍 JoinCommunity: Code length: \(trimmedCode.count)")
+        
         isLoading = true
         errorMessage = ""
         
         firestoreService.joinCommunity(inviteCode: trimmedCode) { success, error in
             DispatchQueue.main.async {
+                print("🔍 JoinCommunity: Result - Success: \(success), Error: \(error ?? "nil")")
                 isLoading = false
                 if success {
+                    print("✅ JoinCommunity: Successfully joined community")
                     dismiss()
                     onSuccess?()
                 } else {
-                    errorMessage = error ?? "Invalid community code. Please try again."
+                    let errorMsg = error ?? "Invalid community code. Please try again."
+                    print("❌ JoinCommunity: Failed to join - \(errorMsg)")
+                    errorMessage = errorMsg
                     // Clear the invite code on error for better UX
                     withAnimation(.easeInOut(duration: 0.2)) {
                         inviteCode = ""
@@ -11268,60 +11425,44 @@ struct CreateCommunityPage: View {
     }
     
     var body: some View {
-        NavigationView {
             VStack(spacing: 0) {
-                // Header
+            // Modern Header - like Sign Up pages
                 HStack {
                     Button(action: {
                         isTextFieldFocused = false
                         dismiss()
                     }) {
-                        Image(systemName: "chevron.left")
+                    Image(systemName: "arrow.left")
                             .font(.title2)
                             .fontWeight(.medium)
                             .foregroundColor(.black)
+                        .frame(width: 44, height: 44)
                     }
                     
                     Spacer()
-                    
-                    Text("Create Community")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.black)
-                    
-                    Spacer()
-                    
-                    // Invisible spacer to center title
-                    Image(systemName: "chevron.left")
-                        .font(.title2)
-                        .foregroundColor(.clear)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
-                .padding(.bottom, 32)
-                
-                // Main content
-                VStack(spacing: 32) {
-                    // Icon and title
+            
+            // Main Content with modern spacing
+            VStack(spacing: 40) {
+                // Title Section - modern style like Sign Up
                     VStack(spacing: 16) {
-                        Image(systemName: "person.2.circle.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.blue)
-                        
-                        Text("Create a New Community")
-                            .font(.title2)
+                    Text("Create Community")
+                        .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.black)
                             .multilineTextAlignment(.center)
                         
                         Text("Start a betting group for friends, family, or colleagues")
-                            .font(.subheadline)
+                        .font(.body)
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
-                    }
                     .padding(.horizontal, 20)
+                }
+                .padding(.top, 40)
                     
-                    // Input field
+                // Input Section with modern styling
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Community Name")
                             .font(.headline)
@@ -11329,18 +11470,10 @@ struct CreateCommunityPage: View {
                             .foregroundColor(.black)
                         
                         TextField("Enter community name", text: $communityName)
-                            .font(.title3)
-                            .fontWeight(.medium)
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.gray.opacity(0.1))
-                            )
+                        .textFieldStyle(ModernTextFieldStyle())
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(isTextFieldFocused ? Color.blue : Color.clear, lineWidth: 2)
+                                .stroke(isTextFieldFocused ? Color.slingBlue : Color.clear, lineWidth: 2)
                             )
                             .focused($isTextFieldFocused)
                             .onAppear {
@@ -11349,21 +11482,51 @@ struct CreateCommunityPage: View {
                             .onChange(of: communityName) { _, newValue in
                                 errorMessage = ""
                             }
-                    }
-                    .padding(.horizontal, 20)
                     
-                    // Error message
+                    // Character count and validation
+                    HStack {
+                        if !communityName.isEmpty {
+                            if isValidCommunityName {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                    Text("Looks good!")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                }
+                            } else if communityName.count > 50 {
+                                Text("Too long")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        Text("\(communityName.count)/50")
+                            .font(.caption)
+                            .foregroundColor(communityName.count > 50 ? .red : .gray)
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: communityName)
+                }
+                .padding(.horizontal, 24)
+                
+                // Error message - modern style
                     if !errorMessage.isEmpty {
                         Text(errorMessage)
                             .font(.subheadline)
                             .foregroundColor(.red)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
+                        .padding(.horizontal, 24)
+                        .animation(.easeInOut(duration: 0.2), value: errorMessage)
                     }
                     
                     Spacer()
+            }
                     
-                    // Create button
+            // Bottom Button Section - like Sign Up pages
+            VStack(spacing: 16) {
                     Button(action: createCommunity) {
                         HStack {
                             if isLoading {
@@ -11385,17 +11548,16 @@ struct CreateCommunityPage: View {
                         .frame(height: 56)
                         .background(
                             RoundedRectangle(cornerRadius: 28)
-                                .fill(isValidCommunityName && !isLoading ? Color.blue : Color.gray.opacity(0.3))
+                            .fill(isValidCommunityName && !isLoading ? Color.slingBlue : Color.gray.opacity(0.3))
                         )
                     }
                     .disabled(!isValidCommunityName || isLoading)
-                    .padding(.horizontal, 20)
+                .padding(.horizontal, 24)
                     .padding(.bottom, 32)
                 }
             }
             .background(Color.white)
             .navigationBarHidden(true)
-        }
         .sheet(isPresented: $showingShareModal) {
             ShareCommunityModal(
                 communityName: communityName,
@@ -14552,8 +14714,8 @@ struct EnhancedCommunityDetailView: View {
                                         .resizable()
                                         .aspectRatio(contentMode: .fill)
                                 } placeholder: {
-                                    Circle()
-                                        .fill(Color.white)
+                    Circle()
+                        .fill(Color.white)
                                         .overlay(
                                             ProgressView()
                                                 .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
@@ -14569,13 +14731,13 @@ struct EnhancedCommunityDetailView: View {
                                 // Show community initials
                                 Circle()
                                     .fill(Color.white)
-                                    .frame(width: 56, height: 56)
-                                    .overlay(
-                                        Text(String(community.name.prefix(1)).uppercased())
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.slingBlue)
-                                    )
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            Text(String(community.name.prefix(1)).uppercased())
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.slingBlue)
+                        )
                             }
                             
                             // Camera overlay indicator
@@ -14926,15 +15088,15 @@ struct EnhancedCommunityDetailView: View {
                     let sortedMembers = membersWithPoints.sorted { $0.netPoints > $1.netPoints }
                     // Always show leaderboard even with just one member
                     if !sortedMembers.isEmpty {
-                        ForEach(Array(sortedMembers.enumerated()), id: \.element.id) { index, memberWithPoints in
-                            MemberRowView(
-                                memberWithPoints: memberWithPoints,
-                                rank: index + 1,
-                                onTap: {
-                                    selectedMemberForProfile = memberWithPoints
-                                    showingTradingProfile = true
-                                }
-                            )
+                    ForEach(Array(sortedMembers.enumerated()), id: \.element.id) { index, memberWithPoints in
+                        MemberRowView(
+                            memberWithPoints: memberWithPoints,
+                            rank: index + 1,
+                            onTap: {
+                                selectedMemberForProfile = memberWithPoints
+                                showingTradingProfile = true
+                            }
+                        )
                         }
                     } else {
                         // Show empty state if no members loaded
@@ -14993,16 +15155,16 @@ struct EnhancedCommunityDetailView: View {
                             
                             // Placeholder for net points
                             VStack(alignment: .trailing, spacing: 2) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "bolt.fill")
-                                        .font(.caption)
+                            HStack(spacing: 4) {
+                                Image(systemName: "bolt.fill")
+                                    .font(.caption)
                                         .foregroundColor(.slingBlue)
-                                    
-                                    Text("--")
+                                
+                                Text("--")
                                         .font(.headline)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.gray)
-                                }
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.gray)
+                            }
                                 
                                 Text("Net Points")
                                     .font(.caption)
@@ -15809,32 +15971,59 @@ struct TradingProfileView: View {
                     // Avatar - User Profile Picture or Initials
                     if let profilePictureUrl = userData?.profile_picture_url {
                         // Show user's profile picture
-                        AsyncImage(url: URL(string: profilePictureUrl)) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            Circle()
-                                .fill(Color.white)
-                                .overlay(
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
-                                        .scaleEffect(0.8)
-                                )
+                        AsyncImage(url: URL(string: profilePictureUrl)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 56, height: 56)
+                                    .clipShape(Circle())
+                            case .failure(_):
+                                // Fallback to initials on error
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 56, height: 56)
+                                    .overlay(
+                                        Text(getUserInitialsFromName())
+                                            .font(.title3)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.slingBlue)
+                                    )
+                            case .empty:
+                                // Show initials while loading
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 56, height: 56)
+                                    .overlay(
+                                        Text(getUserInitialsFromName())
+                                            .font(.title3)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.slingBlue)
+                                    )
+                            @unknown default:
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 56, height: 56)
+                                    .overlay(
+                                        Text(getUserInitialsFromName())
+                                            .font(.title3)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.slingBlue)
+                                    )
+                            }
                         }
-                        .frame(width: 56, height: 56)
-                        .clipShape(Circle())
                     } else {
                         // Fallback to initials
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: 56, height: 56)
-                            .overlay(
-                                Text(String(userName.prefix(1)).uppercased())
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.slingBlue)
-                            )
+                            Circle()
+                                .fill(Color.white)
+                        .frame(width: 56, height: 56)
+                                .overlay(
+                                    Text(String(userName.prefix(1)).uppercased())
+                                .font(.title2)
+                                        .fontWeight(.bold)
+                                .foregroundColor(.slingBlue)
+                                )
                     }
                             
                     VStack(alignment: .leading, spacing: 4) {
@@ -16197,6 +16386,30 @@ struct TradingProfileView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Helper Methods
+    private func getUserInitialsFromName() -> String {
+        if let displayName = displayName, !displayName.isEmpty {
+            let components = displayName.components(separatedBy: " ")
+            if components.count >= 2 {
+                let firstInitial = String(components[0].prefix(1)).uppercased()
+                let lastInitial = String(components[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else if components.count == 1 {
+                return String(components[0].prefix(1)).uppercased()
+            }
+        } else if !userName.isEmpty {
+            let components = userName.components(separatedBy: " ")
+            if components.count >= 2 {
+                let firstInitial = String(components[0].prefix(1)).uppercased()
+                let lastInitial = String(components[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else {
+                return String(userName.prefix(1)).uppercased()
+            }
+        }
+        return "U"
     }
 }
 
@@ -17676,7 +17889,7 @@ struct ChangePasswordView: View {
                                                 Spacer()
                                                 
                                                 Button(action: { showCurrentPassword.toggle() }) {
-                                                    Image(systemName: "eye")
+                                                    Image(systemName: showCurrentPassword ? "eye.slash" : "eye")
                                                         .foregroundColor(.gray)
                                                         .frame(width: 24, height: 24)
                                                 }
@@ -17714,7 +17927,7 @@ struct ChangePasswordView: View {
                                                 Spacer()
                                                 
                                                 Button(action: { showNewPassword.toggle() }) {
-                                                    Image(systemName: "eye")
+                                                    Image(systemName: showNewPassword ? "eye.slash" : "eye")
                                                         .foregroundColor(.gray)
                                                         .frame(width: 24, height: 24)
                                                 }
@@ -17752,7 +17965,7 @@ struct ChangePasswordView: View {
                                                 Spacer()
                                                 
                                                 Button(action: { showConfirmPassword.toggle() }) {
-                                                    Image(systemName: "eye")
+                                                    Image(systemName: showConfirmPassword ? "eye.slash" : "eye")
                                                         .foregroundColor(.gray)
                                                         .frame(width: 24, height: 24)
                                                 }
@@ -20233,3 +20446,55 @@ struct UserImagePicker: View {
         }
     }
 }
+
+// MARK: - Photos Picker Sheet
+struct PhotosPickerSheet: View {
+    @Binding var selectedItem: PhotosPickerItem?
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                PhotosPicker(
+                    selection: $selectedItem,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    VStack(spacing: 20) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 60))
+                            .foregroundColor(.slingBlue)
+                        
+                        Text("Choose from Photos")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                        
+                        Text("Select a photo from your library")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.clear)
+                    .contentShape(Rectangle())
+                }
+                .onChange(of: selectedItem) { newItem in
+                    if newItem != nil {
+                        dismiss()
+                    }
+                }
+            }
+            .navigationTitle("Select Photo")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+

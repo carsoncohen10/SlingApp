@@ -56,6 +56,7 @@ struct AuthenticationView: View {
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var showingEmailForm = false
+    @State private var showingCommunityOnboarding = false
     @State private var currentNonce: String?
     @State private var errorMessageTimer: Timer?
     @State private var appleButtonPressed = false
@@ -154,6 +155,7 @@ struct AuthenticationView: View {
                                 }
                                 
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.218) {
+                                    
                                     appleButtonPressed = false
                                     // Trigger Apple Sign In
                                     triggerAppleSignIn()
@@ -334,7 +336,17 @@ struct AuthenticationView: View {
             EmailAuthenticationView(
                 firestoreService: firestoreService,
                 isSignUp: $isSignUp,
-                onDismiss: { showingEmailForm = false }
+                onDismiss: { showingEmailForm = false },
+                onShowOnboarding: { 
+                    showingEmailForm = false
+                    showingCommunityOnboarding = true
+                }
+            )
+        }
+        .sheet(isPresented: $showingCommunityOnboarding) {
+            CommunityOnboardingView(
+                firestoreService: firestoreService,
+                onDismiss: { showingCommunityOnboarding = false }
             )
         }
         .onAppear {
@@ -973,6 +985,7 @@ struct EmailAuthenticationView: View {
     @ObservedObject var firestoreService: FirestoreService
     @Binding var isSignUp: Bool
     let onDismiss: () -> Void
+    let onShowOnboarding: (() -> Void)?
     
     @State private var currentStep = 0
     @State private var email = ""
@@ -1239,7 +1252,12 @@ struct EmailAuthenticationView: View {
                         SlingLogError("User sign up failed", error: nil)
                     } else {
                         SlingLogInfo("User successfully created account")
-                        onDismiss()
+                        // Show community onboarding for new users
+                        if let onShowOnboarding = onShowOnboarding {
+                            onShowOnboarding()
+                        } else {
+                            onDismiss()
+                        }
                     }
                 }
             }
@@ -1267,12 +1285,13 @@ struct EmailStepView: View {
     @Binding var email: String
     @Binding var isSignUp: Bool
     @Binding var password: String
+    @State private var isPasswordVisible = false
     
     var body: some View {
         VStack(spacing: 32) {
             // Title
             Text(isSignUp ? "Create Account" : "Welcome back to Sling")
-                .font(.largeTitle)
+                .font(isSignUp ? .largeTitle : .title)
                 .fontWeight(.bold)
                 .foregroundColor(.black)
                 .multilineTextAlignment(.center)
@@ -1332,24 +1351,33 @@ struct EmailStepView: View {
                             .font(.headline)
                             .foregroundColor(.black)
                         
-                        SecureField("Enter your password", text: $password)
-                            .textFieldStyle(ModernTextFieldStyle())
-                            .overlay(
-                                HStack {
-                                    Spacer()
-                                    
-                                    Button(action: {}) {
-                                        Image(systemName: "eye")
-                                            .foregroundColor(.gray)
-                                            .frame(width: 24, height: 24)
-                                    }
-                                    .padding(.trailing, 20)
+                        ZStack {
+                            if isPasswordVisible {
+                                TextField("Enter your password", text: $password)
+                                    .textFieldStyle(ModernTextFieldStyle())
+                            } else {
+                                SecureField("Enter your password", text: $password)
+                                    .textFieldStyle(ModernTextFieldStyle())
+                            }
+                        }
+                        .overlay(
+                            HStack {
+                                Spacer()
+                                
+                                Button(action: {
+                                    isPasswordVisible.toggle()
+                                }) {
+                                    Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                                        .foregroundColor(.gray)
+                                        .frame(width: 24, height: 24)
                                 }
-                            )
+                                .padding(.trailing, 20)
+                            }
+                        )
                     }
                     .padding(.horizontal, 24)
                     
-                    // Toggle button for Sign In page - moved much closer to password input
+                    // Toggle button for Sign In page - moved directly under password input
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             // Switch to sign up
@@ -1367,7 +1395,7 @@ struct EmailStepView: View {
                                 .foregroundColor(.slingBlue)
                         }
                     }
-                    .padding(.top, 8)
+                    .padding(.top, 4)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
                 }
@@ -1383,6 +1411,7 @@ struct EmailStepView: View {
 struct PasswordStepView: View {
     @Binding var password: String
     @Binding var isSignUp: Bool
+    @State private var isPasswordVisible = false
     
     var body: some View {
         VStack(spacing: 32) {
@@ -1407,20 +1436,29 @@ struct PasswordStepView: View {
                     .font(.headline)
                     .foregroundColor(.black)
                 
-                SecureField("Enter your password", text: $password)
-                    .textFieldStyle(ModernTextFieldStyle())
-                    .overlay(
-                        HStack {
-                            Spacer()
-                            
-                            Button(action: {}) {
-                                Image(systemName: "eye")
-                                    .foregroundColor(.gray)
-                                    .frame(width: 24, height: 24)
-                            }
-                            .padding(.trailing, 20)
+                ZStack {
+                    if isPasswordVisible {
+                        TextField("Enter your password", text: $password)
+                            .textFieldStyle(ModernTextFieldStyle())
+                    } else {
+                        SecureField("Enter your password", text: $password)
+                            .textFieldStyle(ModernTextFieldStyle())
+                    }
+                }
+                .overlay(
+                    HStack {
+                        Spacer()
+                        
+                        Button(action: {
+                            isPasswordVisible.toggle()
+                        }) {
+                            Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                                .foregroundColor(.gray)
+                                .frame(width: 24, height: 24)
                         }
-                    )
+                        .padding(.trailing, 20)
+                    }
+                )
                 
                 Text("Must be at least 6 characters")
                     .font(.caption)
@@ -1644,5 +1682,139 @@ class AppleSignInPresentationContextProvider: NSObject, ASAuthorizationControlle
             fatalError("No window available")
         }
         return window
+    }
+}
+
+// MARK: - Community Onboarding View
+
+struct CommunityOnboardingView: View {
+    @ObservedObject var firestoreService: FirestoreService
+    let onDismiss: () -> Void
+    
+    @State private var showingJoinCommunity = false
+    @State private var showingCreateCommunity = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: 16) {
+                    // Close button - small and grayed out as requested
+                    HStack {
+                        Spacer()
+                        Button(action: { onDismiss() }) {
+                            Text("Skip")
+                                .font(.caption)
+                                .foregroundColor(.gray.opacity(0.6))
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.top, 20)
+                    }
+                    
+                    // Title Section
+                    VStack(spacing: 20) {
+                        Image(systemName: "person.2.circle.fill")
+                            .font(.system(size: 80))
+                            .foregroundColor(.slingBlue)
+                        
+                        VStack(spacing: 12) {
+                            Text("Join the Community")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                                .foregroundColor(.black)
+                                .multilineTextAlignment(.center)
+                            
+                            Text("Connect with friends and start betting together! Join an existing community or create your own.")
+                                .font(.body)
+                                .foregroundColor(.gray)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 20)
+                        }
+                    }
+                    .padding(.top, 40)
+                }
+                
+                Spacer()
+                
+                // Action Buttons
+                VStack(spacing: 16) {
+                    // Join Community Button
+                    Button(action: {
+                        showingJoinCommunity = true
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "person.crop.circle.badge.plus")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                            
+                            Text("Join a Community")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(
+                            RoundedRectangle(cornerRadius: 28)
+                                .fill(Color.slingBlue)
+                        )
+                    }
+                    .padding(.horizontal, 20)
+                    
+                    // Create Community Button
+                    Button(action: {
+                        showingCreateCommunity = true
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "plus.circle")
+                                .font(.title2)
+                                .foregroundColor(.slingBlue)
+                            
+                            Text("Create a Community")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.slingBlue)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(
+                            RoundedRectangle(cornerRadius: 28)
+                                .stroke(Color.slingBlue, lineWidth: 2)
+                                .fill(Color.white)
+                        )
+                    }
+                    .padding(.horizontal, 20)
+                    
+                    // Help text
+                    Text("You can always join or create more communities later in the app.")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 8)
+                }
+                .padding(.bottom, 40)
+            }
+            .background(Color.white)
+            .navigationBarHidden(true)
+        }
+        .sheet(isPresented: $showingJoinCommunity) {
+            JoinCommunityPage(
+                firestoreService: firestoreService,
+                onSuccess: {
+                    showingJoinCommunity = false
+                    onDismiss()
+                }
+            )
+        }
+        .sheet(isPresented: $showingCreateCommunity) {
+            CreateCommunityPage(
+                firestoreService: firestoreService,
+                onSuccess: {
+                    showingCreateCommunity = false
+                    onDismiss()
+                }
+            )
+        }
     }
 }
