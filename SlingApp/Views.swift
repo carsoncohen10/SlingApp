@@ -3164,32 +3164,26 @@ struct AvailableBetCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 
-                // Bet options - styled like main page with odds
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(bet.options, id: \.self) { option in
-                        let odds = getOddsForOption(option)
-                        HStack(alignment: .top, spacing: 8) {
-                            Text(option)
-                                .font(.subheadline)
-                                .foregroundColor(.black)
-                                .fontWeight(.medium)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                            
-                            Spacer()
-                            
-                            Text(odds)
-                                .font(.subheadline)
-                                .foregroundColor(.black)
-                                .fontWeight(.medium)
-                                .lineLimit(1)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.slingBlue.opacity(0.1))
-                        .cornerRadius(8)
+                // Bet Now Button
+                HStack {
+                    HStack(spacing: 8) {
+                        Text("Bet")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        
+                        Image(systemName: "arrow.right")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .background(AnyShapeStyle(Color.slingGradient))
+                    .cornerRadius(12)
                 }
                 
                 Spacer()
@@ -5188,23 +5182,11 @@ struct ChooseWinnerView: View {
 struct CommunitiesView: View {
     let firestoreService: FirestoreService
     let onNavigateToHome: ((String) -> Void)?
-    @State private var searchText = ""
     @State private var showingJoinCommunityModal = false
     @State private var showingCreateCommunityModal = false
     @State private var outstandingBalances: [OutstandingBalance] = []
     @State private var showingAllBalances = false
     
-    // Computed property to filter communities based on search text
-    private var filteredCommunities: [FirestoreCommunity] {
-        if searchText.isEmpty {
-            return firestoreService.userCommunities
-        } else {
-            return firestoreService.userCommunities.filter { community in
-                community.name.localizedCaseInsensitiveContains(searchText) ||
-                community.invite_code.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-    }
     
     var body: some View {
         ScrollView {
@@ -5217,15 +5199,44 @@ struct CommunitiesView: View {
                                 .foregroundColor(.black)
                             
                             Spacer()
+                            
+                            // Create/Join Community Button with Dropdown
+                            Menu {
+                                Button(action: { showingCreateCommunityModal = true }) {
+                                    Label("Create Community", systemImage: "plus.circle")
+                                }
+                                
+                                Button(action: { showingJoinCommunityModal = true }) {
+                                    Label("Join Community", systemImage: "person.badge.plus")
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "plus")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.white)
+                                    
+                                                        Text("Add")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                                    
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(AnyShapeStyle(Color.slingGradient))
+                                .cornerRadius(20)
+                            }
                         }
                         .padding(.vertical, 12)
                         .background(Color.white)
                         
                         // Outstanding Balances Section
                         outstandingBalancesSection
-                        
-                        // Search and Actions Section
-                        searchAndActionsSection
                         
                         // Communities Section
                         communitiesSection
@@ -5315,90 +5326,11 @@ struct CommunitiesView: View {
         }
     }
     
-    // MARK: - Search and Actions Section
-    private var searchAndActionsSection: some View {
-        VStack(spacing: 8) {
-            // Modern Search Bar
-                HStack(spacing: 12) {
-                    Image(systemName: "magnifyingglass")
-                    .font(.title3)
-                        .foregroundColor(.gray)
-                    
-                    ZStack(alignment: .leading) {
-                        if searchText.isEmpty {
-                        Text("Search communities...")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                        }
-                        
-                        TextField("", text: $searchText)
-                            .font(.subheadline)
-                            .foregroundColor(.black)
-                            .textFieldStyle(PlainTextFieldStyle())
-                    }
-                    
-                    if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
-                            Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-                .background(Color.white)
-            .cornerRadius(16)
-                .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                )
-                
-                // Action Buttons - Smaller and more compact
-                        HStack(spacing: 8) {
-                    Button(action: { showingCreateCommunityModal = true }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.subheadline)
-                            Text("Create")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(AnyShapeStyle(Color.slingGradient))
-                        .cornerRadius(10)
-                    }
-                    
-                    Button(action: { showingJoinCommunityModal = true }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "person.badge.plus")
-                                .font(.subheadline)
-                            Text("Join")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.white)
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                    }
-                }
-        }
-    }
     
     // MARK: - Communities Section
     private var communitiesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !filteredCommunities.isEmpty {
+                                    if !firestoreService.userCommunities.isEmpty {
                 HStack {
                     Text("Your Communities")
                         .font(.headline)
@@ -5407,7 +5339,7 @@ struct CommunitiesView: View {
                     
                     Spacer()
                     
-                    Text("\(filteredCommunities.count) communities")
+                    Text("\(firestoreService.userCommunities.count) communities")
                         .font(.subheadline)
                         .foregroundColor(.gray)
                     }
@@ -5417,8 +5349,9 @@ struct CommunitiesView: View {
                     .fill(Color.gray.opacity(0.2))
                     .frame(height: 1)
                 
+                
                 LazyVStack(spacing: 16) {
-                    ForEach(filteredCommunities) { community in
+                    ForEach(firestoreService.userCommunities) { community in
                         ModernCommunityCard(
                             community: community,
                             firestoreService: firestoreService,
@@ -5426,35 +5359,13 @@ struct CommunitiesView: View {
                         )
                     }
                 }
+                .padding(.top, 16) // Spacing after horizontal line
             } else {
-                    if searchText.isEmpty {
-                        EmptyCommunitiesView(firestoreService: firestoreService)
-                    } else {
-                    noSearchResultsView
-                }
+                EmptyCommunitiesView(firestoreService: firestoreService)
             }
         }
     }
     
-    // MARK: - No Search Results View
-    private var noSearchResultsView: some View {
-                        VStack(spacing: 16) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 48))
-                                .foregroundColor(Color.slingBlue.opacity(0.6))
-                            
-                            Text("No communities found")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.black)
-                            
-                            Text("Try adjusting your search terms or join a new community.")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                                .multilineTextAlignment(.center)
-                        }
-        .padding(.vertical, 40)
-    }
     
     // MARK: - Helper Methods
     private func getUserInitials() -> String {
