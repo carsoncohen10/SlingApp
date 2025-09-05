@@ -76,8 +76,12 @@ struct MainAppView: View {
                         VStack(spacing: 4) {
                             Image(systemName: selectedTab == 0 ? "house.fill" : "house")
                                 .font(.title2)
-                                                    // Text removed
-                            .font(.caption)
+                                .frame(height: 24)
+                            
+                            Text("Home")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .frame(height: 16)
                         }
                         .foregroundColor(selectedTab == 0 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
@@ -94,6 +98,7 @@ struct MainAppView: View {
                             ZStack {
                                 Image(systemName: selectedTab == 1 ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
                                     .font(.title2)
+                                    .frame(height: 24)
                                 
                                 // Unread message indicator - refined styling
                                 if firestoreService.totalUnreadCount > 0 {
@@ -114,8 +119,11 @@ struct MainAppView: View {
                                         .offset(x: 10, y: -10)
                                 }
                             }
-                                                    // Text removed
-                            .font(.caption)
+                            
+                            Text("Chat")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .frame(height: 16)
                         }
                         .foregroundColor(selectedTab == 1 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
@@ -144,8 +152,12 @@ struct MainAppView: View {
                         VStack(spacing: 4) {
                             Image(systemName: selectedTab == 2 ? "list.bullet.clipboard.fill" : "list.bullet.clipboard")
                                 .font(.title2)
-                                                    // Text removed
-                            .font(.caption)
+                                .frame(height: 24)
+                            
+                            Text("My Bets")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .frame(height: 16)
                         }
                         .foregroundColor(selectedTab == 2 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
@@ -168,8 +180,12 @@ struct MainAppView: View {
                         VStack(spacing: 4) {
                             Image(systemName: selectedTab == 3 ? "person.2.fill" : "person.2")
                                 .font(.title2)
-                                                    // Text removed
-                            .font(.caption)
+                                .frame(height: 24)
+                            
+                            Text("Communities")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .frame(height: 16)
                         }
                         .foregroundColor(selectedTab == 3 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)

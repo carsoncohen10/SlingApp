@@ -391,16 +391,21 @@ struct FirestoreCommunityMessage: Identifiable, Codable, Equatable {
     // Convert to the existing CommunityMessage model used by the UI
     func toCommunityMessage() -> CommunityMessage {
         // Convert the type string to MessageType enum
+        print("🔍 Converting message type: '\(type)' to MessageType")
         let messageType: MessageType
         switch type {
-        case "betAnnouncement":
+        case "betAnnouncement", "announcement":
             messageType = .betAnnouncement
+            print("✅ Converted to betAnnouncement")
         case "betResult":
             messageType = .betResult
+            print("✅ Converted to betResult")
         case "system":
             messageType = .system
+            print("✅ Converted to system")
         default:
             messageType = .regular
+            print("⚠️ Converted to regular (default) - type was: '\(type)'")
         }
         
         return CommunityMessage(

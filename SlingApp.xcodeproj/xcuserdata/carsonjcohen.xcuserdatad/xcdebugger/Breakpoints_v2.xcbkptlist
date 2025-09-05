@@ -50,6 +50,36 @@
             endingLineNumber = "17"
             landmarkName = "Color"
             landmarkType = "21">
+            <Locations>
+               <Location
+                  uuid = "627AB8DE-D0C1-469E-99D7-EA6E40B506A2 - ace5421492a576db"
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "one-time initialization function for slingLightBlue"
+                  moduleName = "SlingApp.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/carsonjcohen/Desktop/SlingApp/SlingApp/Views.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "17"
+                  endingLineNumber = "17">
+               </Location>
+               <Location
+                  uuid = "627AB8DE-D0C1-469E-99D7-EA6E40B506A2 - 30f6794fbb95bbf9"
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "SwiftUI.Color.slingLightBlue.unsafeMutableAddressor : SwiftUI.Color"
+                  moduleName = "SlingApp.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/carsonjcohen/Desktop/SlingApp/SlingApp/Views.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "17"
+                  endingLineNumber = "17">
+               </Location>
+            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

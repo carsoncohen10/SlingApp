@@ -3168,10 +3168,10 @@ struct AvailableBetCard: View {
                 HStack {
                     HStack(spacing: 8) {
                         Text("Bet")
-                            .font(.subheadline)
+                                .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
-                            .lineLimit(1)
+                                .lineLimit(1)
                             .minimumScaleFactor(0.8)
                         
                         Image(systemName: "arrow.right")
@@ -3305,7 +3305,7 @@ struct ChatMessageBubble: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.gray)
                         
-                        // Bot message content (bet announcement)
+                        // Bot message content
                         if message.messageType == .betAnnouncement {
                             BetAnnouncementCard(
                                 message: message,
@@ -3323,23 +3323,30 @@ struct ChatMessageBubble: View {
                                             }
                                         }
                                     }
-                                },
-                                onOptionTap: { option in
-                                    // Fetch the actual bet from Firestore and show place bet sheet
-                                    if let betId = message.betId {
-                                        firestoreService.fetchBet(by: betId) { fetchedBet in
-                                            DispatchQueue.main.async {
-                                                if let fetchedBet = fetchedBet {
-                                                    selectedBet = fetchedBet
-                                                    selectedBetOption = option
-                                                    showingPlaceBet = true
-                                                }
-                                            }
-                                        }
-                                    }
                                 }
                             )
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            // Regular bot message (system messages, etc.)
+                            Text(message.text)
+                                .font(.subheadline)
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(Color.white)
+                                .cornerRadius(16)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .onAppear {
+                                    print("🔍 Regular bot message displayed:")
+                                    print("  - Message type: \(message.messageType)")
+                                    print("  - Message text: \(message.text)")
+                                    print("  - Bet ID: \(message.betId ?? "nil")")
+                                    print("  - Sender email: \(message.senderEmail)")
+                                }
                         }
                     }
                 } else {
@@ -3543,10 +3550,18 @@ struct MessagesView: View {
     }
     
     private func formatMessagePreview(_ message: CommunityMessage) -> String {
+        // For bot messages, don't show "Sling:" prefix
+        if message.senderEmail == "app@slingapp.com" || message.senderEmail == "bot@sling.app" {
+            return message.text
+        }
         return "\(message.senderName): \(message.text)"
     }
     
     private func formatMessagePreview(_ message: FirestoreCommunityMessage) -> String {
+        // For bot messages, don't show "Sling:" prefix
+        if message.sender_email == "app@slingapp.com" || message.sender_email == "bot@sling.app" {
+            return message.message
+        }
         // Convert stored name to full name for preview
         let senderFullName = getFullNameFromStoredName(message.sender_name, email: message.sender_email)
         return "\(senderFullName): \(message.message)"
@@ -3855,12 +3870,28 @@ struct MessagesView: View {
     
     private func chatItemAvatarView(_ chatItem: ChatListItem) -> some View {
         ZStack(alignment: .topTrailing) {
-            AsyncImage(url: URL(string: chatItem.imageUrl)) { image in
+            // Get the actual community to access profile_image_url
+            Group {
+                if let community = firestoreService.userCommunities.first(where: { $0.id == chatItem.communityId }),
+                   let profileImageUrl = community.profile_image_url, !profileImageUrl.isEmpty {
+                    AsyncImage(url: URL(string: profileImageUrl)) { phase in
+                        switch phase {
+                        case .success(let image):
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                RoundedRectangle(cornerRadius: 12)
+                        case .failure(_), .empty:
+                            // Fallback to initials on error or while loading
+                            Circle()
+                                .fill(AnyShapeStyle(Color.slingGradient))
+                                .overlay(
+                                    Text(String(chatItem.communityName.prefix(1)).uppercased())
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                )
+                        @unknown default:
+                            Circle()
                     .fill(AnyShapeStyle(Color.slingGradient))
                     .overlay(
                         Text(String(chatItem.communityName.prefix(1)).uppercased())
@@ -3868,6 +3899,19 @@ struct MessagesView: View {
                             .fontWeight(.bold)
                             .foregroundColor(.white)
                     )
+                        }
+                    }
+                } else {
+                    // Fallback to initials if no profile image
+                    Circle()
+                        .fill(AnyShapeStyle(Color.slingGradient))
+                        .overlay(
+                            Text(String(chatItem.communityName.prefix(1)).uppercased())
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        )
+                }
             }
             .frame(width: 44, height: 44)
             .clipShape(Circle())
@@ -4066,6 +4110,38 @@ struct MessagesView: View {
             }
             
             // Community avatar
+            if let profileImageUrl = selectedCommunity!.profile_image_url, !profileImageUrl.isEmpty {
+                AsyncImage(url: URL(string: profileImageUrl)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    case .failure(_), .empty:
+                        // Fallback to initials on error or while loading
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .overlay(
+                                Text(String(selectedCommunity!.name.prefix(1)).uppercased())
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                    @unknown default:
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .overlay(
+                                Text(String(selectedCommunity!.name.prefix(1)).uppercased())
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                    }
+                }
+                .frame(width: 32, height: 32)
+                .clipShape(Circle())
+            } else {
+                // Fallback to initials if no profile image
             Circle()
                 .fill(AnyShapeStyle(Color.slingGradient))
                 .frame(width: 32, height: 32)
@@ -4075,6 +4151,7 @@ struct MessagesView: View {
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                 )
+            }
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(selectedCommunity!.name)
@@ -4494,7 +4571,6 @@ struct BetAnnouncementCard: View {
     let message: CommunityMessage
     let firestoreService: FirestoreService
     let onBetTap: () -> Void
-    let onOptionTap: (String) -> Void
     
     @State private var bet: FirestoreBet?
     @State private var isLoading = true
@@ -4516,137 +4592,8 @@ struct BetAnnouncementCard: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 12)
             } else if let bet = bet {
-                // Bet image and details
-                HStack(spacing: 8) {
-                    // Bet image - smaller size
-                    if let imageURL = bet.image_url, !imageURL.isEmpty {
-                        AsyncImage(url: URL(string: imageURL)) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 40, height: 40)
-                                    .clipped()
-                                    .cornerRadius(6)
-                            case .failure(_):
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.gray.opacity(0.3))
-                                    .frame(width: 40, height: 40)
-                                    .overlay(
-                                        Image(systemName: "photo")
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
-                                    )
-                            case .empty:
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.gray.opacity(0.3))
-                                    .frame(width: 40, height: 40)
-                                    .overlay(
-                                        ProgressView()
-                                            .scaleEffect(0.5)
-                                    )
-                            @unknown default:
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.gray.opacity(0.3))
-                                    .frame(width: 40, height: 40)
-                            }
-                        }
-                    } else {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 40, height: 40)
-                            .overlay(
-                                Image(systemName: "photo")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                            )
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(bet.title)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.black)
-                        
-                        HStack(spacing: 4) {
-                            Image(systemName: "person.2.fill")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                            
-                            Text(communityName)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                            
-                            Text("•")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                            
-                            Text("by \(creatorFirstName)")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
-                        
-                        Text("Betting closes: \(formatDeadline(bet.deadline))")
-                            .font(.caption2)
-                            .foregroundColor(.slingBlue)
-                    }
-                    
-                    Spacer()
-                }
-                
-                // Betting options - stack vertically if more than 3 options
-                VStack(spacing: 6) {
-                    let displayOptions = bet.options.count > 3 ? Array(bet.options.prefix(3)) : bet.options
-                    
-                    ForEach(displayOptions, id: \.self) { option in
-                        Button(action: {
-                            onOptionTap(option)
-                        }) {
-                            HStack {
-                                Text(option)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.black)
-                                
-                                Spacer()
-                                
-                                Text(bet.odds[option] ?? "-110")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.black)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.slingLightBlue)
-                            .cornerRadius(6)
-                        }
-                    }
-                    
-                    // Show "view other options" if there are more than 3
-                    if bet.options.count > 3 {
-                        Button(action: {
-                            onBetTap() // Navigate to bet details to see all options
-                        }) {
-                            HStack {
-                                Text("View \(bet.options.count - 3) more options")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.slingBlue)
-                                
-                                Spacer()
-                                
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(.slingBlue)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.slingLightBlue)
-                            .cornerRadius(6)
-                        }
-                    }
-                }
+                // Clickable mini bet card
+                betCardView(bet: bet)
             } else {
                 // Error state
                 HStack {
@@ -4671,6 +4618,11 @@ struct BetAnnouncementCard: View {
             onBetTap()
         }
         .onAppear {
+            print("🔍 BetAnnouncementCard onAppear:")
+            print("  - Message type: \(message.messageType)")
+            print("  - Message text: \(message.text)")
+            print("  - Bet ID: \(message.betId ?? "nil")")
+            print("  - Sender email: \(message.senderEmail)")
             loadBetDetails()
         }
     }
@@ -4764,6 +4716,171 @@ struct BetAnnouncementCard: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d 'at' h:mm a"
         return formatter.string(from: date)
+    }
+    
+    private func betCardView(bet: FirestoreBet) -> some View {
+        Button(action: {
+            onBetTap()
+        }) {
+            VStack(alignment: .leading, spacing: 6) {
+                betHeaderView(bet: bet)
+                bettingOptionsView(bet: bet)
+                deadlineView(bet: bet)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .frame(maxWidth: 240, alignment: .leading)
+    }
+    
+    private func betHeaderView(bet: FirestoreBet) -> some View {
+        HStack(spacing: 8) {
+            betImageView(bet: bet)
+            betTitleView(bet: bet)
+            Spacer()
+        }
+    }
+    
+    private func betImageView(bet: FirestoreBet) -> some View {
+        Group {
+            if let imageURL = bet.image_url, !imageURL.isEmpty {
+                AsyncImage(url: URL(string: imageURL)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 40, height: 40)
+                            .clipped()
+                            .cornerRadius(8)
+                    case .failure(_):
+                        placeholderImageView
+                    case .empty:
+                        loadingImageView
+                    @unknown default:
+                        placeholderImageView
+                    }
+                }
+            } else {
+                placeholderImageView
+            }
+        }
+    }
+    
+    private var placeholderImageView: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color.gray.opacity(0.3))
+            .frame(width: 40, height: 40)
+            .overlay(
+                Image(systemName: "photo")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            )
+    }
+    
+    private var loadingImageView: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color.gray.opacity(0.3))
+            .frame(width: 40, height: 40)
+            .overlay(
+                ProgressView()
+                    .scaleEffect(0.5)
+            )
+    }
+    
+    private func betTitleView(bet: FirestoreBet) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(bet.title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(.black)
+                .lineLimit(2)
+            
+            HStack(spacing: 4) {
+                Text(communityName)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                
+                Text("•")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                
+                Text("by \(creatorFirstName)")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            }
+        }
+    }
+    
+    private func bettingOptionsView(bet: FirestoreBet) -> some View {
+        HStack(spacing: 6) {
+            if bet.options.count == 1 {
+                // Show single option
+                bettingOptionView(option: bet.options[0], bet: bet)
+                    .frame(maxWidth: .infinity)
+            } else if bet.options.count == 2 {
+                // Show both options
+                ForEach(bet.options, id: \.self) { option in
+                    bettingOptionView(option: option, bet: bet)
+                        .frame(maxWidth: .infinity)
+                }
+            } else {
+                // Show first option and "and X others"
+                bettingOptionView(option: bet.options[0], bet: bet)
+                    .frame(maxWidth: .infinity)
+                andOthersView(bet: bet)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+    
+    private func bettingOptionView(option: String, bet: FirestoreBet) -> some View {
+        HStack(spacing: 4) {
+            Text(option)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.slingBlue)
+            
+            Text(bet.odds[option] ?? "-110")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.slingBlue)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.slingLightBlue)
+        .cornerRadius(8)
+    }
+    
+    private func andOthersView(bet: FirestoreBet) -> some View {
+        Text("and \(bet.options.count - 1) others")
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundColor(.gray)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(8)
+    }
+    
+    private func moreOptionsView(bet: FirestoreBet) -> some View {
+        Text("+\(bet.options.count - 2)")
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundColor(.slingBlue)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.slingBlue.opacity(0.1))
+            .cornerRadius(8)
+    }
+    
+    private func deadlineView(bet: FirestoreBet) -> some View {
+        Text("Deadline: \(formatDeadline(bet.deadline))")
+            .font(.caption2)
+            .foregroundColor(.gray)
     }
 }
 
@@ -5361,7 +5478,7 @@ struct CommunitiesView: View {
                 }
                 .padding(.top, 16) // Spacing after horizontal line
             } else {
-                EmptyCommunitiesView(firestoreService: firestoreService)
+                        EmptyCommunitiesView(firestoreService: firestoreService)
             }
         }
     }
@@ -7462,15 +7579,15 @@ struct ProfileView: View {
                                         )
                                 case .failure(_):
                                     // Fallback to initials on error
-                                    Circle()
-                                        .fill(Color.slingGradient)
-                                        .frame(width: 64, height: 64)
-                                        .overlay(
-                                            Text(getUserInitials())
-                                                .font(.title2)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.white)
-                                        )
+                        Circle()
+                            .fill(Color.slingGradient)
+                            .frame(width: 64, height: 64)
+                            .overlay(
+                                Text(getUserInitials())
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                            )
                                         .overlay(
                                             Circle()
                                                 .stroke(Color.white, lineWidth: 4)
@@ -10342,7 +10459,8 @@ struct CreateBetView: View {
                 if let mentionRange = attributedString.range(of: mentionText) {
                     // Apply sling gradient color
                     attributedString[mentionRange].foregroundColor = .slingBlue
-                    attributedString[mentionRange].font = .subheadline.weight(.medium)
+                    // Keep the same font size and weight as the base text
+                    attributedString[mentionRange].font = .subheadline
                 }
             }
         }
@@ -10649,7 +10767,7 @@ struct ColoredTextField: UIViewRepresentable {
                 // Apply sling blue color to mentions
                 let slingBlueColor = UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)
                 attributedString.addAttribute(.foregroundColor, value: slingBlueColor, range: matchRange)
-                attributedString.addAttribute(.font, value: UIFont.systemFont(ofSize: 16, weight: .medium), range: matchRange)
+                attributedString.addAttribute(.font, value: UIFont.systemFont(ofSize: 16), range: matchRange)
             }
         }
         
@@ -10747,6 +10865,11 @@ struct ColoredTextView: UIViewRepresentable {
     private func updateTextColor(_ textView: UITextView) {
         let attributedString = NSMutableAttributedString(string: text)
         
+        // Set consistent font for entire text first
+        let baseFont = UIFont.systemFont(ofSize: 16)
+        attributedString.addAttribute(.font, value: baseFont, range: NSRange(location: 0, length: text.utf16.count))
+        attributedString.addAttribute(.foregroundColor, value: UIColor.label, range: NSRange(location: 0, length: text.utf16.count))
+        
         // Only color actual user names that were inserted from dropdown
         // Look for patterns like @FirstName LastName (with proper capitalization)
         let mentionPattern = "@[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+"
@@ -10758,15 +10881,12 @@ struct ColoredTextView: UIViewRepresentable {
                 let matchRange = match.range
                 let mentionText = (text as NSString).substring(with: matchRange)
                 
-                // Apply sling blue color to mentions
+                // Apply sling blue color to mentions (keep same font)
                 let slingBlueColor = UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)
                 attributedString.addAttribute(.foregroundColor, value: slingBlueColor, range: matchRange)
-                attributedString.addAttribute(.font, value: UIFont.systemFont(ofSize: 16, weight: .medium), range: matchRange)
+                // Don't change font - keep the base font
             }
         }
-        
-        // Set default color for non-mention text
-        attributedString.addAttribute(.foregroundColor, value: UIColor.label, range: NSRange(location: 0, length: text.utf16.count))
         
         textView.attributedText = attributedString
     }
@@ -14524,6 +14644,11 @@ struct EnhancedCommunityDetailView: View {
     
     // Image picker state
     @State private var showingImagePicker = false
+    @State private var showingPhotoOptions = false
+    @State private var showingPhotoPicker = false
+    @State private var showingCamera = false
+    @State private var selectedItem: PhotosPickerItem? = nil
+    @State private var selectedImage: UIImage?
     
     var body: some View {
         NavigationView {
@@ -14573,6 +14698,27 @@ struct EnhancedCommunityDetailView: View {
                     firestoreService: firestoreService
                 )
             }
+            .confirmationDialog("Choose Community Picture", isPresented: $showingPhotoOptions, titleVisibility: .visible) {
+                Button("Choose from Photos") {
+                    showingPhotoPicker = true
+                }
+                
+                Button("Take Photo") {
+                    showingCamera = true
+                }
+                
+                Button("Cancel", role: .cancel) { }
+            }
+            .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedItem, matching: .images, photoLibrary: .shared())
+            .sheet(isPresented: $showingCamera) {
+                CameraView { image in
+                    selectedImage = image
+                    showingCamera = false
+                }
+            }
+            .onChange(of: selectedItem) { _ in
+                loadPhotoFromPicker()
+            }
         }
     }
     
@@ -14615,18 +14761,29 @@ struct EnhancedCommunityDetailView: View {
                 VStack(spacing: 6) {
                     // Avatar - Tappable to change profile image
                     Button(action: {
-                        showingImagePicker = true
+                        showingPhotoOptions = true
                     }) {
                         ZStack {
-                            if let profileImageUrl = community.profile_image_url {
+                            if let selectedImage = selectedImage {
+                                // Show selected image
+                                Image(uiImage: selectedImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 56, height: 56)
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white, lineWidth: 2)
+                                    )
+                            } else if let profileImageUrl = community.profile_image_url {
                                 // Show custom community image
                                 AsyncImage(url: URL(string: profileImageUrl)) { image in
                                     image
                                         .resizable()
                                         .aspectRatio(contentMode: .fill)
                                 } placeholder: {
-                    Circle()
-                        .fill(Color.white)
+                                    Circle()
+                                        .fill(Color.white)
                                         .overlay(
                                             ProgressView()
                                                 .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
@@ -14642,25 +14799,33 @@ struct EnhancedCommunityDetailView: View {
                                 // Show community initials
                                 Circle()
                                     .fill(Color.white)
-                        .frame(width: 56, height: 56)
-                        .overlay(
-                            Text(String(community.name.prefix(1)).uppercased())
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.slingBlue)
-                        )
+                                    .frame(width: 56, height: 56)
+                                    .overlay(
+                                        Text(String(community.name.prefix(1)).uppercased())
+                                            .font(.title2)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.slingBlue)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                    )
                             }
                             
-                            // Camera overlay indicator
+                            // Swap icon overlay at 3-6 o'clock position
                             Circle()
-                                .fill(Color.black.opacity(0.5))
-                                .frame(width: 56, height: 56)
+                                .fill(Color.slingBlue)
+                                .frame(width: 24, height: 24)
                                 .overlay(
-                                    Image(systemName: "camera.fill")
-                                        .font(.caption)
+                                    Image(systemName: "arrow.2.squarepath")
+                                        .font(.system(size: 10, weight: .medium))
                                         .foregroundColor(.white)
                                 )
-                                .opacity(0) // Hidden by default, could add hover effect later
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 1)
+                                )
+                                .offset(x: 20, y: 20) // Position at 3-6 o'clock (half on, half off)
                         }
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -15360,6 +15525,37 @@ struct EnhancedCommunityDetailView: View {
                 if success {
                     // Dismiss the view and go back to communities list
                     dismiss()
+                }
+            }
+        }
+    }
+    
+    private func loadPhotoFromPicker() {
+        Task {
+            if let selectedItem = selectedItem {
+                if let data = try? await selectedItem.loadTransferable(type: Data.self),
+                   let uiImage = UIImage(data: data) {
+                    DispatchQueue.main.async {
+                        self.selectedImage = uiImage
+                        uploadCommunityImage()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func uploadCommunityImage() {
+        guard let image = selectedImage,
+              let communityId = community.id else { return }
+        
+        firestoreService.uploadCommunityImage(image: image, communityId: communityId) { success in
+            DispatchQueue.main.async {
+                if success {
+                    print("✅ Community image uploaded successfully")
+                    // Clear the selected image since it's now uploaded
+                    self.selectedImage = nil
+                } else {
+                    print("❌ Failed to upload community image")
                 }
             }
         }
@@ -20408,4 +20604,5 @@ struct PhotosPickerSheet: View {
         }
     }
 }
+
 

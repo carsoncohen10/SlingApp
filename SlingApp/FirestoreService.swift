@@ -441,18 +441,164 @@ class FirestoreService: ObservableObject {
         completion: @escaping (Bool, String?) -> Void
     ) {
         let msgId = generateMessageId()
-        let payload: [String: Any] = [
-            "id": msgId,
-            "community_id": communityId,
-            "sender_email": currentUser?.email ?? "app@slingapp.com",
-            "sender_name": currentUser?.display_name ?? "Sling",
-            "message": "New market: \(betTitle)",
-            "time_stamp": Date(),
-            "type": "announcement",
-            "bet_id": betId
+        let now = Date()
+        
+        // First, find the community document ID
+        guard let community = userCommunities.first(where: { $0.id == communityId }),
+              let documentId = community.documentId else {
+            print("❌ Community not found for bot message: \(communityId)")
+            completion(false, "Community not found")
+            return
+        }
+        
+        // Add message to chat_history field of the community document
+        let chatHistoryUpdate: [String: Any] = [
+            "chat_history.\(msgId)": [
+                "id": msgId,
+                "community_id": communityId,
+                "sender_id": "sling_bot",
+                "sender_name": "Sling",
+                "sender_email": "app@slingapp.com",
+                "message": "New market: \(betTitle)",
+                "time_stamp": now,
+                "type": "betAnnouncement",
+                "bet_id": betId,
+                "read_by": [],
+                "created_by": "app@slingapp.com",
+                "created_by_id": "sling_bot",
+                "created_date": now,
+                "updated_date": now
+            ]
         ]
-        db.collection("CommunityMessage").document(msgId).setData(payload) { error in
-            completion(error == nil, error?.localizedDescription)
+        
+        db.collection("community").document(documentId).updateData(chatHistoryUpdate) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ Error sending bot announcement message: \(error.localizedDescription)")
+                    completion(false, error.localizedDescription)
+                } else {
+                    print("✅ Bot announcement message sent for bet: \(betTitle)")
+                    
+                    // Refresh messages for this community
+                    self?.fetchMessages(for: communityId)
+                    
+                    // Update unread count
+                    self?.updateTotalUnreadCount()
+                    
+                    completion(true, nil)
+                }
+            }
+        }
+    }
+    
+    func sendCommunityJoinMessage(
+        to communityId: String,
+        userName: String,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        let msgId = generateMessageId()
+        let now = Date()
+        
+        // First, find the community document ID
+        guard let community = userCommunities.first(where: { $0.id == communityId }),
+              let documentId = community.documentId else {
+            print("❌ Community not found for bot join message: \(communityId)")
+            completion(false, "Community not found")
+            return
+        }
+        
+        // Add message to chat_history field of the community document
+        let chatHistoryUpdate: [String: Any] = [
+            "chat_history.\(msgId)": [
+                "id": msgId,
+                "community_id": communityId,
+                "sender_id": "sling_bot",
+                "sender_name": "Sling",
+                "sender_email": "app@slingapp.com",
+                "message": "\(userName) joined the community! 🎉",
+                "time_stamp": now,
+                "type": "system",
+                "read_by": [],
+                "created_by": "app@slingapp.com",
+                "created_by_id": "sling_bot",
+                "created_date": now,
+                "updated_date": now
+            ]
+        ]
+        
+        db.collection("community").document(documentId).updateData(chatHistoryUpdate) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ Error sending bot join message: \(error.localizedDescription)")
+                    completion(false, error.localizedDescription)
+                } else {
+                    print("✅ Bot join message sent for \(userName)")
+                    
+                    // Refresh messages for this community
+                    self?.fetchMessages(for: communityId)
+                    
+                    // Update unread count
+                    self?.updateTotalUnreadCount()
+                    
+                    completion(true, nil)
+                }
+            }
+        }
+    }
+    
+    func sendCommunityCreatedMessage(
+        to communityId: String,
+        communityName: String,
+        creatorName: String,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        let msgId = generateMessageId()
+        let now = Date()
+        
+        // First, find the community document ID
+        guard let community = userCommunities.first(where: { $0.id == communityId }),
+              let documentId = community.documentId else {
+            print("❌ Community not found for bot created message: \(communityId)")
+            completion(false, "Community not found")
+            return
+        }
+        
+        // Add message to chat_history field of the community document
+        let chatHistoryUpdate: [String: Any] = [
+            "chat_history.\(msgId)": [
+                "id": msgId,
+                "community_id": communityId,
+                "sender_id": "sling_bot",
+                "sender_name": "Sling",
+                "sender_email": "app@slingapp.com",
+                "message": "Welcome to \(communityName)! Created by \(creatorName). Let's start betting! 🎲",
+                "time_stamp": now,
+                "type": "system",
+                "read_by": [],
+                "created_by": "app@slingapp.com",
+                "created_by_id": "sling_bot",
+                "created_date": now,
+                "updated_date": now
+            ]
+        ]
+        
+        db.collection("community").document(documentId).updateData(chatHistoryUpdate) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ Error sending bot created message: \(error.localizedDescription)")
+                    completion(false, error.localizedDescription)
+                } else {
+                    print("✅ Bot created message sent for community: \(communityName)")
+                    
+                    // Refresh messages for this community
+                    self?.fetchMessages(for: communityId)
+                    
+                    // Update unread count
+                    self?.updateTotalUnreadCount()
+                    
+                    completion(true, nil)
+                }
+            }
         }
     }
     
@@ -2161,6 +2307,19 @@ class FirestoreService: ObservableObject {
                         betTitle: betTitle,
                         excludeUser: self?.currentUser?.email ?? ""
                     )
+                    
+                    // Send bot announcement message to the community chat
+                    self?.sendBetAnnouncementMessage(
+                        to: communityId,
+                        betId: betId,
+                        betTitle: betTitle
+                    ) { success, error in
+                        if success {
+                            print("✅ Bot announcement message sent for bet: \(betTitle)")
+                        } else {
+                            print("❌ Failed to send bot announcement message: \(error ?? "Unknown error")")
+                        }
+                    }
                 } else {
                     print("⚠️ Warning: Cannot create bet notifications - community ID is missing or empty")
                 }
@@ -2288,6 +2447,19 @@ class FirestoreService: ObservableObject {
                                         print("❌ Failed to create community joined notification for \(userEmail)")
                                     }
                                 }
+                                
+                                // Send bot message to community chat
+                                let userName = self?.currentUser?.display_name ?? self?.currentUser?.first_name ?? "Someone"
+                                self?.sendCommunityJoinMessage(
+                                    to: communityId,
+                                    userName: userName
+                                ) { success, error in
+                                    if success {
+                                        print("✅ Bot join message sent for \(userName)")
+                                    } else {
+                                        print("❌ Failed to send bot join message: \(error ?? "Unknown error")")
+                                    }
+                                }
                             }
                             
                             completion(true, nil)
@@ -2332,13 +2504,30 @@ class FirestoreService: ObservableObject {
         ]
         
         let memberDocumentId = "\(communityId)_\(userEmail)"
-        db.collection("CommunityMember").document(memberDocumentId).setData(memberData) { error in
+        db.collection("CommunityMember").document(memberDocumentId).setData(memberData) { [weak self] error in
             if let error = error {
                 print("❌ Error creating community member record: \(error.localizedDescription)")
                 // Still complete with success since community was created
                 completion(true, communityId)
             } else {
                 print("✅ Successfully created community and added creator as member")
+                
+                // Send bot welcome message to the new community
+                if let communityName = communityData["name"] as? String {
+                    let creatorName = self?.currentUser?.display_name ?? self?.currentUser?.first_name ?? "Someone"
+                    self?.sendCommunityCreatedMessage(
+                        to: communityId,
+                        communityName: communityName,
+                        creatorName: creatorName
+                    ) { success, error in
+                        if success {
+                            print("✅ Bot welcome message sent for community: \(communityName)")
+                        } else {
+                            print("❌ Failed to send bot welcome message: \(error ?? "Unknown error")")
+                        }
+                    }
+                }
+                
                 completion(true, communityId)
             }
         }
