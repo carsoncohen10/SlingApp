@@ -371,6 +371,7 @@ struct BetImageView: View {
     let imageURL: String? // Direct image URL from Firestore
     let size: CGFloat
     @State private var hasError = false
+    @State private var showImageFullscreen = false
     
     init(title: String, imageURL: String? = nil, size: CGFloat = 60) {
         self.title = title
@@ -390,6 +391,9 @@ struct BetImageView: View {
                         .frame(width: size, height: size)
                         .clipped()
                         .cornerRadius(12)
+                        .onTapGesture {
+                            showImageFullscreen = true
+                        }
                     case .failure(_):
                         // Handle AsyncImage loading failure
                         RoundedRectangle(cornerRadius: 12)
@@ -437,6 +441,11 @@ struct BetImageView: View {
                 // Image URL is available
             } else {
                 // No image URL available
+            }
+        }
+        .fullScreenCover(isPresented: $showImageFullscreen) {
+            if let imageUrl = imageURL {
+                FullscreenImageView(imageUrl: imageUrl, isPresented: $showImageFullscreen)
             }
         }
     }
@@ -732,12 +741,12 @@ struct EmptyBetsView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.gray.opacity(0.6))
             
-            Text("No pending bets found")
+            Text("No Active Bets")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(.black)
             
-            Text("You don't have any pending bets right now.")
+            Text("This community doesn't have any active bets yet.")
                 .font(.subheadline)
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
@@ -2171,6 +2180,8 @@ struct MyBetCard: View {
     @State private var showingDeleteAlert = false
     @State private var selectedBettingOption = ""
     @State private var hasRemindedCreator = false
+    @State private var showImageFullscreen = false
+    @State private var selectedImageUrl: String?
     
     // MARK: - Cached Computed Values (Performance Optimization)
     @State private var cachedCommunityName: String = ""
@@ -2327,6 +2338,10 @@ struct MyBetCard: View {
                                     .frame(width: 64, height: 64)
                                     .clipped()
                                     .cornerRadius(12)
+                                    .onTapGesture {
+                                        selectedImageUrl = imageURL
+                                        showImageFullscreen = true
+                                    }
                             case .failure(_), .empty:
                                 RoundedRectangle(cornerRadius: 12)
                                     .fill(Color.gray.opacity(0.2))
@@ -2518,7 +2533,7 @@ struct MyBetCard: View {
             case .chooseWinner:
                 ChooseWinnerView(bet: bet, firestoreService: firestoreService)
             case .placeBet:
-                PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService)
+                PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService, onBetPlaced: nil)
             case .share:
                 ShareSheet(activityItems: [generateShareText()])
             case .betDetail:
@@ -2568,6 +2583,11 @@ struct MyBetCard: View {
             }
             
             cachedUserWager = Double(cachedUserParticipation?.stake_amount ?? 0)
+        }
+        .fullScreenCover(isPresented: $showImageFullscreen) {
+            if let imageUrl = selectedImageUrl {
+                FullscreenImageView(imageUrl: imageUrl, isPresented: $showImageFullscreen)
+            }
         }
     }
     
@@ -2980,7 +3000,7 @@ struct CondensedBetCard: View {
             case .chooseWinner:
                 ChooseWinnerView(bet: bet, firestoreService: firestoreService)
             case .placeBet:
-                PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService)
+                PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService, onBetPlaced: nil)
             case .share:
                 ShareSheet(activityItems: [generateShareText()])
             case .betDetail:
@@ -3915,15 +3935,6 @@ struct MessagesView: View {
             }
             .frame(width: 44, height: 44)
             .clipShape(Circle())
-            
-            // Blue dot indicator for unread messages - only show if there are actually unread messages
-            if let unreadCount = unreadCounts[chatItem.communityId],
-               unreadCount > 0 {
-                Circle()
-                    .fill(Color.slingBlue)
-                    .frame(width: 12, height: 12)
-                    .offset(x: 4, y: -4)
-            }
         }
     }
     
@@ -3938,9 +3949,19 @@ struct MessagesView: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 2) {
-                                            Text(chatItem.timestampString)
-                        .font(.caption)
-                        .foregroundColor(.gray)
+                    HStack(spacing: 4) {
+                        Text(chatItem.timestampString)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        
+                        // Blue dot indicator for unread messages - only show if there are actually unread messages
+                        if let unreadCount = unreadCounts[chatItem.communityId],
+                           unreadCount > 0 {
+                            Circle()
+                                .fill(Color.slingBlue)
+                                .frame(width: 8, height: 8)
+                        }
+                    }
                 }
             }
             
@@ -4023,6 +4044,9 @@ struct MessagesView: View {
         .onChange(of: firestoreService.messages) { _, newMessages in
     
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardActive = true
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             isKeyboardActive = false
         }
@@ -4063,6 +4087,7 @@ struct MessagesView: View {
             
             messageInputView
         }
+        .navigationBarHidden(isKeyboardActive)
         .gesture(
             DragGesture()
                 .onChanged { value in
@@ -4323,6 +4348,8 @@ struct CommunityInfoModal: View {
     let community: FirestoreCommunity
     @ObservedObject var firestoreService: FirestoreService
     @State private var selectedTab = 0 // 0 = Bets, 1 = Members
+    @State private var showImageFullscreen = false
+    @State private var selectedImageUrl: String?
     
     private var communityBets: [FirestoreBet] {
         return firestoreService.bets.filter { $0.community_id == (community.id ?? "") }
@@ -4352,6 +4379,10 @@ struct CommunityInfoModal: View {
                             }
                             .frame(width: 48, height: 48)
                             .clipShape(Circle())
+                            .onTapGesture {
+                                selectedImageUrl = profileImageUrl
+                                showImageFullscreen = true
+                            }
                         } else {
                             // Show community initials
                         Circle()
@@ -4512,6 +4543,150 @@ struct CommunityInfoModal: View {
                 .padding(.trailing, 16),
                 alignment: .topTrailing
             )
+            .fullScreenCover(isPresented: $showImageFullscreen) {
+                if let imageUrl = selectedImageUrl {
+                    FullscreenImageView(imageUrl: imageUrl, isPresented: $showImageFullscreen)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Fullscreen Image View
+struct FullscreenImageView: View {
+    let imageUrl: String
+    let selectedImage: UIImage?
+    @Binding var isPresented: Bool
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    
+    init(imageUrl: String, selectedImage: UIImage? = nil, isPresented: Binding<Bool>) {
+        self.imageUrl = imageUrl
+        self.selectedImage = selectedImage
+        self._isPresented = isPresented
+    }
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            if let selectedImage = selectedImage {
+                // Show selected image directly
+                Image(uiImage: selectedImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .gesture(
+                        SimultaneousGesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    let delta = value / lastScale
+                                    lastScale = value
+                                    scale = min(max(scale * delta, 0.5), 4.0)
+                                }
+                                .onEnded { _ in
+                                    lastScale = 1.0
+                                    if scale < 1.0 {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            scale = 1.0
+                                            offset = .zero
+                                        }
+                                    }
+                                },
+                            DragGesture()
+                                .onChanged { value in
+                                    let newOffset = CGSize(
+                                        width: lastOffset.width + value.translation.width,
+                                        height: lastOffset.height + value.translation.height
+                                    )
+                                    offset = newOffset
+                                }
+                                .onEnded { _ in
+                                    lastOffset = offset
+                                }
+                        )
+                    )
+            } else if !imageUrl.isEmpty {
+                // Show image from URL
+                AsyncImage(url: URL(string: imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .gesture(
+                            SimultaneousGesture(
+                                MagnificationGesture()
+                                    .onChanged { value in
+                                        let delta = value / lastScale
+                                        lastScale = value
+                                        scale = min(max(scale * delta, 0.5), 4.0)
+                                    }
+                                    .onEnded { _ in
+                                        lastScale = 1.0
+                                        if scale < 1.0 {
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                scale = 1.0
+                                                offset = .zero
+                                            }
+                                        }
+                                    },
+                                DragGesture()
+                                    .onChanged { value in
+                                        let newOffset = CGSize(
+                                            width: lastOffset.width + value.translation.width,
+                                            height: lastOffset.height + value.translation.height
+                                        )
+                                        offset = newOffset
+                                    }
+                                    .onEnded { _ in
+                                        lastOffset = offset
+                                    }
+                            )
+                        )
+                } placeholder: {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                }
+            } else {
+                // Fallback
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
+            }
+            
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        isPresented = false
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .background(Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                    .padding(.top, 50)
+                    .padding(.trailing, 20)
+                }
+                Spacer()
+            }
+        }
+        .onTapGesture(count: 2) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                if scale > 1.0 {
+                    scale = 1.0
+                    offset = .zero
+                    lastOffset = .zero
+                } else {
+                    scale = 2.0
+                }
+            }
         }
     }
 }
@@ -4930,6 +5105,7 @@ struct PlaceBetView: View {
     let presetOption: String? // Add preset option parameter
     @ObservedObject var firestoreService: FirestoreService
     @Environment(\.dismiss) private var dismiss
+    let onBetPlaced: (() -> Void)? // Callback when bet is successfully placed
     
     @State private var selectedOption = ""
     @State private var betAmount = ""
@@ -7534,6 +7710,10 @@ struct ProfileView: View {
     @State private var selectedCommunity: FirestoreCommunity?
     @State private var showingCommunityDetail = false
     
+    // Fullscreen image state
+    @State private var showImageFullscreen = false
+    @State private var selectedImageUrl: String?
+    
     private func getUserInitials() -> String {
         let user = firestoreService.currentUser
         if let firstName = user?.first_name, let lastName = user?.last_name, !firstName.isEmpty, !lastName.isEmpty {
@@ -7562,82 +7742,124 @@ struct ProfileView: View {
                 VStack(spacing: 24) {
                     // Profile Summary
                     HStack(spacing: 16) {
-                        // Profile Picture or Initials
-                        if let profilePictureUrl = firestoreService.currentUser?.profile_picture_url {
-                            // Show user's profile picture
-                            AsyncImage(url: URL(string: profilePictureUrl)) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 64, height: 64)
-                                        .clipShape(Circle())
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 4)
-                                        )
-                                case .failure(_):
-                                    // Fallback to initials on error
-                        Circle()
-                            .fill(Color.slingGradient)
-                            .frame(width: 64, height: 64)
-                            .overlay(
-                                Text(getUserInitials())
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                            )
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 4)
-                                        )
-                                case .empty:
-                                    // Show initials while loading
-                                    Circle()
-                                        .fill(Color.slingGradient)
-                                        .frame(width: 64, height: 64)
-                                        .overlay(
-                                            Text(getUserInitials())
-                                                .font(.title2)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.white)
-                                        )
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 4)
-                                        )
-                                @unknown default:
-                                    Circle()
-                                        .fill(Color.slingGradient)
-                                        .frame(width: 64, height: 64)
-                                        .overlay(
-                                            Text(getUserInitials())
-                                                .font(.title2)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.white)
-                                        )
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 4)
-                                        )
+                        // Profile Picture or Initials - Enhanced with click handlers
+                        ZStack {
+                            if let profilePictureUrl = firestoreService.currentUser?.profile_picture_url {
+                                // Show user's profile picture
+                                AsyncImage(url: URL(string: profilePictureUrl)) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 80, height: 80)
+                                            .clipShape(Circle())
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.white, lineWidth: 4)
+                                            )
+                                            .onTapGesture {
+                                                // Show fullscreen image
+                                                selectedImageUrl = profilePictureUrl
+                                                showImageFullscreen = true
+                                            }
+                                    case .failure(_):
+                                        // Fallback to initials on error
+                                        Circle()
+                                            .fill(Color.slingGradient)
+                                            .frame(width: 80, height: 80)
+                                            .overlay(
+                                                Text(getUserInitials())
+                                                    .font(.largeTitle)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.white)
+                                            )
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.white, lineWidth: 4)
+                                            )
+                                            .onTapGesture {
+                                                // Change picture
+                                                showingEditProfile = true
+                                            }
+                                    case .empty:
+                                        // Show initials while loading
+                                        Circle()
+                                            .fill(Color.slingGradient)
+                                            .frame(width: 80, height: 80)
+                                            .overlay(
+                                                Text(getUserInitials())
+                                                    .font(.largeTitle)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.white)
+                                            )
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.white, lineWidth: 4)
+                                            )
+                                            .onTapGesture {
+                                                // Change picture
+                                                showingEditProfile = true
+                                            }
+                                    @unknown default:
+                                        Circle()
+                                            .fill(Color.slingGradient)
+                                            .frame(width: 80, height: 80)
+                                            .overlay(
+                                                Text(getUserInitials())
+                                                    .font(.largeTitle)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.white)
+                                            )
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.white, lineWidth: 4)
+                                            )
+                                            .onTapGesture {
+                                                // Change picture
+                                                showingEditProfile = true
+                                            }
+                                    }
                                 }
+                            } else {
+                                // Fallback to initials
+                                Circle()
+                                    .fill(Color.slingGradient)
+                                    .frame(width: 80, height: 80)
+                                    .overlay(
+                                        Text(getUserInitials())
+                                            .font(.largeTitle)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white, lineWidth: 4)
+                                    )
+                                    .onTapGesture {
+                                        // Change picture
+                                        showingEditProfile = true
+                                    }
                             }
-                        } else {
-                            // Fallback to initials
+                            
+                            // Swap icon overlay at 3-6 o'clock position
                             Circle()
-                                .fill(Color.slingGradient)
-                            .frame(width: 64, height: 64)
-                            .overlay(
-                                Text(getUserInitials())
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                            )
+                                .fill(Color.slingBlue)
+                                .frame(width: 28, height: 28)
+                                .overlay(
+                                    Image(systemName: "arrow.2.squarepath")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white)
+                                )
                                 .overlay(
                                     Circle()
-                                        .stroke(Color.white, lineWidth: 4)
+                                        .stroke(Color.white, lineWidth: 2)
                                 )
+                                .offset(x: 28, y: 28) // Position at 3-6 o'clock (half on, half off)
+                                .onTapGesture {
+                                    // Change picture
+                                    showingEditProfile = true
+                                }
                         }
                         
                         VStack(alignment: .leading, spacing: 4) {
@@ -7823,6 +8045,11 @@ struct ProfileView: View {
                     community: community,
                     firestoreService: firestoreService
                 )
+            }
+        }
+        .fullScreenCover(isPresented: $showImageFullscreen) {
+            if let imageUrl = selectedImageUrl {
+                FullscreenImageView(imageUrl: imageUrl, isPresented: $showImageFullscreen)
             }
         }
     }
@@ -8687,7 +8914,6 @@ struct NotificationsView: View {
     let firestoreService: FirestoreService
     @State private var isLoadingNotifications = false
     @State private var selectedFilter: NotificationFilter = .all
-    @State private var hasMarkedAllAsRead = false
     
     // Computed property to filter notifications based on selected filter
     private var filteredNotifications: [FirestoreNotification] {
@@ -8838,11 +9064,12 @@ struct NotificationsView: View {
                     firestoreService.fetchNotifications()
                 }
                 
-                // Mark all unread notifications as read when the notification page is opened
-                if !hasMarkedAllAsRead {
-                    markAllUnreadNotificationsAsRead()
-                    hasMarkedAllAsRead = true
-                }
+                // Don't mark notifications as read when opening - only when closing
+            }
+            .onDisappear {
+                print("🔍 NotificationsView: onDisappear triggered - marking notifications as read")
+                // Mark all unread notifications as read when the notification page is closed
+                markAllUnreadNotificationsAsRead()
             }
             .onReceive(firestoreService.$notifications) { notifications in
                 print("🔍 NotificationsView: Notifications updated, count: \(notifications.count)")
@@ -12994,8 +13221,11 @@ struct BettingInterfaceView: View {
                     showSuccess = true
                     firestoreService.refreshCurrentUser()
                     
-                    // Auto-dismiss after 2 seconds
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    // Call the callback to notify parent (e.g., switch to My Bets tab)
+                    self.onBetPlaced?()
+                    
+                    // Auto-dismiss after 1 second (faster)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                         dismiss()
                     }
                 } else {
@@ -13448,7 +13678,7 @@ struct BetReviewView: View {
                     print("✅ Bet placed successfully!")
                     showSuccess = true
                     // Dismiss after a short delay to show success message
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                         print("🎉 Calling onConfirm and dismiss")
                         onConfirm()
                         dismiss()
@@ -13796,7 +14026,7 @@ struct SwipeableBetCard: View {
             ChooseWinnerView(bet: bet, firestoreService: firestoreService)
         }
         .sheet(isPresented: $showingPlaceBetSheet) {
-            PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService)
+            PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService, onBetPlaced: nil)
         }
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(activityItems: [generateShareText()])
@@ -14242,7 +14472,7 @@ struct EnhancedBetCard: View {
             ChooseWinnerView(bet: bet, firestoreService: firestoreService)
         }
         .sheet(isPresented: $showingPlaceBetSheet) {
-            PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService)
+            PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService, onBetPlaced: nil)
         }
         .alert("Cancel Market", isPresented: $showingCancelAlert) {
             Button("Cancel", role: .cancel) { }
@@ -14650,6 +14880,10 @@ struct EnhancedCommunityDetailView: View {
     @State private var selectedItem: PhotosPickerItem? = nil
     @State private var selectedImage: UIImage?
     
+    // Fullscreen image state
+    @State private var showImageFullscreen = false
+    @State private var selectedImageUrl: String?
+    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -14719,6 +14953,13 @@ struct EnhancedCommunityDetailView: View {
             .onChange(of: selectedItem) { _ in
                 loadPhotoFromPicker()
             }
+            .fullScreenCover(isPresented: $showImageFullscreen) {
+                if let imageUrl = selectedImageUrl {
+                    FullscreenImageView(imageUrl: imageUrl, isPresented: $showImageFullscreen)
+                } else if let selectedImage = selectedImage {
+                    FullscreenImageView(imageUrl: "", selectedImage: selectedImage, isPresented: $showImageFullscreen)
+                }
+            }
         }
     }
     
@@ -14759,76 +15000,89 @@ struct EnhancedCommunityDetailView: View {
                 
                 // Community Info - compact layout
                 VStack(spacing: 6) {
-                    // Avatar - Tappable to change profile image
-                    Button(action: {
-                        showingPhotoOptions = true
-                    }) {
-                        ZStack {
-                            if let selectedImage = selectedImage {
-                                // Show selected image
-                                Image(uiImage: selectedImage)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 56, height: 56)
-                                    .clipShape(Circle())
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: 2)
-                                    )
-                            } else if let profileImageUrl = community.profile_image_url {
-                                // Show custom community image
-                                AsyncImage(url: URL(string: profileImageUrl)) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    Circle()
-                                        .fill(Color.white)
-                                        .overlay(
-                                            ProgressView()
-                                                .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
-                                        )
-                                }
-                                .frame(width: 56, height: 56)
+                    // Avatar - Bigger profile picture with separate click handlers
+                    ZStack {
+                        if let selectedImage = selectedImage {
+                            // Show selected image
+                            Image(uiImage: selectedImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 80, height: 80)
                                 .clipShape(Circle())
                                 .overlay(
                                     Circle()
-                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                        .stroke(Color.white, lineWidth: 3)
                                 )
-                            } else {
-                                // Show community initials
+                                .onTapGesture {
+                                    // Show fullscreen image
+                                    selectedImageUrl = nil
+                                    showImageFullscreen = true
+                                }
+                        } else if let profileImageUrl = community.profile_image_url {
+                            // Show custom community image
+                            AsyncImage(url: URL(string: profileImageUrl)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } placeholder: {
                                 Circle()
                                     .fill(Color.white)
-                                    .frame(width: 56, height: 56)
                                     .overlay(
-                                        Text(String(community.name.prefix(1)).uppercased())
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.slingBlue)
-                                    )
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .slingBlue))
                                     )
                             }
-                            
-                            // Swap icon overlay at 3-6 o'clock position
+                            .frame(width: 80, height: 80)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                            )
+                            .onTapGesture {
+                                // Show fullscreen image
+                                selectedImageUrl = profileImageUrl
+                                showImageFullscreen = true
+                            }
+                        } else {
+                            // Show community initials - clicking anywhere changes picture
                             Circle()
-                                .fill(Color.slingBlue)
-                                .frame(width: 24, height: 24)
+                                .fill(Color.white)
+                                .frame(width: 80, height: 80)
                                 .overlay(
-                                    Image(systemName: "arrow.2.squarepath")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(.white)
+                                    Text(String(community.name.prefix(1)).uppercased())
+                                        .font(.largeTitle)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.slingBlue)
                                 )
                                 .overlay(
                                     Circle()
-                                        .stroke(Color.white, lineWidth: 1)
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 2)
                                 )
-                                .offset(x: 20, y: 20) // Position at 3-6 o'clock (half on, half off)
+                                .onTapGesture {
+                                    // Change picture
+                                    showingPhotoOptions = true
+                                }
                         }
+                        
+                        // Swap icon overlay at 3-6 o'clock position
+                        Circle()
+                            .fill(Color.slingBlue)
+                            .frame(width: 28, height: 28)
+                            .overlay(
+                                Image(systemName: "arrow.2.squarepath")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white)
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 2)
+                            )
+                            .offset(x: 28, y: 28) // Position at 3-6 o'clock (half on, half off)
+                            .onTapGesture {
+                                // Change picture
+                                showingPhotoOptions = true
+                            }
                     }
-                    .buttonStyle(PlainButtonStyle())
                     
                     // Community Name with Admin Badge
                     HStack(spacing: 8) {
@@ -15548,7 +15802,7 @@ struct EnhancedCommunityDetailView: View {
         guard let image = selectedImage,
               let communityId = community.id else { return }
         
-        firestoreService.uploadCommunityImage(image: image, communityId: communityId) { success in
+        firestoreService.uploadCommunityImage(image, communityId: communityId) { success, imageUrl in
             DispatchQueue.main.async {
                 if success {
                     print("✅ Community image uploaded successfully")
@@ -15682,6 +15936,10 @@ struct MemberProfileView: View {
     @State private var memberBets: [FirestoreBet] = []
     @State private var isLoadingBets = false
     
+    // Fullscreen image state
+    @State private var showImageFullscreen = false
+    @State private var selectedImageUrl: String?
+    
     // Mock data for demonstration - in real app, fetch from Firestore
     private var memberName: String {
         if memberIndex == 0 {
@@ -15711,7 +15969,7 @@ struct MemberProfileView: View {
         NavigationView {
             VStack(spacing: 0) {
                 // Header
-                headerSection
+                headerSection(selectedImageUrl: $selectedImageUrl, showImageFullscreen: $showImageFullscreen)
                 
                 // Performance Section
                 performanceSection
@@ -15727,11 +15985,16 @@ struct MemberProfileView: View {
             .onAppear {
                 loadMemberBets()
             }
+            .fullScreenCover(isPresented: $showImageFullscreen) {
+                if let imageUrl = selectedImageUrl {
+                    FullscreenImageView(imageUrl: imageUrl, isPresented: $showImageFullscreen)
+                }
+            }
         }
     }
     
     // MARK: - Header Section
-    private var headerSection: some View {
+    private func headerSection(selectedImageUrl: Binding<String?>, showImageFullscreen: Binding<Bool>) -> some View {
         VStack(spacing: 16) {
             HStack {
                 Button(action: { dismiss() }) {
@@ -15996,6 +16259,10 @@ struct TradingProfileView: View {
     @State private var userActivityItems: [UserActivityItem] = []
     @State private var isLoadingActivity = false
     
+    // Fullscreen image state
+    @State private var showImageFullscreen = false
+    @State private var selectedImageUrl: String?
+    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -16022,6 +16289,11 @@ struct TradingProfileView: View {
                     userData: userData,
                     firestoreService: firestoreService
                 )
+            }
+            .fullScreenCover(isPresented: $showImageFullscreen) {
+                if let imageUrl = selectedImageUrl {
+                    FullscreenImageView(imageUrl: imageUrl, isPresented: $showImageFullscreen)
+                }
             }
         }
     }
@@ -16075,62 +16347,128 @@ struct TradingProfileView: View {
             // User Info Card
                     VStack(spacing: 16) {
                 HStack(spacing: 16) {
-                    // Avatar - User Profile Picture or Initials
-                    if let profilePictureUrl = userData?.profile_picture_url {
-                        // Show user's profile picture
-                        AsyncImage(url: URL(string: profilePictureUrl)) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 56, height: 56)
-                                    .clipShape(Circle())
-                            case .failure(_):
-                                // Fallback to initials on error
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 56, height: 56)
-                                    .overlay(
-                                        Text(getUserInitialsFromName())
-                                            .font(.title3)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.slingBlue)
-                                    )
-                            case .empty:
-                                // Show initials while loading
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 56, height: 56)
-                                    .overlay(
-                                        Text(getUserInitialsFromName())
-                                            .font(.title3)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.slingBlue)
-                                    )
-                            @unknown default:
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 56, height: 56)
-                                    .overlay(
-                                        Text(getUserInitialsFromName())
-                                            .font(.title3)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.slingBlue)
-                                    )
+                    // Avatar - User Profile Picture or Initials - Enhanced with click handlers
+                    ZStack {
+                        if let profilePictureUrl = userData?.profile_picture_url {
+                            // Show user's profile picture
+                            AsyncImage(url: URL(string: profilePictureUrl)) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 80, height: 80)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 3)
+                                        )
+                                        .onTapGesture {
+                                            // Show fullscreen image
+                                            selectedImageUrl = profilePictureUrl
+                                            showImageFullscreen = true
+                                        }
+                                case .failure(_):
+                                    // Fallback to initials on error
+                                    Circle()
+                                        .fill(Color.white)
+                                        .frame(width: 80, height: 80)
+                                        .overlay(
+                                            Text(getUserInitialsFromName())
+                                                .font(.largeTitle)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.slingBlue)
+                                        )
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 3)
+                                        )
+                                        .onTapGesture {
+                                            // For member profiles, we can't change the picture
+                                            // Just show fullscreen if there's an image
+                                        }
+                                case .empty:
+                                    // Show initials while loading
+                                    Circle()
+                                        .fill(Color.white)
+                                        .frame(width: 80, height: 80)
+                                        .overlay(
+                                            Text(getUserInitialsFromName())
+                                                .font(.largeTitle)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.slingBlue)
+                                        )
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 3)
+                                        )
+                                        .onTapGesture {
+                                            // For member profiles, we can't change the picture
+                                            // Just show fullscreen if there's an image
+                                        }
+                                @unknown default:
+                                    Circle()
+                                        .fill(Color.white)
+                                        .frame(width: 80, height: 80)
+                                        .overlay(
+                                            Text(getUserInitialsFromName())
+                                                .font(.largeTitle)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.slingBlue)
+                                        )
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 3)
+                                        )
+                                        .onTapGesture {
+                                            // For member profiles, we can't change the picture
+                                            // Just show fullscreen if there's an image
+                                        }
+                                }
                             }
-                        }
-                    } else {
-                        // Fallback to initials
+                        } else {
+                            // Fallback to initials
                             Circle()
                                 .fill(Color.white)
-                        .frame(width: 56, height: 56)
+                                .frame(width: 80, height: 80)
                                 .overlay(
                                     Text(String(userName.prefix(1)).uppercased())
-                                .font(.title2)
+                                        .font(.largeTitle)
                                         .fontWeight(.bold)
-                                .foregroundColor(.slingBlue)
+                                        .foregroundColor(.slingBlue)
                                 )
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 3)
+                                )
+                                .onTapGesture {
+                                    // For member profiles, we can't change the picture
+                                    // Just show fullscreen if there's an image
+                                }
+                        }
+                        
+                        // For member profiles, we don't show a swap icon since users can't change other people's pictures
+                        // Only show swap icon if this is the current user's profile
+                        if isCurrentUser {
+                            // Swap icon overlay at 3-6 o'clock position
+                            Circle()
+                                .fill(Color.slingBlue)
+                                .frame(width: 28, height: 28)
+                                .overlay(
+                                    Image(systemName: "arrow.2.squarepath")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white)
+                                )
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 2)
+                                )
+                                .offset(x: 28, y: 28) // Position at 3-6 o'clock (half on, half off)
+                                .onTapGesture {
+                                    // Change picture - this would open edit profile
+                                    showingUserSettings = true
+                                }
+                        }
                     }
                             
                     VStack(alignment: .leading, spacing: 4) {
@@ -16153,6 +16491,23 @@ struct TradingProfileView: View {
                     
                     Spacer()
                     
+                    // Edit Profile Button - White pencil icon
+                    if isCurrentUser {
+                        Button(action: {
+                            showingUserSettings = true
+                        }) {
+                            Image(systemName: "pencil")
+                                .font(.title3)
+                                .foregroundColor(.white)
+                                .frame(width: 32, height: 32)
+                                .background(Color.white.opacity(0.2))
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                    }
 
                 }
             }
