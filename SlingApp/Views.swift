@@ -1047,7 +1047,8 @@ struct EnhancedBetCardView: View {
             BettingInterfaceView(
                 bet: bet,
                 selectedOption: selectedBettingOption.isEmpty ? bet.options.first ?? "Yes" : selectedBettingOption,
-                firestoreService: firestoreService
+                firestoreService: firestoreService,
+                onBetPlaced: nil
             )
         }
     }
@@ -2549,7 +2550,8 @@ struct MyBetCard: View {
                 BettingInterfaceView(
                     bet: bet,
                     selectedOption: selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption,
-                    firestoreService: firestoreService
+                    firestoreService: firestoreService,
+                    onBetPlaced: nil
                 )
             }
         }
@@ -3016,7 +3018,8 @@ struct CondensedBetCard: View {
                 BettingInterfaceView(
                     bet: bet,
                     selectedOption: selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption,
-                    firestoreService: firestoreService)
+                    firestoreService: firestoreService,
+                    onBetPlaced: nil)
             }
         }
         .onAppear {
@@ -3444,7 +3447,8 @@ struct ChatMessageBubble: View {
                 BettingInterfaceView(
                     bet: selectedBet,
                     selectedOption: selectedBetOption.isEmpty ? (selectedBet.options.first ?? "Yes") : selectedBetOption,
-                    firestoreService: firestoreService
+                    firestoreService: firestoreService,
+                    onBetPlaced: nil
                 )
             }
         }
@@ -12618,7 +12622,8 @@ struct JoinBetView: View {
                     BettingInterfaceView(
                         bet: bet,
                         selectedOption: selectedOption,
-                        firestoreService: firestoreService
+                        firestoreService: firestoreService,
+                        onBetPlaced: nil
                     )
                 }
             }
@@ -12944,6 +12949,7 @@ struct BettingInterfaceView: View {
     let bet: FirestoreBet
     @State private var selectedOption: String
     @ObservedObject var firestoreService: FirestoreService
+    let onBetPlaced: (() -> Void)? // Callback when bet is successfully placed
     @State private var betAmount = ""
     @State private var isLoading = false
     @State private var showingOptionPicker = false
@@ -12991,12 +12997,13 @@ struct BettingInterfaceView: View {
     }
     
     // Initialize with selected option
-    init(bet: FirestoreBet, selectedOption: String, firestoreService: FirestoreService) {
+    init(bet: FirestoreBet, selectedOption: String, firestoreService: FirestoreService, onBetPlaced: (() -> Void)? = nil) {
         self.bet = bet
         // Ensure we have a valid selectedOption, fallback to first option if empty
         let validOption = selectedOption.isEmpty ? (bet.options.first ?? "Yes") : selectedOption
         self._selectedOption = State(initialValue: validOption)
         self.firestoreService = firestoreService
+        self.onBetPlaced = onBetPlaced
     }
     
     var body: some View {
@@ -14046,7 +14053,8 @@ struct SwipeableBetCard: View {
                 BettingInterfaceView(
                     bet: bet,
                     selectedOption: selectedBettingOption,
-                    firestoreService: firestoreService
+                    firestoreService: firestoreService,
+                    onBetPlaced: nil
                 )
             }
         }
