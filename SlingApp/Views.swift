@@ -1178,6 +1178,7 @@ struct MyBetsView: View {
     @Binding var selectedTab: Int
     @State private var selectedPastBetFilter = "All"
     @State private var showingCreateBetModal = false
+    @StateObject private var timeTracker = TimeTracker()
     
     // Computed properties for statistics
     private var activeBets: [FirestoreBet] {
@@ -1278,6 +1279,7 @@ struct MyBetsView: View {
                                 if availableBets.isEmpty {
                                     // Create Bet Card - when no bets exist at all
                                     Button(action: {
+                                        AnalyticsService.shared.trackMyBetsInteraction(action: .createBet, betId: "new", betTitle: "Create Bet")
                                         showingCreateBetModal = true
                                     }) {
                                         VStack(spacing: 8) {
@@ -1309,6 +1311,7 @@ struct MyBetsView: View {
                                 } else {
                                     // View More Markets Card - when some bets exist
                                 Button(action: {
+                                    AnalyticsService.shared.trackMyBetsInteraction(action: .viewDetails, betId: "home", betTitle: "View More Markets")
                                     // Navigate to home page by changing the selected tab
                                     selectedTab = 0
                                 }) {
@@ -1524,6 +1527,17 @@ struct MyBetsView: View {
         }
         .background(Color.white)
         .onAppear {
+            // Track my bets page view
+            AnalyticsService.shared.trackUserFlowStep(step: .myBetsTab)
+            AnalyticsService.shared.trackFeatureUsage(feature: "my_bets_page", context: "main_app")
+            timeTracker.startTracking(for: "my_bets_page")
+            
+            // Track bet stats view
+            AnalyticsService.shared.trackBetStatsView(statType: "active_bets", value: activeBets.count)
+            AnalyticsService.shared.trackBetStatsView(statType: "past_bets", value: pastBets.count)
+            AnalyticsService.shared.trackBetStatsView(statType: "won_bets", value: wonBets.count)
+            AnalyticsService.shared.trackBetStatsView(statType: "total_bets", value: totalBets)
+            
             firestoreService.fetchUserBets { _ in }
             firestoreService.fetchUserBetParticipations()
             firestoreService.fetchUserCommunities()
@@ -1532,6 +1546,12 @@ struct MyBetsView: View {
             firestoreService.fetchUserBets { _ in }
             firestoreService.fetchUserBetParticipations()
             firestoreService.fetchUserCommunities()
+        }
+        .onDisappear {
+            // Track time spent on my bets page
+            if let duration = timeTracker.endTracking(for: "my_bets_page") {
+                AnalyticsService.shared.trackPageViewTime(page: "my_bets_page", timeSpent: duration)
+            }
         }
         .sheet(isPresented: $showingCreateBetModal) {
             CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
@@ -3473,6 +3493,7 @@ struct MessagesView: View {
     @State private var isKeyboardActive = false
     @State private var isLoadingMessages = false
     @State private var userFullNames: [String: String] = [:] // Cache for user full names
+    @StateObject private var timeTracker = TimeTracker()
     
     // Global timestamp state - activated by swiping anywhere on the page
     @State private var isShowingTimestamps = false
@@ -3530,10 +3551,25 @@ struct MessagesView: View {
         let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         messageText = "" // Clear input immediately for better UX
         
+        // Track message send attempt
+        AnalyticsService.shared.trackMessageSend(
+            communityId: community.id ?? "",
+            communityName: community.name,
+            messageLength: trimmedMessage.count,
+            success: true
+        )
+        
         firestoreService.sendMessage(to: community.id ?? "", text: trimmedMessage) { success, error in
             DispatchQueue.main.async {
                 if let error = error {
                     print("❌ Failed to send message: \(error)")
+                    // Track failed message send
+                    AnalyticsService.shared.trackMessageSend(
+                        communityId: community.id ?? "",
+                        communityName: community.name,
+                        messageLength: trimmedMessage.count,
+                        success: false
+                    )
                     // Optionally show an error message to user
                 }
             }
@@ -3990,6 +4026,13 @@ struct MessagesView: View {
                     .transition(.move(edge: .trailing))
                     .onAppear {
                         if let community = selectedCommunity {
+                            // Track community selection
+                            AnalyticsService.shared.trackChatCommunitySelect(
+                                communityId: community.id ?? "",
+                                communityName: community.name,
+                                unreadCount: unreadCounts[community.id ?? ""] ?? 0
+                            )
+                            
                             loadMessages(for: community)
                             // Mark all messages as read when entering chat
                             if let communityId = community.id {
@@ -4009,6 +4052,11 @@ struct MessagesView: View {
         .background(Color.white)
         .animation(.easeInOut(duration: 0.3), value: selectedCommunity)
         .onAppear {
+            // Track chat page view
+            AnalyticsService.shared.trackUserFlowStep(step: .chatTab)
+            AnalyticsService.shared.trackFeatureUsage(feature: "chat_page", context: "main_app")
+            timeTracker.startTracking(for: "chat_page")
+            
             // Refresh communities when view appears
             isLoadingMessages = true
             firestoreService.fetchUserCommunities()
@@ -4020,6 +4068,12 @@ struct MessagesView: View {
             // Set loading to false after initial load
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 isLoadingMessages = false
+            }
+        }
+        .onDisappear {
+            // Track time spent on chat page
+            if let duration = timeTracker.endTracking(for: "chat_page") {
+                AnalyticsService.shared.trackPageViewTime(page: "chat_page", timeSpent: duration)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
@@ -5483,6 +5537,7 @@ struct CommunitiesView: View {
     @State private var showingCreateCommunityModal = false
     @State private var outstandingBalances: [OutstandingBalance] = []
     @State private var showingAllBalances = false
+    @StateObject private var timeTracker = TimeTracker()
     
     
     var body: some View {
@@ -5499,11 +5554,17 @@ struct CommunitiesView: View {
                             
                             // Create/Join Community Button with Dropdown
                             Menu {
-                                Button(action: { showingCreateCommunityModal = true }) {
+                                Button(action: { 
+                                    AnalyticsService.shared.trackCommunitiesInteraction(action: .create)
+                                    showingCreateCommunityModal = true 
+                                }) {
                                     Label("Create Community", systemImage: "plus.circle")
                                 }
                                 
-                                Button(action: { showingJoinCommunityModal = true }) {
+                                Button(action: { 
+                                    AnalyticsService.shared.trackCommunitiesInteraction(action: .join)
+                                    showingJoinCommunityModal = true 
+                                }) {
                                     Label("Join Community", systemImage: "person.badge.plus")
                                 }
                             } label: {
@@ -5542,13 +5603,26 @@ struct CommunitiesView: View {
                     .padding(.bottom, 100) // Space for bottom tab bar
         }
         .refreshable {
+            AnalyticsService.shared.trackCommunitiesInteraction(action: .refresh)
             await refreshData()
         }
         .background(Color.white)
         .onAppear {
+            // Track communities page view
+            AnalyticsService.shared.trackUserFlowStep(step: .communitiesTab)
+            AnalyticsService.shared.trackFeatureUsage(feature: "communities_page", context: "main_app")
+            AnalyticsService.shared.trackCommunitiesInteraction(action: .view)
+            timeTracker.startTracking(for: "communities_page")
+            
             loadOutstandingBalances()
             firestoreService.fetchUserCommunities()
             updateCommunityStatistics()
+        }
+        .onDisappear {
+            // Track time spent on communities page
+            if let duration = timeTracker.endTracking(for: "communities_page") {
+                AnalyticsService.shared.trackPageViewTime(page: "communities_page", timeSpent: duration)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             firestoreService.fetchUserCommunities()
@@ -5600,6 +5674,7 @@ struct CommunitiesView: View {
                 
                 // View All button
                 Button(action: {
+                    AnalyticsService.shared.trackCommunitiesInteraction(action: .balanceView, details: ["balance_count": outstandingBalances.count])
                     showingAllBalances = true
                 }) {
                     Text("View All")
@@ -6654,6 +6729,18 @@ struct ModernCommunityCard: View {
     
     var body: some View {
         Button(action: {
+            // Track community tap
+            AnalyticsService.shared.trackCommunityView(
+                communityId: community.id ?? "",
+                communityName: community.name,
+                memberCount: community.member_count,
+                betCount: community.total_bets
+            )
+            AnalyticsService.shared.trackCommunitiesInteraction(
+                action: .communityTap,
+                communityId: community.id,
+                communityName: community.name
+            )
             showingCommunityDetail = true
         }) {
             VStack(alignment: .leading, spacing: 12) {
@@ -8217,6 +8304,7 @@ struct CommunityDetailView: View {
     @State private var userBalance: Double = 0.0
     @State private var memberBalances: [String: Double] = [:]
     @State private var hasLoadedBalances = false
+    @StateObject private var timeTracker = TimeTracker()
     
     // Computed property to sort members by activity/balance
     private var sortedMembers: [CommunityMemberInfo] {
@@ -8252,6 +8340,11 @@ struct CommunityDetailView: View {
                     // Header with back button and dropdown
                     HStack {
                         Button(action: {
+                            AnalyticsService.shared.trackCommunityDetailInteraction(
+                                action: .back,
+                                communityId: community.id ?? "",
+                                communityName: community.name
+                            )
                             dismiss()
                         }) {
                             Image(systemName: "arrow.left")
@@ -8263,13 +8356,28 @@ struct CommunityDetailView: View {
                         
                         Menu {
                             Button("All Members") {
-                                // Filter action
+                                AnalyticsService.shared.trackCommunityDetailInteraction(
+                                    action: .filter,
+                                    communityId: community.id ?? "",
+                                    communityName: community.name,
+                                    details: ["filter_type": "all_members"]
+                                )
                             }
                             Button("Active Bets") {
-                                // Filter action
+                                AnalyticsService.shared.trackCommunityDetailInteraction(
+                                    action: .filter,
+                                    communityId: community.id ?? "",
+                                    communityName: community.name,
+                                    details: ["filter_type": "active_bets"]
+                                )
                             }
                             Button("Settled Bets") {
-                                // Filter action
+                                AnalyticsService.shared.trackCommunityDetailInteraction(
+                                    action: .filter,
+                                    communityId: community.id ?? "",
+                                    communityName: community.name,
+                                    details: ["filter_type": "settled_bets"]
+                                )
                             }
                         } label: {
                             HStack(spacing: 4) {
@@ -8405,6 +8513,19 @@ struct CommunityDetailView: View {
                             VStack(spacing: 0) {
                                 ForEach(sortedMembers, id: \.email) { member in
                                     Button(action: {
+                                        AnalyticsService.shared.trackCommunityMemberInteraction(
+                                            action: "balance_view",
+                                            communityId: community.id ?? "",
+                                            communityName: community.name,
+                                            memberEmail: member.email,
+                                            memberName: member.name
+                                        )
+                                        AnalyticsService.shared.trackCommunityDetailInteraction(
+                                            action: .transactionHistory,
+                                            communityId: community.id ?? "",
+                                            communityName: community.name,
+                                            details: ["member_email": member.email, "member_name": member.name]
+                                        )
                                         selectedMember = member
                                         showingTransactionHistory = true
                                     }) {
@@ -8432,8 +8553,26 @@ struct CommunityDetailView: View {
             .background(Color.white)
             .navigationBarHidden(true)
             .onAppear {
+                // Track community detail view
+                AnalyticsService.shared.trackCommunityDetailInteraction(
+                    action: .view,
+                    communityId: community.id ?? "",
+                    communityName: community.name,
+                    details: ["member_count": community.member_count, "bet_count": community.total_bets]
+                )
+                timeTracker.startTracking(for: "community_detail_\(community.id ?? "")")
+                
                 loadMembers()
                 loadBalances()
+            }
+            .onDisappear {
+                // Track time spent on community detail page
+                if let duration = timeTracker.endTracking(for: "community_detail_\(community.id ?? "")") {
+                    AnalyticsService.shared.trackPageViewTime(
+                        page: "community_detail_\(community.name)",
+                        timeSpent: duration
+                    )
+                }
             }
             .sheet(isPresented: $showingTransactionHistory) {
                 if let member = selectedMember {
@@ -8918,6 +9057,7 @@ struct NotificationsView: View {
     let firestoreService: FirestoreService
     @State private var isLoadingNotifications = false
     @State private var selectedFilter: NotificationFilter = .all
+    @StateObject private var timeTracker = TimeTracker()
     
     // Computed property to filter notifications based on selected filter
     private var filteredNotifications: [FirestoreNotification] {
@@ -8937,6 +9077,7 @@ struct NotificationsView: View {
                     // Navigation Bar
                     HStack {
                         Button(action: {
+                            AnalyticsService.shared.trackFeatureUsage(feature: "notifications_close", context: "notifications_page")
                             dismiss()
                         }) {
                             Image(systemName: "xmark")
@@ -8969,6 +9110,7 @@ struct NotificationsView: View {
                         Menu {
                             ForEach(NotificationFilter.allCases, id: \.self) { filter in
                                 Button(filter.rawValue) {
+                                    AnalyticsService.shared.trackNotificationFilter(filter: filter.rawValue)
                                     selectedFilter = filter
                                 }
                             }
@@ -9058,6 +9200,11 @@ struct NotificationsView: View {
             .navigationBarHidden(true)
 
             .onAppear {
+                // Track notifications page view
+                AnalyticsService.shared.trackUserFlowStep(step: .notifications)
+                AnalyticsService.shared.trackFeatureUsage(feature: "notifications_page", context: "main_app")
+                timeTracker.startTracking(for: "notifications_page")
+                
                 print("🔍 NotificationsView: onAppear triggered")
                 print("🔍 NotificationsView: Current user email: \(firestoreService.currentUser?.email ?? "nil")")
                 print("🔍 NotificationsView: Current notifications count: \(firestoreService.notifications.count)")
@@ -9071,6 +9218,11 @@ struct NotificationsView: View {
                 // Don't mark notifications as read when opening - only when closing
             }
             .onDisappear {
+                // Track time spent on notifications page
+                if let duration = timeTracker.endTracking(for: "notifications_page") {
+                    AnalyticsService.shared.trackPageViewTime(page: "notifications_page", timeSpent: duration)
+                }
+                
                 print("🔍 NotificationsView: onDisappear triggered - marking notifications as read")
                 // Mark all unread notifications as read when the notification page is closed
                 markAllUnreadNotificationsAsRead()
@@ -9088,6 +9240,11 @@ struct NotificationsView: View {
     private func markAllUnreadNotificationsAsRead() {
         let unreadNotifications = firestoreService.notifications.filter { !$0.is_read }
         print("🔍 NotificationsView: Marking \(unreadNotifications.count) unread notifications as read")
+        
+        // Track mark all read action
+        if unreadNotifications.count > 0 {
+            AnalyticsService.shared.trackNotificationMarkAllRead(count: unreadNotifications.count)
+        }
         
         for notification in unreadNotifications {
             if let notificationId = notification.id {
@@ -9141,6 +9298,12 @@ struct EnhancedNotificationRow: View {
     
     var body: some View {
         Button(action: {
+            // Track notification tap
+            AnalyticsService.shared.trackNotificationInteraction(
+                action: .tap,
+                notificationId: notification.id ?? "unknown",
+                notificationType: notification.icon
+            )
             // Notifications are automatically marked as read when they appear on screen
             // This button can be used for future navigation or actions
             // No manual action needed for marking as read
@@ -9206,8 +9369,21 @@ struct EnhancedNotificationRow: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 4)
         .onAppear {
+            // Track notification view
+            AnalyticsService.shared.trackNotificationInteraction(
+                action: .view,
+                notificationId: notification.id ?? "unknown",
+                notificationType: notification.icon
+            )
+            
             // Automatically mark notification as read when it appears on screen
             if notification.isUnread, let notificationId = notification.id {
+                AnalyticsService.shared.trackNotificationInteraction(
+                    action: .markRead,
+                    notificationId: notificationId,
+                    notificationType: notification.icon
+                )
+                
                 firestoreService.markNotificationAsRead(notificationId: notificationId) { success in
                     if success {
                         print("✅ Notification automatically marked as read: \(notificationId)")
@@ -9251,6 +9427,10 @@ struct EditProfileView: View {
     @State private var selectedItem: PhotosPickerItem? = nil
     @State private var selectedImage: UIImage?
     @State private var profileImageUrl: String?
+    @StateObject private var timeTracker = TimeTracker()
+    @State private var originalDisplayName: String
+    @State private var originalFirstName: String
+    @State private var originalLastName: String
     
     init(firestoreService: FirestoreService) {
         self.firestoreService = firestoreService
@@ -9258,6 +9438,9 @@ struct EditProfileView: View {
         self._firstName = State(initialValue: firestoreService.currentUser?.first_name ?? "")
         self._lastName = State(initialValue: firestoreService.currentUser?.last_name ?? "")
         self._profileImageUrl = State(initialValue: firestoreService.currentUser?.profile_picture_url)
+        self._originalDisplayName = State(initialValue: firestoreService.currentUser?.display_name ?? "")
+        self._originalFirstName = State(initialValue: firestoreService.currentUser?.first_name ?? "")
+        self._originalLastName = State(initialValue: firestoreService.currentUser?.last_name ?? "")
     }
     
     var body: some View {
@@ -9271,8 +9454,10 @@ struct EditProfileView: View {
                     HStack {
                         Button(action: { 
                             if hasUnsavedChanges() {
+                                AnalyticsService.shared.trackProfileEditAction(action: .unsavedChanges)
                                 showingUnsavedChangesAlert = true
                             } else {
+                                AnalyticsService.shared.trackProfileEditAction(action: .close)
                                 dismiss()
                             }
                         }) {
@@ -9292,6 +9477,7 @@ struct EditProfileView: View {
                         Spacer()
                         
                         Button(action: {
+                            AnalyticsService.shared.trackProfileEditAction(action: .save)
                             saveChanges()
                         }) {
                             Text("Save")
@@ -9317,6 +9503,7 @@ struct EditProfileView: View {
                         
                             // Profile Picture Display and Edit Button
                             Button(action: {
+                                AnalyticsService.shared.trackProfileEditAction(action: .imageSelect)
                                 showingPhotoOptions = true
                             }) {
                                 ZStack {
@@ -9402,6 +9589,11 @@ struct EditProfileView: View {
                                     
                                     TextField("First", text: $firstName)
                                         .textFieldStyle(ModernTextFieldStyle())
+                                        .onChange(of: firstName) { newValue in
+                                            if newValue != originalFirstName {
+                                                AnalyticsService.shared.trackProfileFieldEdit(field: "first_name", oldValue: originalFirstName, newValue: newValue)
+                                            }
+                                        }
                                 }
                                 
                                 VStack(alignment: .leading, spacing: 8) {
@@ -9411,6 +9603,11 @@ struct EditProfileView: View {
                                     
                                     TextField("Last", text: $lastName)
                                         .textFieldStyle(ModernTextFieldStyle())
+                                        .onChange(of: lastName) { newValue in
+                                            if newValue != originalLastName {
+                                                AnalyticsService.shared.trackProfileFieldEdit(field: "last_name", oldValue: originalLastName, newValue: newValue)
+                                            }
+                                        }
                                 }
                             }
                             
@@ -9433,6 +9630,11 @@ struct EditProfileView: View {
                                             let formattedName = newValue.replacingOccurrences(of: " ", with: "")
                                             if formattedName != newValue {
                                                 displayName = formattedName
+                                            }
+                                            
+                                            // Track field edit
+                                            if formattedName != originalDisplayName {
+                                                AnalyticsService.shared.trackProfileFieldEdit(field: "display_name", oldValue: originalDisplayName, newValue: formattedName)
                                             }
                                         }
                                 }
@@ -9463,14 +9665,18 @@ struct EditProfileView: View {
             }
             .confirmationDialog("Choose Profile Picture", isPresented: $showingPhotoOptions, titleVisibility: .visible) {
                 Button("Choose from Photos") {
+                    AnalyticsService.shared.trackProfileImageUpload(method: "photo_library", success: true)
                     showingPhotoPicker = true
                 }
                 
                 Button("Take Photo") {
+                    AnalyticsService.shared.trackProfileImageUpload(method: "camera", success: true)
                     showingCamera = true
                 }
                 
-                Button("Cancel", role: .cancel) { }
+                Button("Cancel", role: .cancel) { 
+                    AnalyticsService.shared.trackProfileEditAction(action: .cancel)
+                }
             }
             .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedItem, matching: .images, photoLibrary: .shared())
             .sheet(isPresented: $showingCamera) {
@@ -9481,6 +9687,18 @@ struct EditProfileView: View {
             }
             .onChange(of: selectedItem) { _ in
                 loadPhotoFromPicker()
+            }
+            .onAppear {
+                // Track profile edit page view
+                AnalyticsService.shared.trackProfileEditAction(action: .open)
+                AnalyticsService.shared.trackUserFlowStep(step: .profileEdit)
+                timeTracker.startTracking(for: "profile_edit")
+            }
+            .onDisappear {
+                // Track time spent on profile edit
+                if let duration = timeTracker.endTracking(for: "profile_edit") {
+                    AnalyticsService.shared.trackPageViewTime(page: "profile_edit", timeSpent: duration)
+                }
             }
         }
     }
@@ -9545,11 +9763,19 @@ struct EditProfileView: View {
         
         // Validate input
         guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            AnalyticsService.shared.trackProfileEditAction(action: .validationError, field: "display_name")
             isLoading = false
             return
         }
         
         print("💾 Starting profile save process...")
+        
+        // Track fields that changed
+        var fieldsChanged: [String] = []
+        if displayName != originalDisplayName { fieldsChanged.append("display_name") }
+        if firstName != originalFirstName { fieldsChanged.append("first_name") }
+        if lastName != originalLastName { fieldsChanged.append("last_name") }
+        if selectedImage != nil { fieldsChanged.append("profile_image") }
         
         // If there's a new profile image, upload it first
         if let selectedImage = selectedImage {
@@ -9559,6 +9785,7 @@ struct EditProfileView: View {
                     
                     if success {
                         print("✅ Profile image uploaded successfully")
+                        AnalyticsService.shared.trackProfileImageUpload(method: "upload", success: true)
                         // Clear the selected image and update local URL
                         self.selectedImage = nil
                         self.profileImageUrl = self.firestoreService.currentUser?.profile_picture_url
@@ -9570,9 +9797,10 @@ struct EditProfileView: View {
                         self.firestoreService.objectWillChange.send()
                         
                         // Now update the text fields
-                        self.updateTextFields()
+                        self.updateTextFields(fieldsChanged: fieldsChanged)
                     } else {
                         print("❌ Failed to upload profile image: \(error ?? "Unknown error")")
+                        AnalyticsService.shared.trackProfileImageUpload(method: "upload", success: false, error: error ?? "Unknown error")
                         self.isLoading = false
                         // Show error feedback to user
                         // You could add an error state here
@@ -9582,11 +9810,11 @@ struct EditProfileView: View {
         } else {
             // No new image, just update text fields
             print("📝 No new image, updating text fields only...")
-            updateTextFields()
+            updateTextFields(fieldsChanged: fieldsChanged)
         }
     }
     
-    private func updateTextFields() {
+    private func updateTextFields(fieldsChanged: [String]) {
         // Update user profile text fields in Firestore
         let updateData: [String: Any] = [
             "display_name": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -9600,9 +9828,11 @@ struct EditProfileView: View {
                 self.isLoading = false
                 if success {
                     print("✅ Profile updated successfully")
+                    AnalyticsService.shared.trackProfileSave(success: true, fieldsChanged: fieldsChanged)
                     self.showingSaveSuccess = true
                 } else {
                     print("❌ Failed to update profile")
+                    AnalyticsService.shared.trackProfileSave(success: false, fieldsChanged: fieldsChanged, error: "Update failed")
                     // You could show an error alert here
                 }
             }
@@ -14869,6 +15099,19 @@ struct EnhancedCommunityDetailView: View {
     @State private var selectedMemberForProfile: CommunityMemberWithPoints?
     @State private var showingCopyFeedback = false
     @State private var isAdmin: Bool = false
+    @StateObject private var timeTracker = TimeTracker()
+    @State private var previousTab = 0
+    
+    // Helper function to get tab name
+    private func getTabName(_ index: Int) -> String {
+        switch index {
+        case 0: return "overview"
+        case 1: return "bets"
+        case 2: return "members"
+        case 3: return "settings"
+        default: return "unknown"
+        }
+    }
     
     // Settings sheet states
     @State private var showingNotificationSettings = false
@@ -14902,8 +15145,26 @@ struct EnhancedCommunityDetailView: View {
             .background(Color.white)
             .navigationBarHidden(true)
             .onAppear {
+                // Track enhanced community detail view
+                AnalyticsService.shared.trackCommunityDetailInteraction(
+                    action: .view,
+                    communityId: community.id ?? "",
+                    communityName: community.name,
+                    details: ["member_count": community.member_count, "bet_count": community.total_bets, "is_admin": isAdmin]
+                )
+                timeTracker.startTracking(for: "enhanced_community_detail_\(community.id ?? "")")
+                
                 loadCommunityBets()
                 checkAdminStatus()
+            }
+            .onDisappear {
+                // Track time spent on enhanced community detail page
+                if let duration = timeTracker.endTracking(for: "enhanced_community_detail_\(community.id ?? "")") {
+                    AnalyticsService.shared.trackPageViewTime(
+                        page: "enhanced_community_detail_\(community.name)",
+                        timeSpent: duration
+                    )
+                }
             }
             .animation(.easeInOut(duration: 0.3), value: selectedTab)
             .sheet(isPresented: $showingCreateBetModal) {
@@ -15169,7 +15430,26 @@ struct EnhancedCommunityDetailView: View {
     }
     
     private func tabButton(for index: Int) -> some View {
-        Button(action: { selectedTab = index }) {
+        Button(action: { 
+            let fromTab = getTabName(previousTab)
+            let toTab = getTabName(index)
+            
+            AnalyticsService.shared.trackCommunityTabSwitch(
+                communityId: community.id ?? "",
+                communityName: community.name,
+                fromTab: fromTab,
+                toTab: toTab
+            )
+            AnalyticsService.shared.trackCommunityDetailInteraction(
+                action: .tabSwitch,
+                communityId: community.id ?? "",
+                communityName: community.name,
+                details: ["from_tab": fromTab, "to_tab": toTab]
+            )
+            
+            previousTab = selectedTab
+            selectedTab = index 
+        }) {
             VStack(spacing: 4) {
                 Text(tabTitle(for: index))
                     .font(.subheadline)
@@ -16266,6 +16546,8 @@ struct TradingProfileView: View {
     @State private var showingUserSettings = false
     @State private var userActivityItems: [UserActivityItem] = []
     @State private var isLoadingActivity = false
+    @StateObject private var timeTracker = TimeTracker()
+    @State private var previousTab = 0
     
     // Fullscreen image state
     @State private var showImageFullscreen = false
@@ -16283,9 +16565,20 @@ struct TradingProfileView: View {
             .navigationBarHidden(true)
             .animation(.easeInOut(duration: 0.3), value: selectedTab)
             .onAppear {
+                // Track profile view
+                AnalyticsService.shared.trackProfileInteraction(action: .view, profileId: userId, profileType: isCurrentUser ? "current_user" : "member_profile")
+                AnalyticsService.shared.trackUserFlowStep(step: .profile)
+                timeTracker.startTracking(for: "trading_profile")
+                
                 loadUserData()
                 loadUserBets()
                 loadUserActivity()
+            }
+            .onDisappear {
+                // Track time spent on profile
+                if let duration = timeTracker.endTracking(for: "trading_profile") {
+                    AnalyticsService.shared.trackPageViewTime(page: "trading_profile", timeSpent: duration)
+                }
             }
             .onChange(of: selectedTab) { oldValue, newValue in
                 if newValue == 0 { // Activity tab
@@ -16311,7 +16604,10 @@ struct TradingProfileView: View {
         VStack(spacing: 0) {
             // Navigation Header
             HStack {
-                        Button(action: { dismiss() }) {
+                        Button(action: { 
+                            AnalyticsService.shared.trackFeatureUsage(feature: "profile_close", context: "trading_profile")
+                            dismiss() 
+                        }) {
                             Image(systemName: "arrow.left")
                                 .font(.title2)
                                 .foregroundColor(.black)
@@ -16329,6 +16625,7 @@ struct TradingProfileView: View {
                 
                 if isCurrentUser {
                     Button(action: {
+                        AnalyticsService.shared.trackProfileInteraction(action: .settings, profileId: userId, profileType: "current_user")
                         showingUserSettings = true
                     }) {
                         Image(systemName: "gearshape")
@@ -16338,6 +16635,7 @@ struct TradingProfileView: View {
                     }
                 } else {
                     Button(action: {
+                        AnalyticsService.shared.trackProfileInteraction(action: .share, profileId: userId, profileType: "member_profile")
                         // Share functionality for member profiles
                     }) {
                         Image(systemName: "square.and.arrow.up")
@@ -16559,7 +16857,11 @@ struct TradingProfileView: View {
     private var tabSelectorSection: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                Button(action: { selectedTab = 0 }) {
+                Button(action: { 
+                    AnalyticsService.shared.trackProfileTabSwitch(fromTab: getTabName(previousTab), toTab: "activity", profileId: userId)
+                    previousTab = selectedTab
+                    selectedTab = 0 
+                }) {
                     VStack(spacing: 4) {
                         Text("Activity")
                             .font(.subheadline)
@@ -16573,7 +16875,11 @@ struct TradingProfileView: View {
                 }
                 .frame(maxWidth: .infinity)
                 
-                Button(action: { selectedTab = 1 }) {
+                Button(action: { 
+                    AnalyticsService.shared.trackProfileTabSwitch(fromTab: getTabName(previousTab), toTab: "recent_bets", profileId: userId)
+                    previousTab = selectedTab
+                    selectedTab = 1 
+                }) {
                     VStack(spacing: 4) {
                         Text("Recent Bets")
                             .font(.subheadline)
@@ -16881,6 +17187,16 @@ struct TradingProfileView: View {
         }
         return "U"
     }
+    
+    // MARK: - Helper Methods
+    
+    private func getTabName(_ tabIndex: Int) -> String {
+        switch tabIndex {
+        case 0: return "activity"
+        case 1: return "recent_bets"
+        default: return "unknown"
+        }
+    }
 }
 
 // MARK: - Supporting Views for Trading Profile
@@ -16902,6 +17218,7 @@ struct UserSettingsView: View {
     @State private var showingTermsOfService = false
     @State private var showingPrivacyPolicy = false
     @State private var showingLanguageError = false
+    @StateObject private var timeTracker = TimeTracker()
     
     var body: some View {
         NavigationView {
@@ -16994,6 +17311,12 @@ struct UserSettingsView: View {
                 Text("Language selection will be available in a future update. For now, the app is only available in English.")
             }
             .onAppear {
+                // Track settings page view
+                AnalyticsService.shared.trackUserFlowStep(step: .settings)
+                AnalyticsService.shared.trackFeatureUsage(feature: "settings_page", context: "profile")
+                AnalyticsService.shared.trackSettingsSectionView(section: "main")
+                timeTracker.startTracking(for: "settings_page")
+                
                 print("🔧 UserSettingsView body rendered")
                 // Ensure user settings exist in Firestore
                 firestoreService.ensureUserSettingsExist { success in
@@ -17004,6 +17327,12 @@ struct UserSettingsView: View {
                     } else {
                         print("❌ Failed to ensure user settings in Firestore")
                     }
+                }
+            }
+            .onDisappear {
+                // Track time spent on settings page
+                if let duration = timeTracker.endTracking(for: "settings_page") {
+                    AnalyticsService.shared.trackPageViewTime(page: "settings_page", timeSpent: duration)
                 }
             }
         }
@@ -17031,7 +17360,10 @@ struct UserSettingsView: View {
     // MARK: - Header Section
     private var headerSection: some View {
         HStack {
-            Button(action: { dismiss() }) {
+            Button(action: { 
+                AnalyticsService.shared.trackFeatureUsage(feature: "settings_close", context: "settings_page")
+                dismiss() 
+            }) {
                 Image(systemName: "arrow.left")
                     .font(.title2)
                     .foregroundColor(.slingBlue)
@@ -17047,7 +17379,10 @@ struct UserSettingsView: View {
             
             Spacer()
             
-            Button(action: { dismiss() }) {
+            Button(action: { 
+                AnalyticsService.shared.trackFeatureUsage(feature: "settings_close_x", context: "settings_page")
+                dismiss() 
+            }) {
                 Image(systemName: "xmark")
                     .font(.title2)
                     .foregroundColor(.gray)
@@ -17073,18 +17408,24 @@ struct UserSettingsView: View {
             
             VStack(spacing: 0) {
                 SettingsRow(icon: "person.circle", title: "Edit Profile", subtitle: "Update your personal information", isDestructive: false, action: {
+                    AnalyticsService.shared.trackSettingsInteraction(action: .tap, settingType: "edit_profile")
+                    AnalyticsService.shared.trackSettingsSectionView(section: "profile")
                     print("🔧 Edit Profile button tapped")
                     showingEditProfile = true
                     print("🔧 showingEditProfile set to: \(showingEditProfile)")
                 })
                 Divider().padding(.leading, 56)
                 SettingsRow(icon: "key", title: "Change Password", subtitle: "Update your password", isDestructive: false, action: {
+                    AnalyticsService.shared.trackSettingsInteraction(action: .tap, settingType: "change_password")
+                    AnalyticsService.shared.trackSettingsSectionView(section: "profile")
                     print("🔧 Change Password button tapped")
                     showingChangePassword = true
                     print("🔧 showingChangePassword set to: \(showingChangePassword)")
                 })
                 Divider().padding(.leading, 56)
                 SettingsRow(icon: "eye", title: "Profile Visibility", subtitle: "What's displayed on your profile page", isDestructive: false, action: {
+                    AnalyticsService.shared.trackSettingsInteraction(action: .tap, settingType: "profile_visibility")
+                    AnalyticsService.shared.trackSettingsSectionView(section: "profile")
                     print("🔧 Profile Visibility button tapped")
                     showingProfileVisibility = true
                     print("🔧 showingProfileVisibility set to: \(showingProfileVisibility)")
@@ -17108,12 +17449,16 @@ struct UserSettingsView: View {
             
             VStack(spacing: 0) {
                 SettingsRow(icon: "bell", title: "Push Notifications", subtitle: "Bet updates and community alerts", isDestructive: false, action: {
+                    AnalyticsService.shared.trackSettingsInteraction(action: .tap, settingType: "push_notifications")
+                    AnalyticsService.shared.trackSettingsSectionView(section: "notifications")
                     print("🔧 Push Notifications button tapped")
                     showingPushNotifications = true
                     print("🔧 showingPushNotifications set to: \(showingPushNotifications)")
                 })
                 Divider().padding(.leading, 56)
                 SettingsRow(icon: "envelope", title: "Email Notifications", subtitle: "Weekly summaries and updates", isDestructive: false, action: {
+                    AnalyticsService.shared.trackSettingsInteraction(action: .tap, settingType: "email_notifications")
+                    AnalyticsService.shared.trackSettingsSectionView(section: "notifications")
                     print("🔧 Email Notifications button tapped")
                     showingEmailNotifications = true
                     print("🔧 showingEmailNotifications set to: \(showingEmailNotifications)")

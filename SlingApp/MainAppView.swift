@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAnalytics
 
 struct MainAppView: View {
     @ObservedObject var firestoreService: FirestoreService
@@ -17,6 +18,8 @@ struct MainAppView: View {
     @State private var deepLinkCommunity: FirestoreCommunity?
     @State private var showingDeepLinkBet = false
     @State private var showingDeepLinkCommunity = false
+    @StateObject private var timeTracker = TimeTracker()
+    @State private var previousTab = 0
     
     private func getUserInitials() -> String {
         let user = firestoreService.currentUser
@@ -69,6 +72,9 @@ struct MainAppView: View {
                     HStack(spacing: 0) {
                         // Home Tab
                     Button(action: { 
+                        AnalyticsService.shared.trackTabSwitch(fromTab: getTabName(previousTab), toTab: "home")
+                        AnalyticsService.shared.trackUserFlowStep(step: .homeTab)
+                        previousTab = selectedTab
                         selectedTab = 0
                         // Reset community filter when home tab is clicked
                         selectedCommunityFilter = nil
@@ -89,6 +95,9 @@ struct MainAppView: View {
                     
                     // Chat Tab
                     Button(action: { 
+                        AnalyticsService.shared.trackTabSwitch(fromTab: getTabName(previousTab), toTab: "chat")
+                        AnalyticsService.shared.trackUserFlowStep(step: .chatTab)
+                        previousTab = selectedTab
                         selectedTab = 1
                         // Refresh chat data when switching to chat tab (no loading state needed)
                         firestoreService.fetchUserCommunities()
@@ -131,6 +140,8 @@ struct MainAppView: View {
                     
                     // Create Bet Button (Plus Sign)
                     Button(action: {
+                        AnalyticsService.shared.trackFeatureUsage(feature: "create_bet_button", context: "tab_bar")
+                        AnalyticsService.shared.trackUserFlowStep(step: .createBet)
                         showingCreateBetModal = true
                     }) {
                         ZStack {
@@ -148,7 +159,12 @@ struct MainAppView: View {
                     .frame(width: 56, height: 56)
                     
                     // My Bets Tab
-                    Button(action: { selectedTab = 2 }) {
+                    Button(action: { 
+                        AnalyticsService.shared.trackTabSwitch(fromTab: getTabName(previousTab), toTab: "my_bets")
+                        AnalyticsService.shared.trackUserFlowStep(step: .myBetsTab)
+                        previousTab = selectedTab
+                        selectedTab = 2 
+                    }) {
                         VStack(spacing: 4) {
                             Image(systemName: selectedTab == 2 ? "list.bullet.clipboard.fill" : "list.bullet.clipboard")
                                 .font(.title2)
@@ -165,6 +181,9 @@ struct MainAppView: View {
                     
                     // Communities Tab
                     Button(action: { 
+                        AnalyticsService.shared.trackTabSwitch(fromTab: getTabName(previousTab), toTab: "communities")
+                        AnalyticsService.shared.trackUserFlowStep(step: .communitiesTab)
+                        previousTab = selectedTab
                         selectedTab = 3
                         // Update community statistics when Communities tab is selected
                         for community in firestoreService.userCommunities {
@@ -231,6 +250,17 @@ struct MainAppView: View {
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
+        .onAppear {
+            // Track main app view appearance
+            AnalyticsService.shared.trackUserFlowStep(step: .mainApp)
+            timeTracker.startTracking(for: "main_app")
+        }
+        .onDisappear {
+            // Track time spent in main app
+            if let duration = timeTracker.endTracking(for: "main_app") {
+                AnalyticsService.shared.trackPageViewTime(page: "main_app", timeSpent: duration)
+            }
+        }
         .onReceive(deepLinkManager.$pendingDeepLink) { deepLink in
             if let deepLink = deepLink {
                 handleDeepLink(deepLink)
@@ -303,6 +333,16 @@ struct MainAppView: View {
         selectedCommunityFilter = communityName
         selectedTab = 0 // Navigate to Home tab
     }
+    
+    private func getTabName(_ tabIndex: Int) -> String {
+        switch tabIndex {
+        case 0: return "home"
+        case 1: return "chat"
+        case 2: return "my_bets"
+        case 3: return "communities"
+        default: return "unknown"
+        }
+    }
 }
 
 // MARK: - Home View
@@ -370,7 +410,11 @@ struct HomeHeaderView: View {
 
             
             // Notification Bell
-            Button(action: onNotificationsTap) {
+            Button(action: {
+                AnalyticsService.shared.trackFeatureUsage(feature: "notifications", context: "home_header")
+                AnalyticsService.shared.trackUserFlowStep(step: .notifications)
+                onNotificationsTap()
+            }) {
                 ZStack {
                     Image(systemName: "bell")
                         .font(.title2)
@@ -398,7 +442,11 @@ struct HomeHeaderView: View {
             }
             
             // Profile Avatar
-            Button(action: onProfileTap) {
+            Button(action: {
+                AnalyticsService.shared.trackFeatureUsage(feature: "profile", context: "home_header")
+                AnalyticsService.shared.trackUserFlowStep(step: .profile)
+                onProfileTap()
+            }) {
                 if let profilePictureURL = firestoreService.currentUser?.profile_picture_url, !profilePictureURL.isEmpty {
                     AsyncImage(url: URL(string: profilePictureURL)) { phase in
                         switch phase {
@@ -480,6 +528,7 @@ struct FilterBarView: View {
                 HStack(spacing: 12) {
                     ForEach(categories, id: \.self) { category in
                         Button(action: {
+                            AnalyticsService.shared.trackFilterUsage(filterType: "community", filterValue: category, page: "home")
                             selectedFilter = category
                         }) {
                             Text(category)
@@ -523,6 +572,7 @@ struct HomeView: View {
     @State private var showingUserProfile = false
 
     @State private var showingCreateBet = false
+    @StateObject private var timeTracker = TimeTracker()
 
     
     // Dynamic filter categories based on user communities, sorted by bet count
@@ -601,6 +651,7 @@ struct HomeView: View {
                                 
                                 VStack(spacing: 12) {
                                     Button(action: {
+                                        AnalyticsService.shared.trackCommunityInteraction(action: .join, communityId: "new", communityName: "Join Community")
                                         showingJoinCommunityModal = true
                                     }) {
                                         HStack(spacing: 8) {
@@ -619,6 +670,7 @@ struct HomeView: View {
                                     }
                                     
                                     Button(action: {
+                                        AnalyticsService.shared.trackCommunityInteraction(action: .create, communityId: "new", communityName: "Create Community")
                                         showingCreateCommunityModal = true
                                     }) {
                                         HStack(spacing: 8) {
@@ -707,6 +759,7 @@ struct HomeView: View {
                                     
                                     // Create Bet Button
                                     Button(action: {
+                                        AnalyticsService.shared.trackBetInteraction(action: .create, betId: "new", betTitle: "Create Bet", communityName: selectedFilter)
                                         showingCreateBet = true
                                     }) {
                                         HStack(spacing: 8) {
@@ -800,6 +853,7 @@ struct HomeView: View {
                                             
                                             // Create Bet Button
                                             Button(action: {
+                                                AnalyticsService.shared.trackBetInteraction(action: .create, betId: "new", betTitle: "Create Bet", communityName: "other_communities")
                                                 showingCreateBet = true
                                             }) {
                                                 HStack(spacing: 8) {
@@ -845,6 +899,10 @@ struct HomeView: View {
                 await refreshHomeData()
             }
             .onAppear {
+                // Track home view appearance
+                AnalyticsService.shared.trackUserFlowStep(step: .homeTab)
+                timeTracker.startTracking(for: "home_view")
+                
                 // Reset filter to "All Bets" when page appears
                 selectedFilter = "All Bets"
                 
@@ -856,6 +914,12 @@ struct HomeView: View {
                 // Set initial filter if provided (but only if it's not a refresh)
                 if let filter = initialFilter, !filter.isEmpty {
                     selectedFilter = filter
+                }
+            }
+            .onDisappear {
+                // Track time spent on home view
+                if let duration = timeTracker.endTracking(for: "home_view") {
+                    AnalyticsService.shared.trackPageViewTime(page: "home_view", timeSpent: duration)
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
@@ -1003,6 +1067,7 @@ struct HomeBetCard: View {
             // Header with image and title - clickable to go to bet details
             Button(action: {
                 if bet.status.lowercased() == "open" {
+                    AnalyticsService.shared.trackBetInteraction(action: .view, betId: bet.id ?? "unknown", betTitle: bet.title, communityName: communityName)
                     showingJoinBet = true
                 }
             }) {
@@ -1037,6 +1102,7 @@ struct HomeBetCard: View {
             VStack(spacing: 8) {
                 ForEach(bet.options, id: \.self) { option in
                     Button(action: {
+                        AnalyticsService.shared.trackBetInteraction(action: .placeBet, betId: bet.id ?? "unknown", betTitle: bet.title, communityName: communityName)
                         selectedBettingOption = option
                         showingBettingInterface = true
                     }) {
@@ -1065,6 +1131,7 @@ struct HomeBetCard: View {
             // Footer - clickable to go to bet details
             Button(action: {
                 if bet.status.lowercased() == "open" {
+                    AnalyticsService.shared.trackBetInteraction(action: .view, betId: bet.id ?? "unknown", betTitle: bet.title, communityName: communityName)
                     showingJoinBet = true
                 }
             }) {

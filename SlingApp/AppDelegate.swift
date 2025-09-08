@@ -9,6 +9,7 @@
 import UIKit
 import Firebase
 import FirebaseAuth
+import FirebaseAnalytics
 import GoogleSignIn
 
 class AppDelegate: NSObject, UIApplicationDelegate {
@@ -46,6 +47,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Setup Error Logging System
         ErrorLogger.shared.setupErrorLogging()
+        
+        // Initialize Analytics Service
+        AnalyticsService.shared.trackSessionStart()
         
         return true
     }

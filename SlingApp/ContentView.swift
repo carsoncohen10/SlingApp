@@ -1,6 +1,7 @@
 import SwiftUI
 import Firebase
 import FirebaseCore
+import FirebaseAnalytics
 import AuthenticationServices
 import CryptoKit
 import GoogleSignIn
@@ -15,6 +16,7 @@ func formatDisplayName(_ name: String) -> String {
 struct ContentView: View {
     @StateObject var firestoreService = FirestoreService()
     @State private var hasShownLoading = false
+    @StateObject private var timeTracker = TimeTracker()
     
     var body: some View {
         Group {
@@ -27,17 +29,36 @@ struct ContentView: View {
                         // Test the error logging system (you can remove this in production)
                         SlingLogInfo("App started successfully - Error logging system initialized")
                         
+                        // Track app launch and loading screen
+                        AnalyticsService.shared.trackUserFlowStep(step: .appLaunch)
+                        AnalyticsService.shared.trackUserFlowStep(step: .loadingScreen)
+                        timeTracker.startTracking(for: "loading_screen")
+                        
                         // Show loading screen for at least 1.5 seconds, then check auth state
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             withAnimation(.easeInOut(duration: 0.5)) {
                                 hasShownLoading = true
+                                
+                                // Track loading screen completion
+                                if let duration = timeTracker.endTracking(for: "loading_screen") {
+                                    AnalyticsService.shared.trackPageViewTime(page: "loading_screen", timeSpent: duration)
+                                }
                             }
                         }
                     }
             } else if firestoreService.isAuthenticated {
                 MainAppView(firestoreService: firestoreService)
+                    .onAppear {
+                        AnalyticsService.shared.trackUserFlowStep(step: .mainApp)
+                        AnalyticsService.shared.setUserProperties(user: firestoreService.currentUser)
+                    }
             } else {
                 AuthenticationView(firestoreService: firestoreService)
+                    .onAppear {
+                        AnalyticsService.shared.trackUserFlowStep(step: .authentication)
+                        AnalyticsService.shared.trackAuthPageView(page: .welcome)
+                        timeTracker.startTracking(for: "welcome_screen")
+                    }
             }
         }
     }
@@ -62,6 +83,7 @@ struct AuthenticationView: View {
     @State private var appleButtonPressed = false
     @State private var emailButtonPressed = false
     @State private var logoAnimationProgress: CGFloat = 0
+    @StateObject private var timeTracker = TimeTracker()
     
     // Dynamic prediction categories that fade in/out
     private let predictionCategories = [
@@ -146,10 +168,17 @@ struct AuthenticationView: View {
                         // Authentication Buttons - Centered Content
                         VStack(spacing: 16) {
                             // Google Sign-In Button
-                            GoogleSignInButton(action: handleGoogleSignIn, isLoading: isLoading)
+                            GoogleSignInButton(action: {
+                                AnalyticsService.shared.trackAuthButtonTap(button: .googleSignIn, page: .welcome)
+                                AnalyticsService.shared.trackAuthMethodSelected(method: .google)
+                                handleGoogleSignIn()
+                            }, isLoading: isLoading)
                             
                             // Apple Sign-In Button - Custom implementation to match Google button
                             Button(action: {
+                                AnalyticsService.shared.trackAuthButtonTap(button: .appleSignIn, page: .welcome)
+                                AnalyticsService.shared.trackAuthMethodSelected(method: .apple)
+                                
                                 withAnimation(.easeInOut(duration: 0.218)) {
                                     appleButtonPressed = true
                                 }
@@ -203,6 +232,9 @@ struct AuthenticationView: View {
                             
                             // Email Sign-Up Button - Always goes to Sign Up
                             Button(action: {
+                                AnalyticsService.shared.trackAuthButtonTap(button: .emailSignUp, page: .welcome)
+                                AnalyticsService.shared.trackAuthMethodSelected(method: .email)
+                                
                                 withAnimation(.easeInOut(duration: 0.218)) {
                                     emailButtonPressed = true
                                 }
@@ -211,6 +243,9 @@ struct AuthenticationView: View {
                                     emailButtonPressed = false
                                     isSignUp = true
                                     showingEmailForm = true
+                                    
+                                    // Track navigation to email form
+                                    AnalyticsService.shared.trackNavigation(from: "welcome", to: "email_signup", method: .buttonTap)
                                 }
                             }) {
                                 ZStack {
@@ -257,11 +292,16 @@ struct AuthenticationView: View {
                         
                         // Always show "Already have an account? Sign In" button
                         Button(action: {
+                            AnalyticsService.shared.trackAuthButtonTap(button: .toggleToSignIn, page: .welcome)
+                            
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 // Always go to sign in page
                                 isSignUp = false
                                 showingEmailForm = true
                                 errorMessage = ""
+                                
+                                // Track navigation to sign in
+                                AnalyticsService.shared.trackNavigation(from: "welcome", to: "email_signin", method: .buttonTap)
                             }
                         }) {
                             HStack(spacing: 4) {
@@ -285,6 +325,8 @@ struct AuthenticationView: View {
                                 .foregroundColor(.gray.opacity(0.6))
                             
                             Button(action: {
+                                AnalyticsService.shared.trackAuthButtonTap(button: .termsOfService, page: .welcome)
+                                
                                 // Open terms of service
                                 if let url = URL(string: "https://slingapp.com/terms") {
                                     UIApplication.shared.open(url)
@@ -365,6 +407,7 @@ struct AuthenticationView: View {
     }
     
     private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        AnalyticsService.shared.trackAuthStarted(method: .apple)
         isLoading = true
         errorMessage = ""
         
@@ -385,6 +428,7 @@ struct AuthenticationView: View {
             }
         case .failure(let error):
             print("🍎 Apple Sign-In failed with error: \(error)")
+            AnalyticsService.shared.trackAuthFailure(method: .apple, error: error.localizedDescription)
             isLoading = false
             if let authError = error as? ASAuthorizationError {
                 print("🍎 ASAuthorizationError code: \(authError.code.rawValue)")
@@ -497,9 +541,11 @@ struct AuthenticationView: View {
                     DispatchQueue.main.async {
                         if let document = document, document.exists {
                             self.firestoreService.currentUser = try? document.data(as: FirestoreUser.self)
+                            AnalyticsService.shared.trackAuthSuccess(method: .apple, isNewUser: false)
                         } else {
                             // Create new user profile
                             self.createAppleUserProfile(firebaseUser: firebaseUser, appleIDCredential: appleIDCredential)
+                            AnalyticsService.shared.trackAuthSuccess(method: .apple, isNewUser: true)
                         }
                         // Clear the nonce after successful authentication
                         self.currentNonce = nil
@@ -736,6 +782,7 @@ struct AuthenticationView: View {
     // MARK: - Google Sign-In Functions
     
     private func handleGoogleSignIn() {
+        AnalyticsService.shared.trackAuthStarted(method: .google)
         isLoading = true
         errorMessage = ""
         
@@ -750,6 +797,9 @@ struct AuthenticationView: View {
                 self.isLoading = false
                 
                 if let error = error {
+                    let errorMessage = error.localizedDescription
+                    AnalyticsService.shared.trackAuthFailure(method: .google, error: errorMessage)
+                    
                     if let nsError = error as NSError? {
                         switch nsError.code {
                         case GIDSignInError.canceled.rawValue:
@@ -814,9 +864,11 @@ struct AuthenticationView: View {
                             DispatchQueue.main.async {
                                 if let document = document, document.exists {
                                     self.firestoreService.currentUser = try? document.data(as: FirestoreUser.self)
+                                    AnalyticsService.shared.trackAuthSuccess(method: .google, isNewUser: false)
                                 } else {
                                     // Create new user profile
                                     self.createGoogleUserProfile(firebaseUser: firebaseUser, googleUser: user)
+                                    AnalyticsService.shared.trackAuthSuccess(method: .google, isNewUser: true)
                                 }
                             }
                         }
@@ -995,6 +1047,7 @@ struct EmailAuthenticationView: View {
     @State private var displayName = ""
     @State private var isLoading = false
     @State private var errorMessage = ""
+    @StateObject private var timeTracker = TimeTracker()
     
     var body: some View {
         NavigationView {
@@ -1110,6 +1163,8 @@ struct EmailAuthenticationView: View {
                                 .foregroundColor(.gray.opacity(0.6))
                             
                             Button(action: {
+                                AnalyticsService.shared.trackAuthButtonTap(button: .termsOfService, page: .welcome)
+                                
                                 // Open terms of service
                                 if let url = URL(string: "https://slingapp.com/terms") {
                                     UIApplication.shared.open(url)
@@ -1155,6 +1210,19 @@ struct EmailAuthenticationView: View {
             }
         }
         .navigationBarHidden(true)
+        .onAppear {
+            // Track email form view
+            let page: AuthPage = isSignUp ? .emailSignUp : .emailSignIn
+            AnalyticsService.shared.trackAuthPageView(page: page)
+            timeTracker.startTracking(for: page.rawValue)
+        }
+        .onDisappear {
+            // Track time spent on email form
+            let page: AuthPage = isSignUp ? .emailSignUp : .emailSignIn
+            if let duration = timeTracker.endTracking(for: page.rawValue) {
+                AnalyticsService.shared.trackPageViewTime(page: page.rawValue, timeSpent: duration)
+            }
+        }
     }
     
     private func getButtonText() -> String {
@@ -1218,21 +1286,33 @@ struct EmailAuthenticationView: View {
     private func handleNextStep() {
         if isSignUp {
             if currentStep < 2 {
+                // Track step completion
+                let step: AuthStep
+                switch currentStep {
+                case 0: step = .emailEntry
+                case 1: step = .passwordEntry
+                default: step = .emailEntry
+                }
+                AnalyticsService.shared.trackAuthStepCompleted(step: step, method: .email)
+                
                 withAnimation(.easeInOut(duration: 0.3)) {
                     currentStep += 1
                     errorMessage = ""
                 }
             } else {
                 // Final step - create account
+                AnalyticsService.shared.trackAuthStepCompleted(step: .userDetailsEntry, method: .email)
                 handleAuthentication()
             }
         } else {
             // Sign in flow
+            AnalyticsService.shared.trackAuthStepCompleted(step: .emailEntry, method: .email)
             handleAuthentication()
         }
     }
     
     private func handleAuthentication() {
+        AnalyticsService.shared.trackAuthStarted(method: .email)
         isLoading = true
         errorMessage = ""
         
@@ -1249,8 +1329,10 @@ struct EmailAuthenticationView: View {
                     if !success {
                         let errorMsg = error ?? "Failed to create account. Please try again."
                         errorMessage = errorMsg
+                        AnalyticsService.shared.trackAuthFailure(method: .email, error: errorMsg)
                         SlingLogError("User sign up failed", error: nil)
                     } else {
+                        AnalyticsService.shared.trackAuthSuccess(method: .email, isNewUser: true)
                         SlingLogInfo("User successfully created account")
                         // Show community onboarding for new users
                         if let onShowOnboarding = onShowOnboarding {
@@ -1268,8 +1350,10 @@ struct EmailAuthenticationView: View {
                     if !success {
                         let errorMsg = error ?? "Failed to sign in. Please try again."
                         errorMessage = errorMsg
+                        AnalyticsService.shared.trackAuthFailure(method: .email, error: errorMsg)
                         SlingLogError("User sign in failed", error: nil)
                     } else {
+                        AnalyticsService.shared.trackAuthSuccess(method: .email, isNewUser: false)
                         SlingLogInfo("User successfully signed in")
                         onDismiss()
                     }
@@ -1317,12 +1401,21 @@ struct EmailStepView: View {
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .frame(maxWidth: .infinity)
+                    .onTapGesture {
+                        AnalyticsService.shared.trackFormFieldFocus(field: "email", page: isSignUp ? "email_signup" : "email_signin")
+                    }
+                    .onChange(of: email) { newValue in
+                        let isValid = !newValue.isEmpty && newValue.contains("@")
+                        AnalyticsService.shared.trackFormValidation(field: "email", page: isSignUp ? "email_signup" : "email_signin", isValid: isValid, errorType: isValid ? nil : "invalid_email")
+                    }
             }
             .padding(.horizontal, 24)
             
             // Toggle button for Create Account page - moved much closer to email input
             if isSignUp {
                 Button(action: {
+                    AnalyticsService.shared.trackAuthButtonTap(button: .toggleToSignIn, page: .emailSignUp)
+                    
                     withAnimation(.easeInOut(duration: 0.3)) {
                         // Switch to sign in
                         isSignUp = false
@@ -1379,6 +1472,8 @@ struct EmailStepView: View {
                     
                     // Toggle button for Sign In page - moved directly under password input
                     Button(action: {
+                        AnalyticsService.shared.trackAuthButtonTap(button: .toggleToSignUp, page: .emailSignIn)
+                        
                         withAnimation(.easeInOut(duration: 0.3)) {
                             // Switch to sign up
                             isSignUp = true
@@ -1693,6 +1788,7 @@ struct CommunityOnboardingView: View {
     
     @State private var showingJoinCommunity = false
     @State private var showingCreateCommunity = false
+    @StateObject private var timeTracker = TimeTracker()
     
     var body: some View {
         NavigationView {
@@ -1702,7 +1798,10 @@ struct CommunityOnboardingView: View {
                     // Close button - small and grayed out as requested
                     HStack {
                         Spacer()
-                        Button(action: { onDismiss() }) {
+                        Button(action: { 
+                            AnalyticsService.shared.trackAuthButtonTap(button: .skipOnboarding, page: .communityOnboarding)
+                            onDismiss() 
+                        }) {
                             Text("Skip")
                                 .font(.caption)
                                 .foregroundColor(.gray.opacity(0.6))
@@ -1740,6 +1839,7 @@ struct CommunityOnboardingView: View {
                 VStack(spacing: 16) {
                     // Join Community Button
                     Button(action: {
+                        AnalyticsService.shared.trackAuthButtonTap(button: .joinCommunity, page: .communityOnboarding)
                         showingJoinCommunity = true
                     }) {
                         HStack(spacing: 12) {
@@ -1763,6 +1863,7 @@ struct CommunityOnboardingView: View {
                     
                     // Create Community Button
                     Button(action: {
+                        AnalyticsService.shared.trackAuthButtonTap(button: .createCommunity, page: .communityOnboarding)
                         showingCreateCommunity = true
                     }) {
                         HStack(spacing: 12) {
@@ -1797,6 +1898,16 @@ struct CommunityOnboardingView: View {
             }
             .background(Color.white)
             .navigationBarHidden(true)
+        }
+        .onAppear {
+            AnalyticsService.shared.trackAuthPageView(page: .communityOnboarding)
+            AnalyticsService.shared.trackUserFlowStep(step: .communityOnboarding)
+            timeTracker.startTracking(for: "community_onboarding")
+        }
+        .onDisappear {
+            if let duration = timeTracker.endTracking(for: "community_onboarding") {
+                AnalyticsService.shared.trackPageViewTime(page: "community_onboarding", timeSpent: duration)
+            }
         }
         .sheet(isPresented: $showingJoinCommunity) {
             JoinCommunityPage(
