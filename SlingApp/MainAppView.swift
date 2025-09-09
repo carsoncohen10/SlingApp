@@ -347,19 +347,66 @@ struct MainAppView: View {
 
 // MARK: - Home View
 
+// MARK: - Simple Header Component
+struct SimpleHeaderView: View {
+    let title: String
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Sling Logo
+            HStack(spacing: 8) {
+                Image("Logo")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 32, height: 32)
+                    .cornerRadius(8)
+                
+                Text(title)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.black)
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white)
+    }
+}
+
 // MARK: - Home Header Component
 struct HomeHeaderView: View {
     @ObservedObject var firestoreService: FirestoreService
     let onNotificationsTap: () -> Void
     let onProfileTap: () -> Void
+    @Binding var showingPointsPopup: Bool
     
     private func getUserInitials() -> String {
         let user = firestoreService.currentUser
+        
+        // Prioritize first and last name to get both initials
         if let firstName = user?.first_name, let lastName = user?.last_name, !firstName.isEmpty, !lastName.isEmpty {
             let firstInitial = String(firstName.prefix(1)).uppercased()
             let lastInitial = String(lastName.prefix(1)).uppercased()
             return "\(firstInitial)\(lastInitial)"
-        } else if let displayName = user?.display_name, !displayName.isEmpty {
+        }
+        
+        // If we have first name but no last name, try to get second initial from display name
+        if let firstName = user?.first_name, !firstName.isEmpty {
+            let firstInitial = String(firstName.prefix(1)).uppercased()
+            if let displayName = user?.display_name, !displayName.isEmpty {
+                let components = displayName.components(separatedBy: " ")
+                if components.count >= 2 {
+                    let lastInitial = String(components[1].prefix(1)).uppercased()
+                    return "\(firstInitial)\(lastInitial)"
+                }
+            }
+            return firstInitial
+        }
+        
+        // Fallback to display name parsing
+        if let displayName = user?.display_name, !displayName.isEmpty {
             let components = displayName.components(separatedBy: " ")
             if components.count >= 2 {
                 let firstInitial = String(components[0].prefix(1)).uppercased()
@@ -368,9 +415,13 @@ struct HomeHeaderView: View {
             } else if components.count == 1 {
                 return String(components[0].prefix(1)).uppercased()
             }
-        } else if let email = user?.email {
+        }
+        
+        // Final fallback to email
+        if let email = user?.email {
             return String(email.prefix(1)).uppercased()
         }
+        
         return "U"
     }
     
@@ -392,20 +443,25 @@ struct HomeHeaderView: View {
             
             Spacer()
             
-            // Points Badge
-            HStack(spacing: 4) {
-                Image(systemName: "bolt.fill")
-                    .font(.caption)
-                    .foregroundColor(.yellow)
-                Text("\(firestoreService.currentUser?.blitz_points ?? 0)")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.black)
+            // Points Badge - Clickable
+            Button(action: {
+                AnalyticsService.shared.trackFeatureUsage(feature: "points_balance", context: "home_header")
+                showingPointsPopup = true
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.fill")
+                        .font(.caption)
+                        .foregroundColor(.yellow)
+                    Text("\(firestoreService.currentUser?.blitz_points ?? 0)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.yellow.opacity(0.2))
+                .cornerRadius(12)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.yellow.opacity(0.2))
-            .cornerRadius(12)
             
 
             
@@ -570,6 +626,7 @@ struct HomeView: View {
     @State private var selectedFilter = "All Bets"
     @State private var showingNotifications = false
     @State private var showingUserProfile = false
+    @State private var showingPointsPopup = false
 
     @State private var showingCreateBet = false
     @StateObject private var timeTracker = TimeTracker()
@@ -607,7 +664,8 @@ struct HomeView: View {
                             HomeHeaderView(
                     firestoreService: firestoreService,
                     onNotificationsTap: { showingNotifications = true },
-                    onProfileTap: { showingUserProfile = true }
+                    onProfileTap: { showingUserProfile = true },
+                    showingPointsPopup: $showingPointsPopup
                 )
             
 
@@ -1021,6 +1079,76 @@ struct HomeView: View {
                     firestoreService: firestoreService
                 )
             }
+            .overlay(
+                // Points Popup - Centered on screen
+                Group {
+                    if showingPointsPopup {
+                        ZStack {
+                            // Background overlay
+                            Color.black.opacity(0.4)
+                                .ignoresSafeArea()
+                                .onTapGesture {
+                                    showingPointsPopup = false
+                                }
+                            
+                            // Popup content - centered
+                            VStack(spacing: 24) {
+                                // Close button
+                                HStack {
+                                    Button(action: {
+                                        showingPointsPopup = false
+                                    }) {
+                                        Image(systemName: "xmark")
+                                            .font(.title2)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.gray)
+                                    }
+                                    Spacer()
+                                }
+                                
+                                // Lightning bolt icon
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.yellow)
+                                        .frame(width: 120, height: 120)
+                                    
+                                    Image(systemName: "bolt.fill")
+                                        .font(.system(size: 50))
+                                        .foregroundColor(.white)
+                                }
+                                
+                                // Points count
+                                Text("\(firestoreService.currentUser?.blitz_points ?? 0)")
+                                    .font(.largeTitle)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.black)
+                                
+                                // Description
+                                VStack(spacing: 12) {
+                                    Text("Blitz Points")
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.black)
+                                    
+                                    Text("Points are earned by participating in bets and have no monetary value. Use them to track your betting activity and achievements!")
+                                        .font(.body)
+                                        .foregroundColor(.gray)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(nil)
+                                }
+                                
+                                Spacer()
+                            }
+                            .padding(24)
+                            .background(Color.white)
+                            .cornerRadius(20)
+                            .shadow(color: .black.opacity(0.1), radius: 20, x: 0, y: 10)
+                            .frame(maxWidth: 320)
+                            .frame(maxHeight: 500)
+                        }
+                    }
+                }
+            )
     }
     
     private func getUserFullName() -> String {

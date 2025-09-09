@@ -16,8 +16,8 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "1682"
             endingLineNumber = "1682"
-            landmarkName = "isCreatorWithoutWager"
-            landmarkType = "24">
+            landmarkName = "filterPastBets(_:filter:)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -32,7 +32,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "6762"
             endingLineNumber = "6762"
-            landmarkName = "body"
+            landmarkName = "stickyActionButton"
             landmarkType = "24">
          </BreakpointContent>
       </BreakpointProxy>

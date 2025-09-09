@@ -1627,11 +1627,14 @@ struct UserDetailsStepView: View {
                         Text("@")
                             .font(.title2)
                             .foregroundColor(.gray)
-                            .padding(.leading, 20)
+                            .padding(.leading, 16)
                         
                         TextField("username", text: $displayName)
-                            .textFieldStyle(ModernTextFieldStyle())
+                            .textFieldStyle(PlainTextFieldStyle())
+                            .font(.body)
+                            .foregroundColor(.black)
                             .padding(.leading, 8)
+                            .padding(.trailing, 16)
                             .onChange(of: displayName) { newValue in
                                 // Remove spaces from display name
                                 let formattedName = formatDisplayName(newValue)
@@ -1650,22 +1653,30 @@ struct UserDetailsStepView: View {
                                             ProgressView()
                                                 .progressViewStyle(CircularProgressViewStyle(tint: .gray))
                                                 .scaleEffect(0.8)
-                                                .padding(.trailing, 20)
+                                                .padding(.trailing, 16)
                                         } else if isUsernameAvailable {
                                             Image(systemName: "checkmark")
                                                 .foregroundColor(.slingBlue)
                                                 .font(.title3)
-                                                .padding(.trailing, 20)
+                                                .padding(.trailing, 16)
                                         } else {
                                             Image(systemName: "xmark")
                                                 .foregroundColor(.red)
                                                 .font(.title3)
-                                                .padding(.trailing, 20)
+                                                .padding(.trailing, 16)
                                         }
                                     }
                                 }
                             )
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+                    .cornerRadius(10)
                 }
                 
                 Text("This is how other users will see you")
