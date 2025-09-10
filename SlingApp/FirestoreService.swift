@@ -1088,6 +1088,27 @@ class FirestoreService: ObservableObject {
             }
     }
     
+    func fetchUserBetParticipations(for userEmail: String, completion: @escaping ([BetParticipant]) -> Void) {
+        db.collection("BetParticipant")
+            .whereField("user_email", isEqualTo: userEmail)
+            .getDocuments { snapshot, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("❌ Error fetching bet participations for \(userEmail): \(error.localizedDescription)")
+                        completion([])
+                        return
+                    }
+                    
+                    let participations = snapshot?.documents.compactMap { document in
+                        try? document.data(as: BetParticipant.self)
+                    } ?? []
+                    
+                    print("✅ Fetched \(participations.count) bet participations for \(userEmail)")
+                    completion(participations)
+                }
+            }
+    }
+    
     func stopListeningToMessages() {
         messageListener?.remove()
         messageListener = nil

@@ -20,6 +20,7 @@ struct MainAppView: View {
     @State private var showingDeepLinkCommunity = false
     @StateObject private var timeTracker = TimeTracker()
     @State private var previousTab = 0
+    @State private var hideTabText = false
     
     private func getUserInitials() -> String {
         let user = firestoreService.currentUser
@@ -201,10 +202,15 @@ struct MainAppView: View {
                                 .font(.title2)
                                 .frame(height: 24)
                             
-                            Text("Communities")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .frame(height: 16)
+                            // Show text only if screen is wide enough
+                            if !hideTabText {
+                                Text("Communities")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .frame(height: 16)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.5)
+                            }
                         }
                         .foregroundColor(selectedTab == 3 ? Color.slingBlue : .gray)
                         .frame(maxWidth: .infinity)
@@ -254,6 +260,12 @@ struct MainAppView: View {
             // Track main app view appearance
             AnalyticsService.shared.trackUserFlowStep(step: .mainApp)
             timeTracker.startTracking(for: "main_app")
+            
+            // Check screen size and hide tab text if needed
+            let screenWidth = UIScreen.main.bounds.width
+            if screenWidth < 375 { // iPhone SE and smaller
+                hideTabText = true
+            }
         }
         .onDisappear {
             // Track time spent in main app

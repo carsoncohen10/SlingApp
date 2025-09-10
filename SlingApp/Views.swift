@@ -736,40 +736,58 @@ struct EmptyBetsView: View {
     @State private var showingCreateBetModal = false
     
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "target")
-                .font(.system(size: 48))
-                .foregroundColor(.gray.opacity(0.6))
+        VStack(alignment: .leading, spacing: 16) {
+            // Header with icon and title
+            HStack(alignment: .top, spacing: 12) {
+                // Blue square icon with clipboard
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(AnyShapeStyle(Color.slingGradient))
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: "list.bullet.clipboard")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                    )
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("No Active Bets")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    Text("This community doesn't have any active bets yet.")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+            }
             
-            Text("No Active Bets")
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.black)
-            
-            Text("This community doesn't have any active bets yet.")
-                .font(.subheadline)
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-            
+            // Create Bet Button
             Button(action: {
                 showingCreateBetModal = true
             }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
+                    Image(systemName: "plus")
                         .font(.subheadline)
-                    Text("Browse Markets")
+                        .foregroundColor(.white)
+                    
+                    Text("Create a Bet")
                         .font(.subheadline)
                         .fontWeight(.medium)
+                        .foregroundColor(.white)
                 }
-                .foregroundColor(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
                 .frame(maxWidth: .infinity)
-                .background(Color.slingGradient)
+                .frame(height: 44)
+                .background(AnyShapeStyle(Color.slingGradient))
                 .cornerRadius(10)
             }
+            .buttonStyle(PlainButtonStyle())
         }
-        .padding(.horizontal, 16)
+        .padding(16)
+        .background(Color.white)
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
         .sheet(isPresented: $showingCreateBetModal) {
             CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
         }
@@ -781,20 +799,91 @@ struct EmptyActiveBetsView: View {
     @State private var showingCreateBetModal = false
     
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "target")
-                .font(.system(size: 48))
-                .foregroundColor(.gray.opacity(0.6))
-            
-            Text("No pending bets found")
+        VStack(spacing: 20) {
+            // Sample bet design showing how a recent bet would look
+            VStack(spacing: 0) {
+                // Sample bet card
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header section with choice and trophy icon
+                    HStack(alignment: .top) {
+                        // Hero choice at the top
+                        Text("Yes")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        // Trophy icon
+                        Image(systemName: "trophy.fill")
+                            .font(.caption)
+                            .foregroundColor(.slingBlue)
+                            .padding(4)
+                            .background(Color.slingBlue.opacity(0.1))
+                            .cornerRadius(6)
+                    }
+                    
+                    // Bet title
+                    Text("Will the stock market close higher tomorrow?")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.black)
+                        .padding(.top, 8)
+                        .lineLimit(2)
+                    
+                    // Status and wager info
+                    HStack {
+                        // Status badge
+                        Text("Settled")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue)
+                            .cornerRadius(8)
+                        
+                        Spacer()
+                        
+                        // Wager amount
+                        HStack(spacing: 4) {
+                            Text("Wager:")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                            Image(systemName: "bolt.fill")
+                                .font(.caption2)
+                                .foregroundColor(.slingBlue)
+                            Text("100")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+                .padding(16)
+                .frame(width: 160, height: 140)
+                .background(Color.white)
+                .cornerRadius(16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.gray.opacity(0.1), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+                .opacity(0.6) // Make it look like a placeholder
+                
+                // "No recent bets" message
+                VStack(spacing: 8) {
+                    Text("No Recent Bets")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(.black)
             
-            Text("You don't have any pending bets right now.")
+                    Text("Your recent betting activity will appear here")
                 .font(.subheadline)
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
+                }
+                .padding(.top, 16)
+            }
             
             Button(action: {
                 showingCreateBetModal = true
@@ -1282,20 +1371,20 @@ struct MyBetsView: View {
             .padding(.vertical, 12)
             .background(Color.white)
             
-            ScrollView {
-                VStack(spacing: 16) {
-                    // Markets Header
-                    HStack {
-                        Text("Markets")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color.white)
+        ScrollView {
+            VStack(spacing: 16) {
+                // Markets Header
+                HStack {
+                    Text("Markets")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.white)
                 
                 // Dynamic Header Section - Shows "Active Bets" or "Markets to Bet On"
                 VStack(alignment: .leading, spacing: 8) {
@@ -2913,7 +3002,7 @@ struct CondensedBetCard: View {
                         )
                 }
                 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     // Bet title and status badge in same row
                     HStack(alignment: .top) {
                     Text(bet.title)
@@ -2934,69 +3023,75 @@ struct CondensedBetCard: View {
                             .cornerRadius(8)
                     }
                     
-                    // User's choice
-                    HStack {
-                        Text("Your Choice:")
-                            .font(.caption2)
-                        .foregroundColor(.gray)
+                    // User's choice and wager/payout information (formatted like Activity section)
+                    HStack(spacing: 0) {
+                        Text("Chose: ")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
+                        
                         Text(userChoice.isEmpty ? "No choice made" : userChoice)
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.slingBlue)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.slingGradient)
+                        
+                        Text(" • ")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
+                        
+                        if bet.status == "settled" && hasWager {
+                            Text("Paid: ")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                            
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.slingGradient)
+                            
+                            Text("\(getPayoutAmount())")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                        } else if bet.status == "cancelled" && hasWager {
+                            Text("Lost: ")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                            
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.slingGradient)
+                            
+                            Text("\(userWager)")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("Wager: ")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                            
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.slingGradient)
+                            
+                            Text("\(userWager)")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                        }
+                        
                         Spacer()
                     }
                     
-                    // Wager and payout information
-                    HStack {
-                        HStack(spacing: 4) {
-                            Text("Wager:")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                            Image(systemName: "bolt.fill")
-                                .font(.caption2)
-                                .foregroundColor(.slingBlue)
-                            Text("\(userWager)")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
-                        
-                        if bet.status == "settled" && hasWager {
-                            HStack(spacing: 4) {
-                                Text("Paid:")
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
-                                Image(systemName: "bolt.fill")
-                                    .font(.caption2)
-                                    .foregroundColor(.slingBlue)
-                                Text("\(getPayoutAmount())")
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
-                            }
-                        } else if bet.status == "cancelled" && hasWager {
-                            HStack(spacing: 4) {
-                                Text("Paid:")
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
-                                Image(systemName: "bolt.fill")
-                                    .font(.caption2)
-                                    .foregroundColor(.slingBlue)
-                                Text("\(userWager)")
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
-                            }
-                }
-                
-                Spacer()
-                
-                        // Community name and icon
-                        HStack(spacing: 4) {
-                            Image(systemName: "person.2")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                            Text(communityName)
-                                .font(.caption2)
-                    .foregroundColor(.gray)
-                        }
+                    // Community name and icon (formatted like Activity section)
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.2")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(communityName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("•")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("Just now")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
                 
@@ -4483,34 +4578,34 @@ struct CommunityInfoModal: View {
                         Button(action: {
                             showingCommunityInfo = true
                         }) {
-                            if let profileImageUrl = community.profile_image_url {
-                                // Show custom community image
-                                AsyncImage(url: URL(string: profileImageUrl)) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    Circle()
-                                        .fill(AnyShapeStyle(Color.slingGradient))
-                                        .overlay(
-                                            ProgressView()
-                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                                .scaleEffect(0.8)
-                                        )
-                                }
-                                .frame(width: 48, height: 48)
-                                .clipShape(Circle())
-                            } else {
-                                // Show community initials
+                        if let profileImageUrl = community.profile_image_url {
+                            // Show custom community image
+                            AsyncImage(url: URL(string: profileImageUrl)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } placeholder: {
                                 Circle()
                                     .fill(AnyShapeStyle(Color.slingGradient))
-                                    .frame(width: 48, height: 48)
                                     .overlay(
-                                        Text(String(community.name.prefix(1)).uppercased())
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
                                     )
+                            }
+                            .frame(width: 48, height: 48)
+                            .clipShape(Circle())
+                        } else {
+                            // Show community initials
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .frame(width: 48, height: 48)
+                            .overlay(
+                                Text(String(community.name.prefix(1)).uppercased())
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
                             }
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -4525,10 +4620,10 @@ struct CommunityInfoModal: View {
                         Button(action: {
                             showingCommunityInfo = true
                         }) {
-                            Text(community.name)
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.black)
+                        Text(community.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
                         }
                         .buttonStyle(PlainButtonStyle())
                         
@@ -4702,6 +4797,8 @@ struct FullscreenImageView: View {
     @State private var lastScale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
+    @State private var dismissOffset: CGSize = .zero
+    @State private var isDismissing: Bool = false
     
     init(imageUrl: String, selectedImage: UIImage? = nil, isPresented: Binding<Bool>) {
         self.imageUrl = imageUrl
@@ -4712,6 +4809,7 @@ struct FullscreenImageView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+                .opacity(isDismissing ? 1.0 - abs(dismissOffset.height) / 500.0 : 1.0)
             
             if let selectedImage = selectedImage {
                 // Show selected image directly
@@ -4719,7 +4817,8 @@ struct FullscreenImageView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .scaleEffect(scale)
-                    .offset(offset)
+                    .offset(x: offset.width + dismissOffset.width, y: offset.height + dismissOffset.height)
+                    .opacity(isDismissing ? 1.0 - abs(dismissOffset.height) / 500.0 : 1.0)
                     .gesture(
                         SimultaneousGesture(
                             MagnificationGesture()
@@ -4757,7 +4856,8 @@ struct FullscreenImageView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .scaleEffect(scale)
-                        .offset(offset)
+                        .offset(x: offset.width + dismissOffset.width, y: offset.height + dismissOffset.height)
+                        .opacity(isDismissing ? 1.0 - abs(dismissOffset.height) / 500.0 : 1.0)
                         .gesture(
                             SimultaneousGesture(
                                 MagnificationGesture()
@@ -4829,6 +4929,36 @@ struct FullscreenImageView: View {
                 }
             }
         }
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    // Only allow dismiss gesture when not zoomed in
+                    if scale <= 1.0 {
+                        isDismissing = true
+                        dismissOffset = value.translation
+                    }
+                }
+                .onEnded { value in
+                    if isDismissing {
+                        // Check if swipe is significant enough to dismiss
+                        let swipeThreshold: CGFloat = 100
+                        let velocity = value.predictedEndTranslation.height - value.translation.height
+                        
+                        if abs(value.translation.height) > swipeThreshold || abs(velocity) > 500 {
+                            // Dismiss the view
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                isPresented = false
+                            }
+                        } else {
+                            // Snap back to original position
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                dismissOffset = .zero
+                                isDismissing = false
+                            }
+                        }
+                    }
+                }
+        )
     }
 }
 
@@ -5104,6 +5234,12 @@ struct BetAnnouncementCard: View {
         } else {
             return fullName
         }
+    }
+    
+    private func formatNumber(_ number: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: number)) ?? "\(number)"
     }
     
     private func betCardView(bet: FirestoreBet) -> some View {
@@ -5707,66 +5843,66 @@ struct CommunitiesView: View {
                         .frame(width: 32, height: 32)
                         .cornerRadius(8)
                     
-                    Text("Communities")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
+                            Text("Communities")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.black)
                 }
-                
-                Spacer()
-                
-                // Create/Join Community Button with Dropdown
-                Menu {
-                    Button(action: { 
-                        AnalyticsService.shared.trackCommunitiesInteraction(action: .create)
-                        showingCreateCommunityModal = true 
-                    }) {
-                        Label("Create Community", systemImage: "plus.circle")
-                    }
-                    
-                    Button(action: { 
-                        AnalyticsService.shared.trackCommunitiesInteraction(action: .join)
-                        showingJoinCommunityModal = true 
-                    }) {
-                        Label("Join Community", systemImage: "person.badge.plus")
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                        
-                        Text("Add")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                        
-                        Image(systemName: "chevron.down")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(AnyShapeStyle(Color.slingGradient))
-                    .cornerRadius(20)
-                }
-            }
+                            
+                            Spacer()
+                            
+                            // Create/Join Community Button with Dropdown
+                            Menu {
+                                Button(action: { 
+                                    AnalyticsService.shared.trackCommunitiesInteraction(action: .create)
+                                    showingCreateCommunityModal = true 
+                                }) {
+                                    Label("Create Community", systemImage: "plus.circle")
+                                }
+                                
+                                Button(action: { 
+                                    AnalyticsService.shared.trackCommunitiesInteraction(action: .join)
+                                    showingJoinCommunityModal = true 
+                                }) {
+                                    Label("Join Community", systemImage: "person.badge.plus")
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "plus")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.white)
+                                    
+                                                        Text("Add")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                                    
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(AnyShapeStyle(Color.slingGradient))
+                                .cornerRadius(20)
+                            }
+                        }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color.white)
-            
+                        .padding(.vertical, 12)
+                        .background(Color.white)
+                        
             ScrollView {
                 VStack(spacing: 16) {
-                    // Outstanding Balances Section
-                    outstandingBalancesSection
-                    
-                    // Communities Section
-                    communitiesSection
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 100) // Space for bottom tab bar
+                        // Outstanding Balances Section
+                        outstandingBalancesSection
+                        
+                        // Communities Section
+                        communitiesSection
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 100) // Space for bottom tab bar
             }
         }
         .refreshable {
@@ -8383,65 +8519,146 @@ struct ActivityRow: View {
         }
     }
     
+    private func extractChosenOption(from subtitle: String) -> String {
+        // Extract the chosen option from "Chose: [option] • Wager: ⚡ [points]"
+        if let choseRange = subtitle.range(of: "Chose: ") {
+            let afterChose = subtitle[choseRange.upperBound...]
+            if let bulletRange = afterChose.range(of: " • ") {
+                return String(afterChose[..<bulletRange.lowerBound])
+            }
+        }
+        return subtitle
+    }
+    
+    private func extractWagerLabel(from subtitle: String) -> String {
+        // Extract the wager label from "Chose: [option] • Wager: ⚡ [points]"
+        if subtitle.contains("Wager: ⚡") {
+            return "Wager: "
+        } else if subtitle.contains("Paid: ⚡") {
+            return "Paid: "
+        } else if subtitle.contains("Lost: ⚡") {
+            return "Lost: "
+        }
+        return "Wager: "
+    }
+    
+    private func extractWagerValue(from subtitle: String) -> String {
+        // Extract the wager value from "Chose: [option] • Wager: ⚡ [points]"
+        if let wagerRange = subtitle.range(of: "Wager: ⚡ ") {
+            return String(subtitle[wagerRange.upperBound...])
+        } else if let paidRange = subtitle.range(of: "Paid: ⚡ ") {
+            return String(subtitle[paidRange.upperBound...])
+        } else if let lostRange = subtitle.range(of: "Lost: ⚡ ") {
+            return String(subtitle[lostRange.upperBound...])
+        }
+        return subtitle
+    }
+    
     var body: some View {
         HStack(spacing: 16) {
-            // Activity Icon
-            ZStack {
-                Circle()
-                    .fill(activityItem.iconColor.opacity(0.15))
-                    .frame(width: 48, height: 48)
-                
-                Image(systemName: activityItem.icon)
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(activityItem.iconColor)
-            }
+            activityIcon
             
-            // Activity Content
             VStack(alignment: .leading, spacing: 6) {
-                Text(activityItem.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.primary)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                
-                Text(activityItem.subtitle)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                
-                HStack(spacing: 8) {
-                    Text(formatTimestamp(activityItem.timestamp))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    if let communityName = activityItem.communityName {
-                        Text("•")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Image(systemName: "person.2")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text(communityName)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
+                activityTitle
+                activitySubtitle
+                activityMetadata
             }
             
             Spacer()
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
-        .background(
+        .background(activityBackground)
+    }
+    
+    private var activityIcon: some View {
+            ZStack {
+                Circle()
+                .fill(iconBackgroundColor)
+                    .frame(width: 48, height: 48)
+                
+                Image(systemName: activityItem.icon)
+                    .font(.system(size: 18, weight: .medium))
+                .foregroundColor(iconForegroundColor)
+        }
+    }
+    
+    private var iconBackgroundColor: Color {
+        if activityItem.icon == "bolt.fill" {
+            return Color.slingBlue.opacity(0.15)
+        } else {
+            return activityItem.iconColor.opacity(0.15)
+        }
+    }
+    
+    private var iconForegroundColor: Color {
+        activityItem.icon == "bolt.fill" ? .slingBlue : activityItem.iconColor
+    }
+    
+    private var activityTitle: some View {
+                Text(activityItem.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+    }
+                
+    private var activitySubtitle: some View {
+        HStack(spacing: 0) {
+            Text("Chose: ")
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(.secondary)
+            
+            Text(extractChosenOption(from: activityItem.subtitle))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.slingGradient)
+            
+            Text(" • ")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.secondary)
+            
+            Text(extractWagerLabel(from: activityItem.subtitle))
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.secondary)
+            
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.slingGradient)
+            
+            Text(extractWagerValue(from: activityItem.subtitle))
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.secondary)
+        }
+                    .multilineTextAlignment(.leading)
+        .lineLimit(1)
+    }
+                
+    private var activityMetadata: some View {
+                HStack(spacing: 8) {
+            if let communityName = activityItem.communityName {
+                Image(systemName: "person.2")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                Text(communityName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                Text("•")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+            }
+                        
+            Text(formatTimestamp(activityItem.timestamp))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+        }
+    }
+    
+    private var activityBackground: some View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.white)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-        )
-        .padding(.horizontal, 20)
-        .padding(.vertical, 4)
     }
 }
 
@@ -9517,25 +9734,24 @@ struct EnhancedNotificationRow: View {
                         .lineLimit(3)
                     
                     HStack(spacing: 8) {
-                        Text(notification.timestamp)
+                        if let communityName = notification.communityName {
+                            // Community icon (default to person.2 if no specific icon)
+                            Image(systemName: notification.communityIcon ?? "person.2")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        if let communityName = notification.communityName {
-                            Text("•")
+                            Text(communityName)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
-                            if let communityIcon = notification.communityIcon {
-                                Image(systemName: communityIcon)
+                            Text("•")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
                             
-                            Text(communityName)
+                        Text(notification.timestamp)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                        }
                     }
                 }
                 
@@ -9883,13 +10099,13 @@ struct EditProfileView: View {
             .sheet(isPresented: $showingCamera) {
                 CameraView(
                     onImageCaptured: { image in
-                        selectedImage = image
-                        showingCamera = false
+                    selectedImage = image
+                    showingCamera = false
                     },
                     onError: { error in
                         print("Camera error: \(error)")
-                        showingCamera = false
-                    }
+                    showingCamera = false
+                }
                 )
             }
             .onChange(of: selectedItem) { _ in
@@ -10573,43 +10789,43 @@ struct CreateBetView: View {
                             
                             // Outcome Text - Expanded and better styled
                             VStack(alignment: .leading, spacing: 4) {
-                                if selectedMarketType == "Yes/No" {
-                                    // Yes/No outcomes are not editable
+                            if selectedMarketType == "Yes/No" {
+                                // Yes/No outcomes are not editable
                                     HStack(spacing: 8) {
-                                        Text(outcome)
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.black)
-                                        
-                                        Image(systemName: "lock.fill")
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
-                                    }
-                                } else if selectedMarketType == "Spread" || selectedMarketType == "Over/Under" {
-                                    // Spread and Over/Under outcomes are not editable
+                                    Text(outcome)
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.black)
+                                    
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                            } else if selectedMarketType == "Spread" || selectedMarketType == "Over/Under" {
+                                // Spread and Over/Under outcomes are not editable
                                     HStack(spacing: 8) {
-                                        Text(outcome)
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.black)
-                                        
-                                        Image(systemName: "lock.fill")
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
-                                    }
-                                } else {
-                                    // Multiple Choice and Prop Bet outcomes are editable
+                                    Text(outcome)
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.black)
+                                    
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                            } else {
+                                // Multiple Choice and Prop Bet outcomes are editable
                                     VStack(alignment: .leading, spacing: 4) {
                                         TextField("Enter outcome...", text: $outcomes[index])
-                                            .textFieldStyle(PlainTextFieldStyle())
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.black)
-                                        
+                                        .textFieldStyle(PlainTextFieldStyle())
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.black)
+                                    
                                         HStack(spacing: 4) {
-                                            Image(systemName: "pencil.circle.fill")
+                                    Image(systemName: "pencil.circle.fill")
                                                 .font(.caption2)
-                                                .foregroundColor(.slingBlue)
+                                        .foregroundColor(.slingBlue)
                                             
                                             Text("Tap to edit")
                                                 .font(.caption2)
@@ -10629,26 +10845,26 @@ struct CreateBetView: View {
                                         .font(.caption2)
                                         .foregroundColor(.gray)
                                     
-                                    TextField("Odds", text: $odds[index])
-                                        .textFieldStyle(PlainTextFieldStyle())
-                                        .font(.subheadline)
+                            TextField("Odds", text: $odds[index])
+                                .textFieldStyle(PlainTextFieldStyle())
+                                .font(.subheadline)
                                         .fontWeight(.medium)
-                                        .multilineTextAlignment(.center)
+                                .multilineTextAlignment(.center)
                                         .frame(width: 80)
                                         .padding(.vertical, 8)
                                         .padding(.horizontal, 12)
-                                        .background(Color(.systemGray6))
-                                        .cornerRadius(8)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
                                 }
-                                
+                            
                                 // Percentage Badge - More prominent
-                                Text(percentages[index])
-                                    .font(.caption)
+                            Text(percentages[index])
+                                .font(.caption)
                                     .fontWeight(.bold)
-                                    .foregroundColor(.white)
+                                .foregroundColor(.white)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 4)
-                                    .background(Color.slingBlue)
+                                .background(Color.slingBlue)
                                     .cornerRadius(8)
                             }
                             
@@ -10657,9 +10873,9 @@ struct CreateBetView: View {
                                 if outcomes.count > 2 {
                                     Button(action: {
                                         withAnimation(.easeInOut(duration: 0.2)) {
-                                            outcomes.remove(at: index)
-                                            odds.remove(at: index)
-                                            percentages.remove(at: index)
+                                        outcomes.remove(at: index)
+                                        odds.remove(at: index)
+                                        percentages.remove(at: index)
                                         }
                                     }) {
                                         Image(systemName: "trash.circle.fill")
@@ -10676,11 +10892,11 @@ struct CreateBetView: View {
                                     selectedOutcomeIndex = index
                                     showingAdjustOdds = true
                                 }) {
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
                             }
+                        }
                         }
                         .padding(.vertical, 20)
                         .padding(.horizontal, 20)
@@ -10703,7 +10919,7 @@ struct CreateBetView: View {
                 // Add new option for Multiple Choice and Prop Bet
                 if selectedMarketType == "Multiple Choice" || selectedMarketType == "Prop Bet" {
                     VStack(spacing: 0) {
-                        HStack(spacing: 16) {
+                    HStack(spacing: 16) {
                             // Add icon
                             ZStack {
                                 Circle()
@@ -10718,8 +10934,8 @@ struct CreateBetView: View {
                             
                             // Add option text field
                             VStack(alignment: .leading, spacing: 4) {
-                                TextField("Add another option...", text: $newOptionText)
-                                    .textFieldStyle(PlainTextFieldStyle())
+                        TextField("Add another option...", text: $newOptionText)
+                            .textFieldStyle(PlainTextFieldStyle())
                                     .font(.headline)
                                     .fontWeight(.medium)
                                     .foregroundColor(.black)
@@ -10732,13 +10948,13 @@ struct CreateBetView: View {
                             Spacer()
                             
                             // Add button
-                            Button(action: {
+                        Button(action: {
                                 if !newOptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         outcomes.append(newOptionText.trimmingCharacters(in: .whitespacesAndNewlines))
-                                        odds.append("-110")
-                                        percentages.append("52.4%")
-                                        newOptionText = ""
+                                odds.append("-110")
+                                percentages.append("52.4%")
+                                newOptionText = ""
                                     }
                                 }
                             }) {
@@ -10747,10 +10963,10 @@ struct CreateBetView: View {
                                         .fill(Color.slingGradient)
                                         .frame(width: 40, height: 40)
                                     
-                                    Image(systemName: "plus")
-                                        .font(.subheadline)
+                                Image(systemName: "plus")
+                                    .font(.subheadline)
                                         .fontWeight(.bold)
-                                        .foregroundColor(.white)
+                            .foregroundColor(.white)
                                 }
                             }
                             .disabled(newOptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -15036,32 +15252,32 @@ struct EnhancedBetCard: View {
             
             // Action buttons - only show if bet is open
             if bet.status.lowercased() == "open" {
-                HStack(spacing: 12) {
-                    Button(action: {
-                        showingCancelAlert = true
-                    }) {
-                        Text("Cancel Market")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.red)
-                            .cornerRadius(10)
-                    }
-                    
-                    Button(action: {
-                        showingPlaceBetSheet = true
-                    }) {
-                        Text("Place a Bet")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.slingGradient)
-                            .cornerRadius(10)
-                    }
+            HStack(spacing: 12) {
+                Button(action: {
+                    showingCancelAlert = true
+                }) {
+                    Text("Cancel Market")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.red)
+                        .cornerRadius(10)
+                }
+                
+                Button(action: {
+                    showingPlaceBetSheet = true
+                }) {
+                    Text("Place a Bet")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.slingGradient)
+                        .cornerRadius(10)
+                }
                 }
             } else {
                 // Show bet status when not open
@@ -15547,13 +15763,13 @@ struct EnhancedCommunityDetailView: View {
             .sheet(isPresented: $showingCamera) {
                 CameraView(
                     onImageCaptured: { image in
-                        selectedImage = image
-                        showingCamera = false
+                    selectedImage = image
+                    showingCamera = false
                     },
                     onError: { error in
                         print("Camera error: \(error)")
-                        showingCamera = false
-                    }
+                    showingCamera = false
+                }
                 )
             }
             .onChange(of: selectedItem) { _ in
@@ -17327,7 +17543,7 @@ struct TradingProfileView: View {
         isLoadingBets = true
         
         // Get bets where the user is either the creator or a participant
-        let userEmail = firestoreService.currentUser?.email ?? ""
+        let userEmail = userId // Use the userId parameter instead of currentUser
         
         // Filter bets where user is creator
         let userCreatedBets = firestoreService.bets.filter { bet in
@@ -17346,35 +17562,38 @@ struct TradingProfileView: View {
     private func loadUserActivity() {
         isLoadingActivity = true
         
+        // Fetch the user's bet participations from Firestore
+        firestoreService.fetchUserBetParticipations(for: userId) { userParticipations in
+        
         // Create activity items from user's betting history
         var activityItems: [UserActivityItem] = []
         
-        // Get user's bet participations
-        let userParticipations = firestoreService.userBetParticipations.filter { $0.user_email == userId }
-        
         for participation in userParticipations {
-            if let bet = firestoreService.bets.first(where: { $0.id == participation.bet_id }) {
+                if let bet = self.firestoreService.bets.first(where: { $0.id == participation.bet_id }) {
                 // Create activity item for placing a bet
                 let activityItem = UserActivityItem(
                     id: "\(participation.bet_id ?? "")_\(participation.user_email)_placed",
                     type: .betPlaced,
                     title: "Placed bet on '\(bet.title)'",
-                    subtitle: "Chose: \(participation.chosen_option) • ⚡ \(participation.stake_amount)",
+                        subtitle: "Chose: \(participation.chosen_option) • Wager: ⚡ \(formatNumber(participation.stake_amount))",
                     communityName: getCommunityName(for: bet.community_id),
                     timestamp: bet.created_date,
                     icon: "bolt.fill",
-                    iconColor: .yellow
+                        iconColor: .slingBlue
                 )
                 activityItems.append(activityItem)
                 
                 // If bet is settled, create activity item for result
                 if bet.status == "settled", let winnerOption = bet.winner_option {
                     let isWinner = participation.chosen_option == winnerOption
+                        // Calculate payout amount for winners
+                        let payoutAmount = isWinner ? calculatePayoutAmount(bet: bet, participation: participation) : Double(participation.stake_amount)
+                        
                     let resultActivityItem = UserActivityItem(
                         id: "\(participation.bet_id ?? "")_\(participation.user_email)_result",
                         type: isWinner ? .betWon : .betLost,
                         title: isWinner ? "Won bet on '\(bet.title)'" : "Lost bet on '\(bet.title)'",
-                        subtitle: isWinner ? "Won ⚡ \(participation.stake_amount)" : "Lost ⚡ \(participation.stake_amount)",
+                            subtitle: isWinner ? "Chose: \(participation.chosen_option) • Paid: ⚡ \(formatNumber(Int(payoutAmount)))" : "Chose: \(participation.chosen_option) • Lost: ⚡ \(formatNumber(participation.stake_amount))",
                         communityName: getCommunityName(for: bet.community_id),
                         timestamp: bet.deadline, // Use deadline as settlement time
                         icon: isWinner ? "trophy.fill" : "xmark.circle.fill",
@@ -17389,8 +17608,9 @@ struct TradingProfileView: View {
         activityItems.sort { $0.timestamp > $1.timestamp }
         
         DispatchQueue.main.async {
-            self.userActivityItems = activityItems
-            self.isLoadingActivity = false
+                userActivityItems = activityItems
+                isLoadingActivity = false
+            }
         }
     }
     
@@ -17416,43 +17636,32 @@ struct TradingProfileView: View {
     }
     
     private func getUserStreak() -> Int {
-        // Calculate consecutive correct bets
-        var currentStreak = 0
-        var maxStreak = 0
-        
-        // Get user's email (not currently used but available for future use)
-        _ = firestoreService.currentUser?.email ?? ""
-        
-        // Filter completed bets where user participated and won
-        let userParticipations = firestoreService.userBetParticipations.filter { participant in
-            participant.is_winner == true
-        }
-        
-        // Sort participations by date (most recent first)
-        let sortedParticipations = userParticipations.sorted { participation1, participation2 in
-            participation1.created_date > participation2.created_date
-        }
-        
-        // Calculate streak
-        for participation in sortedParticipations {
-            // Find the corresponding bet to check if it's completed
-            if let bet = userBets.first(where: { $0.id == participation.bet_id }),
-               bet.status == "completed" {
-                currentStreak += 1
-                maxStreak = max(maxStreak, currentStreak)
-            } else {
-                // If bet is not completed or not found, reset streak
-                currentStreak = 0
-            }
-        }
-        
-        return maxStreak
+        // For now, return 0 as we need to fetch participations separately
+        // This could be enhanced to fetch and calculate streak for other users
+        return 0
     }
     
     private func getAbbreviatedDate() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM yyyy"
         return formatter.string(from: Date())
+    }
+    
+    private func calculatePayoutAmount(bet: FirestoreBet, participation: BetParticipant) -> Double {
+        // Calculate total pool for the winning option
+        let winningOptionParticipations = firestoreService.userBetParticipations.filter { p in
+            p.bet_id == bet.id && p.chosen_option == bet.winner_option
+        }
+        let totalWinningPool = winningOptionParticipations.reduce(0) { $0 + $1.stake_amount }
+        
+        // Calculate user's share of the pool
+        if totalWinningPool > 0 {
+            let userShare = Double(participation.stake_amount) / Double(totalWinningPool)
+            let totalPool = Double(bet.total_pool ?? 0)
+            return userShare * totalPool
+        }
+        
+        return Double(participation.stake_amount)
     }
     
     private func formatNumber(_ number: Int) -> String {
@@ -17545,25 +17754,25 @@ struct TradingProfileView: View {
             }
         } else {
             // For other users, use the passed displayName or userName
-            if let displayName = displayName, !displayName.isEmpty {
-                let components = displayName.components(separatedBy: " ")
-                if components.count >= 2 {
-                    let firstInitial = String(components[0].prefix(1)).uppercased()
-                    let lastInitial = String(components[1].prefix(1)).uppercased()
-                    return "\(firstInitial)\(lastInitial)"
-                } else if components.count == 1 {
-                    return String(components[0].prefix(1)).uppercased()
-                }
-            } else if !userName.isEmpty {
-                let components = userName.components(separatedBy: " ")
-                if components.count >= 2 {
-                    let firstInitial = String(components[0].prefix(1)).uppercased()
-                    let lastInitial = String(components[1].prefix(1)).uppercased()
-                    return "\(firstInitial)\(lastInitial)"
-                } else {
-                    return String(userName.prefix(1)).uppercased()
-                }
+        if let displayName = displayName, !displayName.isEmpty {
+            let components = displayName.components(separatedBy: " ")
+            if components.count >= 2 {
+                let firstInitial = String(components[0].prefix(1)).uppercased()
+                let lastInitial = String(components[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else if components.count == 1 {
+                return String(components[0].prefix(1)).uppercased()
             }
+        } else if !userName.isEmpty {
+            let components = userName.components(separatedBy: " ")
+            if components.count >= 2 {
+                let firstInitial = String(components[0].prefix(1)).uppercased()
+                let lastInitial = String(components[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else {
+                return String(userName.prefix(1)).uppercased()
+            }
+        }
         }
         
         return "U"
@@ -17599,6 +17808,7 @@ struct UserSettingsView: View {
     @State private var showingTermsOfService = false
     @State private var showingPrivacyPolicy = false
     @State private var showingLanguageError = false
+    @State private var showingDarkModeError = false
     @StateObject private var timeTracker = TimeTracker()
     
     var body: some View {
@@ -17690,6 +17900,11 @@ struct UserSettingsView: View {
                 Button("OK") { }
             } message: {
                 Text("Language selection will be available in a future update. For now, the app is only available in English.")
+            }
+            .alert("Feature Coming Soon", isPresented: $showingDarkModeError) {
+                Button("OK") { }
+            } message: {
+                Text("Dark mode will be available in a future update. Stay tuned for this feature!")
             }
             .onAppear {
                 // Track settings page view
@@ -17890,14 +18105,11 @@ struct UserSettingsView: View {
                         .tint(.slingBlue)
                         .padding(.trailing, 16)
                         .onChange(of: darkModeEnabled) { _, newValue in
-                            print("🔧 Dark mode changed to: \(newValue)")
-                            firestoreService.updateDarkModeSetting(enabled: newValue) { success in
-                                if success {
-                                    print("✅ Dark mode setting saved to Firestore")
-                                } else {
-                                    print("❌ Failed to save dark mode setting")
-                                }
-                            }
+                            print("🔧 Dark mode toggle attempted - feature coming soon!")
+                            // Reset the toggle to its original state
+                            darkModeEnabled = false
+                            // Show coming soon popup
+                            showingDarkModeError = true
                         }
                 }
             }
@@ -20739,6 +20951,9 @@ struct MemberRowView: View {
     let onTap: () -> Void
     @State private var userFullName: String?
     @State private var isLoadingUserData = false
+    @State private var userProfileImageUrl: String?
+    @State private var userFirstName: String?
+    @State private var userLastName: String?
     
     var body: some View {
         Button(action: onTap) {
@@ -20751,15 +20966,34 @@ struct MemberRowView: View {
                     .frame(width: 16, alignment: .center)
                 
                 // Profile Picture
+                if let profileImageUrl = userProfileImageUrl, !profileImageUrl.isEmpty {
+                    AsyncImage(url: URL(string: profileImageUrl)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .overlay(
+                                Text(getUserInitials())
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                            )
+                    }
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                } else {
                 Circle()
                     .fill(AnyShapeStyle(Color.slingGradient))
                     .frame(width: 40, height: 40)
         .overlay(
-                        Text(String(memberWithPoints.name.prefix(1)).uppercased())
+                            Text(getUserInitials())
                             .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
                     )
+                }
                 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
@@ -20835,6 +21069,9 @@ struct MemberRowView: View {
                 let user = try await FirestoreService().getUser(userId: memberWithPoints.email)
                 await MainActor.run {
                     self.userFullName = user.full_name
+                    self.userProfileImageUrl = user.profile_picture_url
+                    self.userFirstName = user.first_name
+                    self.userLastName = user.last_name
                     self.isLoadingUserData = false
                 }
             } catch {
@@ -20843,6 +21080,37 @@ struct MemberRowView: View {
                     self.isLoadingUserData = false
                 }
             }
+        }
+    }
+    
+    private func getUserInitials() -> String {
+        // Prioritize first and last name if available
+        if let firstName = userFirstName, let lastName = userLastName, !firstName.isEmpty, !lastName.isEmpty {
+            let firstInitial = String(firstName.prefix(1)).uppercased()
+            let lastInitial = String(lastName.prefix(1)).uppercased()
+            return "\(firstInitial)\(lastInitial)"
+        }
+        
+        // Fallback to parsing the full name
+        if let fullName = userFullName, !fullName.isEmpty {
+            let components = fullName.components(separatedBy: " ")
+            if components.count >= 2 {
+                let firstInitial = String(components[0].prefix(1)).uppercased()
+                let lastInitial = String(components[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else if components.count == 1 {
+                return String(components[0].prefix(1)).uppercased()
+            }
+        }
+        
+        // Fallback to member name
+        let components = memberWithPoints.name.components(separatedBy: " ")
+        if components.count >= 2 {
+            let firstInitial = String(components[0].prefix(1)).uppercased()
+            let lastInitial = String(components[1].prefix(1)).uppercased()
+            return "\(firstInitial)\(lastInitial)"
+        } else {
+            return String(memberWithPoints.name.prefix(1)).uppercased()
         }
     }
 }
@@ -21226,144 +21494,144 @@ struct CommunityImagePicker: View {
     }
     
     private var headerSection: some View {
-        VStack(spacing: 16) {
-            Text("Change Community Icon")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.black)
-            
-            Text("Choose a new profile picture for \(community.name)")
-                .font(.body)
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-        }
-        .padding(.top, 20)
+                VStack(spacing: 16) {
+                    Text("Change Community Icon")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                    
+                    Text("Choose a new profile picture for \(community.name)")
+                        .font(.body)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+                .padding(.top, 20)
     }
-    
+                
     private var imagePreviewSection: some View {
-        VStack(spacing: 16) {
-            if let selectedImage = selectedImage {
-                // Show selected image
-                Image(uiImage: selectedImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 120, height: 120)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                    )
-            } else if let profileImageUrl = community.profile_image_url {
-                // Show current community image
-                AsyncImage(url: URL(string: profileImageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Circle()
-                        .fill(Color.gray.opacity(0.2))
+                VStack(spacing: 16) {
+                    if let selectedImage = selectedImage {
+                        // Show selected image
+                        Image(uiImage: selectedImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 120, height: 120)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                    } else if let profileImageUrl = community.profile_image_url {
+                        // Show current community image
+                        AsyncImage(url: URL(string: profileImageUrl)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.gray.opacity(0.2))
+                                .overlay(
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .gray))
+                                )
+                        }
+                        .frame(width: 120, height: 120)
+                        .clipShape(Circle())
                         .overlay(
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .gray))
+                            Circle()
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
-                }
-                .frame(width: 120, height: 120)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                )
-            } else {
-                // Show community initials
-                Circle()
-                    .fill(Color.slingLightBlue)
-                    .frame(width: 120, height: 120)
-                    .overlay(
-                        Text(String(community.name.prefix(1)).uppercased())
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.slingBlue)
-                    )
-                    .overlay(
+                    } else {
+                        // Show community initials
                         Circle()
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                    )
-            }
-            
-            Text("Current Profile Picture")
-                .font(.caption)
-                .foregroundColor(.gray)
+                            .fill(Color.slingLightBlue)
+                            .frame(width: 120, height: 120)
+                            .overlay(
+                                Text(String(community.name.prefix(1)).uppercased())
+                                    .font(.title)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.slingBlue)
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                    
+                    Text("Current Profile Picture")
+                        .font(.caption)
+                        .foregroundColor(.gray)
         }
-    }
-    
+                }
+                
     private var imageSelectionSection: some View {
-        VStack(spacing: 16) {
-            // Photo Library Button
-            PhotosPicker(
-                selection: $selectedItem,
-                matching: .images,
-                photoLibrary: .shared()
-            ) {
-                HStack(spacing: 16) {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.title2)
-                        .foregroundColor(.slingBlue)
-                        .frame(width: 24, height: 24)
+                VStack(spacing: 16) {
+                    // Photo Library Button
+                    PhotosPicker(
+                        selection: $selectedItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        HStack(spacing: 16) {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.title2)
+                                .foregroundColor(.slingBlue)
+                                .frame(width: 24, height: 24)
+                            
+                            Text("Choose from Photo Library")
+                                .font(.headline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.headline)
+                                .foregroundColor(.gray.opacity(0.6))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    }
                     
-                    Text("Choose from Photo Library")
-                        .font(.headline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.slingBlue)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.headline)
-                        .foregroundColor(.gray.opacity(0.6))
+                    // Camera Button
+                    Button(action: {
+                        showingCamera = true
+                    }) {
+                        HStack(spacing: 16) {
+                            Image(systemName: "camera")
+                                .font(.title2)
+                                .foregroundColor(.slingBlue)
+                                .frame(width: 24, height: 24)
+                            
+                            Text("Take a Photo")
+                                .font(.headline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.headline)
+                                .foregroundColor(.gray.opacity(0.6))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .background(Color.white)
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                )
-            }
-            
-            // Camera Button
-            Button(action: {
-                showingCamera = true
-            }) {
-                HStack(spacing: 16) {
-                    Image(systemName: "camera")
-                        .font(.title2)
-                        .foregroundColor(.slingBlue)
-                        .frame(width: 24, height: 24)
-                    
-                    Text("Take a Photo")
-                        .font(.headline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.slingBlue)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.headline)
-                        .foregroundColor(.gray.opacity(0.6))
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .background(Color.white)
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                )
-            }
-        }
-        .padding(.horizontal, 24)
+                .padding(.horizontal, 24)
     }
     
     var body: some View {
@@ -21418,13 +21686,13 @@ struct CommunityImagePicker: View {
         .sheet(isPresented: $showingCamera) {
             CameraView(
                 onImageCaptured: { image in
-                    selectedImage = image
-                    showingCamera = false
+                selectedImage = image
+                showingCamera = false
                 },
                 onError: { error in
                     print("Camera error: \(error)")
-                    showingCamera = false
-                }
+                showingCamera = false
+            }
             )
         }
         .alert("Error", isPresented: $showingErrorAlert) {
@@ -21650,14 +21918,14 @@ struct UserImagePicker: View {
         .sheet(isPresented: $showingCamera) {
             CameraView(
                 onImageCaptured: { image in
-                    selectedImage = image
-                    showingCamera = false
-                    dismiss()
+                selectedImage = image
+                showingCamera = false
+                dismiss()
                 },
                 onError: { error in
                     print("Camera error: \(error)")
                     showingCamera = false
-                }
+            }
             )
         }
         .alert("Error", isPresented: $showingErrorAlert) {
