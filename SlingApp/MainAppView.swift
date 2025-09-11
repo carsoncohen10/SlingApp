@@ -1,6 +1,34 @@
 import SwiftUI
 import FirebaseAnalytics
 
+// MARK: - Color Extension for Hex Colors
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 0)
+        }
+
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+}
+
 struct MainAppView: View {
     @ObservedObject var firestoreService: FirestoreService
     @State private var selectedTab = 0 // 0 = Home, 1 = Chat, 2 = My Bets, 3 = Communities
@@ -1121,12 +1149,12 @@ struct HomeView: View {
                                 // Lightning bolt icon
                                 ZStack {
                                     Circle()
-                                        .fill(Color.yellow)
+                                        .fill(Color(hex: "FFF9E6"))
                                         .frame(width: 120, height: 120)
                                     
                                     Image(systemName: "bolt.fill")
                                         .font(.system(size: 50))
-                                        .foregroundColor(.white)
+                                        .foregroundColor(Color(hex: "FFD84D"))
                                 }
                                 
                                 // Points count
@@ -1143,7 +1171,7 @@ struct HomeView: View {
                                         .foregroundColor(.black)
                                     
                                     Text("Points are earned by participating in bets and have no monetary value. Use them to track your betting activity and achievements!")
-                                        .font(.body)
+                                        .font(.caption)
                                         .foregroundColor(.gray)
                                         .multilineTextAlignment(.center)
                                         .lineLimit(nil)
@@ -1151,12 +1179,12 @@ struct HomeView: View {
                                 
                                 Spacer()
                             }
-                            .padding(24)
+                            .padding(20)
                             .background(Color.white)
                             .cornerRadius(20)
                             .shadow(color: .black.opacity(0.1), radius: 20, x: 0, y: 10)
                             .frame(maxWidth: 320)
-                            .frame(maxHeight: 500)
+                            .frame(maxHeight: 400)
                         }
                     }
                 }

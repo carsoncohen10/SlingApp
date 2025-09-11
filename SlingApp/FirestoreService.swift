@@ -795,6 +795,12 @@ class FirestoreService: ObservableObject {
                         self?.userCommunities = fetchedCommunities
                         print("✅ Loaded \(fetchedCommunities.count) communities")
                         
+                        // Preload community images for faster loading
+                        let imageUrls = fetchedCommunities.compactMap { $0.profile_image_url }.filter { !$0.isEmpty }
+                        if !imageUrls.isEmpty {
+                            ImageCacheManager.shared.preloadImages(urls: imageUrls)
+                        }
+                        
                         // Fetch last messages for all communities immediately after loading
                         self?.fetchLastMessagesForUserCommunities()
                         
@@ -984,6 +990,12 @@ class FirestoreService: ObservableObject {
                             }
                             
                             self?.bets = sortedBets
+                            
+                            // Preload bet images for faster loading
+                            let betImageUrls = sortedBets.compactMap { $0.image_url }.filter { !$0.isEmpty }
+                            if !betImageUrls.isEmpty {
+                                ImageCacheManager.shared.preloadImages(urls: betImageUrls)
+                            }
                         }
                     }
             }
@@ -1673,6 +1685,90 @@ class FirestoreService: ObservableObject {
             communityIcon: communityIcon,
             completion: completion
         )
+    }
+    
+    func createUserJoinedCommunityNotification(
+        for userEmail: String,
+        joinedUserName: String,
+        communityName: String,
+        communityId: String? = nil,
+        communityIcon: String? = nil,
+        completion: @escaping (Bool) -> Void
+    ) {
+        let title = "New Member! 👋"
+        let message = "\(joinedUserName) joined '\(communityName)'"
+        let icon = "person.badge.plus"
+        
+        createNotification(
+            for: userEmail,
+            title: title,
+            message: message,
+            type: "user_joined_community",
+            icon: icon,
+            communityId: communityId,
+            communityName: communityName,
+            communityIcon: communityIcon,
+            completion: completion
+        )
+    }
+    
+    private func notifyCommunityMembersAboutNewMember(
+        communityId: String,
+        communityName: String,
+        communityIcon: String,
+        joinedUserName: String,
+        joinedUserEmail: String
+    ) {
+        print("🔔 Notifying community members about new member: \(joinedUserName)")
+        
+        // Fetch all community members except the one who just joined
+        db.collection("CommunityMember")
+            .whereField("community_id", isEqualTo: communityId)
+            .whereField("user_email", isNotEqualTo: joinedUserEmail) // Exclude the person who just joined
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching community members for notification: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    print("❌ No community members found to notify")
+                    return
+                }
+                
+                print("🔔 Found \(documents.count) community members to notify")
+                
+                // Create notifications for all existing members
+                var notificationsCreated = 0
+                let totalMembers = documents.count
+                
+                for document in documents {
+                    guard let memberEmail = document.data()["user_email"] as? String else {
+                        print("❌ Member document missing email field")
+                        continue
+                    }
+                    
+                    self?.createUserJoinedCommunityNotification(
+                        for: memberEmail,
+                        joinedUserName: joinedUserName,
+                        communityName: communityName,
+                        communityId: communityId,
+                        communityIcon: communityIcon
+                    ) { success in
+                        notificationsCreated += 1
+                        if success {
+                            print("✅ Created new member notification for \(memberEmail)")
+                        } else {
+                            print("❌ Failed to create new member notification for \(memberEmail)")
+                        }
+                        
+                        // Check if all notifications have been processed
+                        if notificationsCreated == totalMembers {
+                            print("✅ Completed notifying all community members about new member")
+                        }
+                    }
+                }
+            }
     }
     
     private func createBetSettledNotifications(betId: String, winnerOption: String, participants: [QueryDocumentSnapshot]) {
@@ -2402,7 +2498,7 @@ class FirestoreService: ObservableObject {
                 
                 guard let document = snapshot?.documents.first else {
                     print("❌ FirestoreService.joinCommunity: No community found with invite code: '\(inviteCode)'")
-                    completion(false, "Invalid invite code")
+                    completion(false, "Community not found")
                     return
                 }
                 
@@ -2481,6 +2577,15 @@ class FirestoreService: ObservableObject {
                                         print("❌ Failed to send bot join message: \(error ?? "Unknown error")")
                                     }
                                 }
+                                
+                                // Notify all existing community members about the new member
+                                self?.notifyCommunityMembersAboutNewMember(
+                                    communityId: communityId,
+                                    communityName: communityName,
+                                    communityIcon: communityIcon,
+                                    joinedUserName: userName,
+                                    joinedUserEmail: userEmail
+                                )
                             }
                             
                             completion(true, nil)

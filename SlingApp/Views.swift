@@ -382,9 +382,7 @@ struct BetImageView: View {
     var body: some View {
         Group {
             if let imageURL = imageURL, !imageURL.isEmpty {
-                AsyncImage(url: URL(string: imageURL)) { phase in
-                    switch phase {
-                    case .success(let image):
+                OptimizedAsyncImage(url: imageURL) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -394,25 +392,7 @@ struct BetImageView: View {
                         .onTapGesture {
                             showImageFullscreen = true
                         }
-                    case .failure(_):
-                        // Handle AsyncImage loading failure
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.red.opacity(0.1))
-                            .frame(width: size, height: size)
-                            .overlay(
-                                VStack(spacing: 4) {
-                                    Image(systemName: "exclamationmark.triangle")
-                                        .foregroundColor(.red)
-                                        .font(.system(size: size * 0.25))
-                                    if size > 40 {
-                                        Text("Load Failed")
-                                            .font(.system(size: size * 0.12))
-                                            .foregroundColor(.red)
-                                    }
-                                }
-                            )
-                    case .empty:
-                        // Still loading the image
+                } placeholder: {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: size, height: size)
@@ -420,9 +400,6 @@ struct BetImageView: View {
                             ProgressView()
                                 .scaleEffect(0.8)
                         )
-                    @unknown default:
-                        EmptyView()
-                    }
                 }
             } else {
                 // No image URL provided - show placeholder
@@ -750,16 +727,16 @@ struct EmptyBetsView: View {
                     )
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("No Active Bets")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.black)
-                    
-                    Text("This community doesn't have any active bets yet.")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
+            Text("No Active Bets")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.black)
+            
+            Text("This community doesn't have any active bets yet.")
+                .font(.subheadline)
+                .foregroundColor(.gray)
                 }
-                
+            
                 Spacer()
             }
             
@@ -775,7 +752,7 @@ struct EmptyBetsView: View {
                     Text("Create a Bet")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(.white)
+                .foregroundColor(.white)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
@@ -1327,9 +1304,9 @@ struct MyBetsView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header with logo, title, and Create button
+            // Header with logo, title, and Create button (exact match to SimpleHeaderView structure)
             HStack(spacing: 12) {
-                // Sling Logo and Title (matching SimpleHeaderView)
+                // Sling Logo and Title (exact copy from SimpleHeaderView)
                 HStack(spacing: 8) {
                     Image("Logo")
                         .resizable()
@@ -1342,8 +1319,8 @@ struct MyBetsView: View {
                         .fontWeight(.bold)
                         .foregroundColor(.black)
                 }
-                
-                Spacer()
+                    
+                    Spacer()
                 
                 // Create Bet Button
                 Button(action: {
@@ -1366,25 +1343,13 @@ struct MyBetsView: View {
                     .background(AnyShapeStyle(Color.slingGradient))
                     .cornerRadius(20)
                 }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color.white)
-            
-        ScrollView {
-            VStack(spacing: 16) {
-                // Markets Header
-                HStack {
-                    Text("Markets")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
-                    
-                    Spacer()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(Color.white)
+            
+        ScrollView {
+            VStack(spacing: 16) {
                 
                 // Dynamic Header Section - Shows "Active Bets" or "Markets to Bet On"
                 VStack(alignment: .leading, spacing: 8) {
@@ -3005,18 +2970,18 @@ struct CondensedBetCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     // Bet title and status badge in same row
                     HStack(alignment: .top) {
-                    Text(bet.title)
+                        Text(bet.title)
                             .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.black)
-                        .lineLimit(2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                            .lineLimit(2)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                        // Status badge
+                        
+                        // Status badge - positioned with equal spacing from right edge as image from left
                         Text(getStatusText())
-                        .font(.caption)
+                            .font(.caption)
                             .fontWeight(.medium)
-                            .foregroundColor(.white)
+                            .foregroundColor(getStatusTextColor())
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .background(getStatusBadgeBackgroundColor())
@@ -3038,27 +3003,63 @@ struct CondensedBetCard: View {
                             .foregroundColor(.secondary)
                         
                         if bet.status == "settled" && hasWager {
-                            Text("Paid: ")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.secondary)
+                            let currentUserEmail = firestoreService.currentUser?.email
+                            let participation = firestoreService.userBetParticipations.first { participation in
+                                participation.bet_id == bet.id && participation.user_email == currentUserEmail
+                            }
                             
-                            Image(systemName: "bolt.fill")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Color.slingGradient)
-                            
-                            Text("\(getPayoutAmount())")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.secondary)
+                            if let participation = participation, let winnerOption = bet.winner_option {
+                                if participation.chosen_option == winnerOption {
+                                    // User won - show payout
+                                    Text("Paid: ")
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Image(systemName: "bolt.fill")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(Color.slingGradient)
+                                    
+                                    Text("\(getPayoutAmount())")
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    // User lost - show wager
+                                    Text("Wager: ")
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Image(systemName: "bolt.fill")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(Color.slingGradient)
+                                    
+                                    Text("\(userWager)")
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundColor(.secondary)
+                                }
+                            } else {
+                                // Fallback - show wager
+                                Text("Wager: ")
+                                    .font(.system(size: 14, weight: .regular))
+                                    .foregroundColor(.secondary)
+                                
+                                Image(systemName: "bolt.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(Color.slingGradient)
+                                
+                                Text("\(userWager)")
+                                    .font(.system(size: 14, weight: .regular))
+                                    .foregroundColor(.secondary)
+                            }
                         } else if bet.status == "cancelled" && hasWager {
-                            Text("Lost: ")
+                            Text("Wager: ")
                                 .font(.system(size: 14, weight: .regular))
                                 .foregroundColor(.secondary)
                             
-                            Image(systemName: "bolt.fill")
+                                Image(systemName: "bolt.fill")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(Color.slingGradient)
                             
-                            Text("\(userWager)")
+                                Text("\(userWager)")
                                 .font(.system(size: 14, weight: .regular))
                                 .foregroundColor(.secondary)
                         } else {
@@ -3073,17 +3074,17 @@ struct CondensedBetCard: View {
                             Text("\(userWager)")
                                 .font(.system(size: 14, weight: .regular))
                                 .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
+                }
+                
+                Spacer()
                     }
-                    
+                
                     // Community name and icon (formatted like Activity section)
                     HStack(spacing: 8) {
-                        Image(systemName: "person.2")
+                            Image(systemName: "person.2")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text(communityName)
+                            Text(communityName)
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Text("•")
@@ -3255,13 +3256,22 @@ struct CondensedBetCard: View {
         case "Won":
             return Color.green.opacity(0.8)
         case "Lost":
-            return Color.red.opacity(0.8)
+            return Color.red.opacity(0.15) // Much lighter background for lost bets
         case "Cancelled":
             return Color.orange.opacity(0.8)
         case "Active":
             return .blue
         default:
             return .gray
+        }
+    }
+    
+    private func getStatusTextColor() -> Color {
+        switch getStatusText() {
+        case "Lost":
+            return Color.red.opacity(0.7) // Lighter text color for lost bets
+        default:
+            return .white
         }
     }
     
@@ -4075,10 +4085,29 @@ struct MessagesView: View {
                 }
             }
         }) {
-            HStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 chatItemAvatarView(chatItem)
                 chatItemContentView(chatItem)
             }
+            .overlay(
+                // Blue dot indicator for unread messages - positioned absolutely to not affect timestamp
+                HStack {
+                    Spacer()
+                    VStack {
+                        Spacer()
+                            .frame(height: 30) // Position dot lower to align with last message
+                        if let unreadCount = unreadCounts[chatItem.communityId],
+                           unreadCount > 0 {
+                            Circle()
+                                .fill(Color.slingBlue)
+                                .frame(width: 8, height: 8)
+                        }
+                        Spacer()
+                    }
+                }
+                .padding(.trailing, 16), // Match the horizontal padding of the main content
+                alignment: .trailing
+            )
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
@@ -4144,21 +4173,9 @@ struct MessagesView: View {
                 
                 Spacer()
                 
-                VStack(alignment: .trailing, spacing: 2) {
-                    HStack(spacing: 4) {
                         Text(chatItem.timestampString)
                             .font(.caption)
                             .foregroundColor(.gray)
-                        
-                        // Blue dot indicator for unread messages - only show if there are actually unread messages
-                        if let unreadCount = unreadCounts[chatItem.communityId],
-                           unreadCount > 0 {
-                            Circle()
-                                .fill(Color.slingBlue)
-                                .frame(width: 8, height: 8)
-                        }
-                    }
-                }
             }
             
             HStack {
@@ -4294,9 +4311,7 @@ struct MessagesView: View {
     
     private var chatInterfaceView: some View {
         VStack(spacing: 0) {
-            if !isKeyboardActive {
                 individualChatHeaderView
-            }
             
             messagesAreaView
             
@@ -5833,9 +5848,9 @@ struct CommunitiesView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header with logo, title, and Add button
+            // Header with logo, title, and Add button (exact match to SimpleHeaderView structure)
             HStack(spacing: 12) {
-                // Sling Logo and Title (matching SimpleHeaderView)
+                // Sling Logo and Title (exact copy from SimpleHeaderView)
                 HStack(spacing: 8) {
                     Image("Logo")
                         .resizable()
@@ -7029,6 +7044,8 @@ struct ModernCommunityCard: View {
     let onViewCommunity: ((String) -> Void)?
     @State private var showingCommunityDetail = false
     @State private var isAdmin: Bool = false
+    @State private var actualMemberCount: Int = 0
+    @State private var actualBetCount: Int = 0
     
     var body: some View {
         Button(action: {
@@ -7101,7 +7118,7 @@ struct ModernCommunityCard: View {
                                 Image(systemName: "person.2.fill")
                         .font(.caption)
                         .foregroundColor(.gray)
-                                Text("\(community.member_count)")
+                                Text("\(actualMemberCount)")
                                     .font(.caption)
                         .foregroundColor(.gray)
                                 Text("members")
@@ -7113,7 +7130,7 @@ struct ModernCommunityCard: View {
                                 Image(systemName: "list.bullet.clipboard")
                         .font(.caption)
                         .foregroundColor(.gray)
-                                Text("\(community.total_bets)")
+                                Text("\(actualBetCount)")
                                     .font(.caption)
                         .foregroundColor(.gray)
                                 Text("bets")
@@ -7155,6 +7172,7 @@ struct ModernCommunityCard: View {
         }
         .onAppear {
             checkAdminStatus()
+            loadCommunityMetrics()
         }
     }
     
@@ -7165,6 +7183,21 @@ struct ModernCommunityCard: View {
                 self.isAdmin = adminStatus
             }
         }
+    }
+    
+    private func loadCommunityMetrics() {
+        guard let communityId = community.id else { return }
+        
+        // Load member count
+        firestoreService.fetchCommunityMembers(communityId: communityId) { members in
+            DispatchQueue.main.async {
+                self.actualMemberCount = members.count
+            }
+        }
+        
+        // Load bet count
+        let communityBets = firestoreService.bets.filter { $0.community_id == communityId }
+        actualBetCount = communityBets.count
     }
 }
 
@@ -7178,6 +7211,8 @@ struct CommunityCard: View {
     @State private var showingCommunityDetail = false
     @State private var showingShareSheet = false
     @State private var showingSettingsModal = false
+    @State private var actualMemberCount: Int = 0
+    @State private var actualBetCount: Int = 0
     
     var body: some View {
         Button(action: {
@@ -7256,7 +7291,7 @@ struct CommunityCard: View {
                     Image(systemName: "person.2")
                                 .font(.caption)
                         .foregroundColor(.gray)
-                    Text("\(community.member_count) members")
+                    Text("\(actualMemberCount) members")
                                 .font(.subheadline)
                         .foregroundColor(.gray)
                 }
@@ -7265,7 +7300,7 @@ struct CommunityCard: View {
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.caption)
                         .foregroundColor(.gray)
-                    Text("\(community.total_bets) bets")
+                    Text("\(actualBetCount) bets")
                         .font(.subheadline)
                         .foregroundColor(.gray)
                 }
@@ -7305,6 +7340,24 @@ struct CommunityCard: View {
         .sheet(isPresented: $showingSettingsModal) {
             CommunitySettingsView(community: community, isAdmin: isAdmin, firestoreService: firestoreService)
         }
+        .onAppear {
+            loadCommunityMetrics()
+        }
+    }
+    
+    private func loadCommunityMetrics() {
+        guard let communityId = community.id else { return }
+        
+        // Load member count
+        firestoreService.fetchCommunityMembers(communityId: communityId) { members in
+            DispatchQueue.main.async {
+                self.actualMemberCount = members.count
+            }
+        }
+        
+        // Load bet count
+        let communityBets = firestoreService.bets.filter { $0.community_id == communityId }
+        actualBetCount = communityBets.count
     }
     
 
@@ -12171,7 +12224,11 @@ struct JoinCommunityPage: View {
     let onSuccess: (() -> Void)?
     @State private var inviteCode = ""
     @State private var isLoading = false
-    @State private var errorMessage = ""
+    @State private var errorMessage = "" {
+        didSet {
+            print("🔍 JoinCommunity: errorMessage changed from '\(oldValue)' to '\(errorMessage)'")
+        }
+    }
     @FocusState private var isTextFieldFocused: Bool
     
     // Computed property to validate invite code
@@ -12284,8 +12341,8 @@ struct JoinCommunityPage: View {
                                             }
                                         }
                                     } else {
-                                        // Only clear error message if it's not a validation error
-                                        if errorMessage != "Code limited to 6 characters" {
+                                        // Only clear error message if it's not a validation error or join error
+                                        if errorMessage != "Code limited to 6 characters" && errorMessage != "Community not found" {
                                             errorMessage = ""
                                         }
                                     }
@@ -12303,8 +12360,8 @@ struct JoinCommunityPage: View {
                                 .padding(.trailing, 16)
                         }
                     
-                    // Validation message - modern style
-                    if !validationMessage.isEmpty {
+                    // Validation message - modern style (only show if no error message)
+                    if !validationMessage.isEmpty && errorMessage.isEmpty {
                         Text(validationMessage)
                             .font(.caption)
                             .foregroundColor(inviteCode.count == 6 ? .green : .gray)
@@ -12313,7 +12370,7 @@ struct JoinCommunityPage: View {
                 }
                 .padding(.horizontal, 24)
                 
-                // Error message - modern style
+                // Error message - modern style (inside main content VStack)
                     if !errorMessage.isEmpty {
                         Text(errorMessage)
                             .font(.subheadline)
@@ -12321,10 +12378,13 @@ struct JoinCommunityPage: View {
                             .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .animation(.easeInOut(duration: 0.2), value: errorMessage)
+                        .onAppear {
+                            print("🔍 JoinCommunity: Error message view appeared with: '\(errorMessage)'")
+                        }
+                }
                     }
                     
                     Spacer()
-            }
                     
             // Bottom Button Section - like Sign Up pages
             VStack(spacing: 16) {
@@ -12383,10 +12443,19 @@ struct JoinCommunityPage: View {
                 } else {
                     let errorMsg = error ?? "Invalid community code. Please try again."
                     print("❌ JoinCommunity: Failed to join - \(errorMsg)")
+                    print("🔍 JoinCommunity: Setting errorMessage to: '\(errorMsg)'")
                     errorMessage = errorMsg
+                    print("🔍 JoinCommunity: errorMessage is now: '\(errorMessage)'")
                     // Clear the invite code on error for better UX
                     withAnimation(.easeInOut(duration: 0.2)) {
                         inviteCode = ""
+                    }
+                    // Clear error message after 3 seconds (similar to "Code limited to 6 characters")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        print("🔍 JoinCommunity: Auto-clear triggered, clearing error message")
+                        if errorMessage == errorMsg {
+                            errorMessage = ""
+                        }
                     }
                 }
             }
@@ -15649,6 +15718,15 @@ struct EnhancedCommunityDetailView: View {
     @StateObject private var timeTracker = TimeTracker()
     @State private var previousTab = 0
     
+    // Computed properties for real-time metrics
+    private var actualMemberCount: Int {
+        return communityMembers.count
+    }
+    
+    private var actualBetCount: Int {
+        return communityBets.count
+    }
+    
     // Helper function to get tab name
     private func getTabName(_ index: Int) -> String {
         switch index {
@@ -15696,13 +15774,19 @@ struct EnhancedCommunityDetailView: View {
                     action: .view,
                     communityId: community.id ?? "",
                     communityName: community.name,
-                    details: ["member_count": community.member_count, "bet_count": community.total_bets, "is_admin": isAdmin]
+                    details: ["member_count": actualMemberCount, "bet_count": actualBetCount, "is_admin": isAdmin]
                 )
                 timeTracker.startTracking(for: "enhanced_community_detail_\(community.id ?? "")")
                 
                 loadCommunityBets()
                 loadCommunityMembers()
                 checkAdminStatus()
+            }
+            .onChange(of: communityMembers) { _, _ in
+                // Update metrics when members change
+            }
+            .onChange(of: communityBets) { _, _ in
+                // Update metrics when bets change
             }
             .onDisappear {
                 // Track time spent on enhanced community detail page
@@ -15928,7 +16012,7 @@ struct EnhancedCommunityDetailView: View {
                             Image(systemName: "person.2.fill")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.9))
-                            Text("\(community.member_count)")
+                            Text("\(actualMemberCount)")
                             .font(.subheadline)
                                 .fontWeight(.medium)
                                 .foregroundColor(.white)
@@ -15943,7 +16027,7 @@ struct EnhancedCommunityDetailView: View {
                             Image(systemName: "list.bullet.clipboard")
                                 .font(.caption)
                             .foregroundColor(.white.opacity(0.9))
-                            Text("\(community.total_bets)")
+                            Text("\(actualBetCount)")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                                 .foregroundColor(.white)
@@ -16489,6 +16573,8 @@ struct EnhancedCommunityDetailView: View {
     
     private func loadCommunityBets() {
         isLoadingBets = true
+        // Refresh bets from Firestore to get latest data
+        firestoreService.fetchBets()
         // Filter bets for this community
         communityBets = firestoreService.bets.filter { $0.community_id == (community.id ?? "") }
         isLoadingBets = false
