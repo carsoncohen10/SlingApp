@@ -1068,7 +1068,7 @@ struct EnhancedBetCardView: View {
                                 
                                 Spacer()
                                 
-                                Text(bet.odds[option] ?? "-110")
+                                Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5))
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                     .foregroundColor(.black)
@@ -2002,7 +2002,7 @@ struct ActiveBetDetailView: View {
                                     
                                     Spacer()
                                     
-                                    Text(bet.odds[option] ?? "-110")
+                                    Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5))
                                         .font(.subheadline)
                                         .fontWeight(.medium)
                                         .foregroundColor(.gray)
@@ -2698,7 +2698,7 @@ struct MyBetCard: View {
             cachedHasWager = cachedUserParticipation != nil
             
             if let participation = cachedUserParticipation {
-                let optionWithOdds = bet.odds[participation.chosen_option] ?? ""
+                let optionWithOdds = firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[participation.chosen_option] ?? 0.5)
                 cachedUserChoice = "\(participation.chosen_option) \(optionWithOdds)".trimmingCharacters(in: .whitespaces)
             } else {
                 cachedUserChoice = "Over -110"
@@ -3321,7 +3321,7 @@ struct AvailableBetCard: View {
     }
     
     private func getOddsForOption(_ option: String) -> String {
-        return bet.odds[option] ?? "-110"
+        return firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5)
     }
     
     var body: some View {
@@ -5381,7 +5381,7 @@ struct BetAnnouncementCard: View {
                 .fontWeight(.medium)
                 .foregroundColor(.slingBlue)
             
-            Text(bet.odds[option] ?? "-110")
+            Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5))
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundColor(.slingBlue)
@@ -5529,7 +5529,7 @@ struct PlaceBetView: View {
                                 
                                 Spacer()
                                 
-                                Text(bet.odds[option] ?? "-110")
+                                Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5))
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                     .foregroundColor(selectedOption == option ? .white : .gray)
@@ -5754,7 +5754,7 @@ struct ChooseWinnerView: View {
                                 
                                 Spacer()
                                 
-                                Text(bet.odds[option] ?? "-110")
+                                Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5))
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                     .foregroundColor(selectedWinner == option ? .white : .gray)
@@ -10480,9 +10480,10 @@ struct CreateBetView: View {
             }
             .sheet(isPresented: $showingAdjustOdds) {
                 AdjustOddsView(
-                    odds: $odds[selectedOutcomeIndex],
-                    percentage: $percentages[selectedOutcomeIndex],
-                    isPresented: $showingAdjustOdds
+                    odds: $odds,
+                    percentages: $percentages,
+                    isPresented: $showingAdjustOdds,
+                    outcomes: outcomes
                 )
             }
             .onAppear {
@@ -10826,6 +10827,9 @@ struct CreateBetView: View {
                         // Outcomes
             VStack(spacing: 16) {
                 ForEach(Array(outcomes.enumerated()), id: \.offset) { index, outcome in
+                    Button(action: {
+                        showingAdjustOdds = true
+                    }) {
                     VStack(spacing: 0) {
                         HStack(spacing: 16) {
                             // Option Number Badge - More prominent
@@ -10890,35 +10894,31 @@ struct CreateBetView: View {
                             
                             Spacer()
                             
-                            // Odds and Percentage Section - Better organized
-                            VStack(spacing: 8) {
-                                // Odds Input - More prominent
-                                VStack(spacing: 2) {
-                                    Text("Odds")
-                                        .font(.caption2)
-                                        .foregroundColor(.gray)
-                                    
-                            TextField("Odds", text: $odds[index])
-                                .textFieldStyle(PlainTextFieldStyle())
-                                .font(.subheadline)
-                                        .fontWeight(.medium)
-                                .multilineTextAlignment(.center)
-                                        .frame(width: 80)
-                                        .padding(.vertical, 8)
-                                        .padding(.horizontal, 12)
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
+                            // Odds Section - Condensed
+                            HStack(spacing: 8) {
+                                VStack(spacing: 4) {
+                                    // Odds Input - More prominent
+                                    VStack(spacing: 2) {
+                                        Text("Odds")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                        
+                                        Text(odds[index])
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .multilineTextAlignment(.center)
+                                            .frame(width: 80)
+                                            .padding(.vertical, 6)
+                                            .padding(.horizontal, 12)
+                                            .background(Color(.systemGray6))
+                                            .cornerRadius(8)
+                                    }
                                 }
-                            
-                                // Percentage Badge - More prominent
-                            Text(percentages[index])
-                                .font(.caption)
-                                    .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 4)
-                                .background(Color.slingBlue)
-                                    .cornerRadius(8)
+                                
+                                // Arrow indicator
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
                             }
                             
                             // Remove Button - More prominent for Multiple Choice and Prop Bet
@@ -10941,18 +10941,12 @@ struct CreateBetView: View {
                                         .foregroundColor(.gray.opacity(0.5))
                                 }
                             } else {
-                                Button(action: {
-                                    selectedOutcomeIndex = index
-                                    showingAdjustOdds = true
-                                }) {
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                // Chevron removed - entire card is now clickable
+                                EmptyView()
                             }
                         }
-                        }
-                        .padding(.vertical, 20)
-                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(Color.white)
@@ -10966,6 +10960,7 @@ struct CreateBetView: View {
                                     lineWidth: 1.5
                                 )
                         )
+                    }
                     }
                 }
                 
@@ -11970,150 +11965,601 @@ struct ColoredTextView: UIViewRepresentable {
     }
 }
 
-// MARK: - Adjust Odds View
+// MARK: - Pool Option Row
 
-struct AdjustOddsView: View {
-    @Binding var odds: String
-    @Binding var percentage: String
-    @Binding var isPresented: Bool
-    @State private var sliderValue: Double = 0.0
-    @State private var zoomLevel: Int = 0 // 0: default, 1: expanded, 2: full range
+struct PoolOptionRow: View {
+    let option: String
+    let poolByOption: [String: Int]
+    let totalPool: Int
+    let firestoreService: FirestoreService
+    let bet: FirestoreBet
+    
+    private var optionPool: Int {
+        poolByOption[option] ?? 0
+    }
+    
+    private var percentage: Double {
+        totalPool > 0 ? Double(optionPool) / Double(totalPool) * 100 : 0.0
+    }
+    
+    private var impliedOdds: Double {
+        firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5
+    }
+    
+    private var formattedOdds: String {
+        firestoreService.formatImpliedOdds(impliedOdds)
+    }
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 32) {
-                // Header
-                VStack(spacing: 16) {
-                    Text("Adjust Odds")
-                        .font(.title2)
-                        .fontWeight(.bold)
+                        HStack {
+            Text(option)
+                                .font(.caption)
                         .foregroundColor(.black)
                     
-                    // Current Odds Display
+                            Spacer()
+                            
+            Text("\(optionPool) pts")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+            
+            Text("(\(String(format: "%.1f", percentage))%)")
+                .font(.caption)
+                .foregroundColor(.gray)
+            
+            Text(formattedOdds)
+                                    .font(.caption)
+                .fontWeight(.medium)
+                                    .foregroundColor(.slingBlue)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(6)
+    }
+}
+
+// MARK: - Main Odds Display View
+
+struct MainOddsDisplayView: View {
+    let odds: String
+    let percentage: String
+    let showPercentage: Bool
+    
+    var body: some View {
                     VStack(spacing: 8) {
-                        Text(odds)
+            HStack(spacing: 0) {
+                // Fixed width container for the sign to prevent text shifting
+                HStack {
+                    if odds.hasPrefix("+") {
+                        Text("+")
                             .font(.system(size: 48, weight: .bold))
                             .foregroundColor(.slingBlue)
-                        
-                        Text(percentage)
-                            .font(.title3)
+                    } else if odds.hasPrefix("-") {
+                        Text("-")
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundColor(.slingBlue)
+                    } else {
+                        // Invisible placeholder to maintain consistent spacing
+                        Text("+")
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundColor(.clear)
+                    }
+                }
+                .frame(width: 30) // Fixed width to prevent shifting
+                
+                Text(odds.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: ""))
+                    .font(.system(size: 48, weight: .bold))
                             .foregroundColor(.black)
                     }
                     
-                    // Odds Slider
-                    VStack(spacing: 16) {
-                        // Range Labels
-                        HStack {
-                            Text("\(getMinRangeText())")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                            
-                            Spacer()
-                            
-                            Text("\(getMaxRangeText())")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                        
-                        Slider(value: $sliderValue, in: getSliderRange(), step: 5)
-                            .accentColor(.slingBlue)
-                            .onChange(of: sliderValue) { oldValue, newValue in
-                                updateOddsAndPercentage(from: newValue)
-                                checkAndExpandRange()
-                            }
-                        
-                        // How Odds Work Section
-                        VStack(spacing: 12) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "info.circle.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.slingBlue)
-                                
-                                Text("How Betting Odds Work")
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
+            Text(showPercentage ? "\(percentage.replacingOccurrences(of: "%", with: ""))% Chance" : "\(odds) Odds")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.gray)
+        }
+    }
+}
+
+// MARK: - Numeric Keypad View
+
+struct NumericKeypadView: View {
+    let selectionFeedback: UISelectionFeedbackGenerator
+    let onKeyPress: (String) -> Void
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            // Row 1: 1, 2, 3
+            HStack(spacing: 12) {
+                ForEach(1...3, id: \.self) { number in
+                    SimpleKeypadButton(number: "\(number)", action: {
+                        onKeyPress("\(number)")
+                        selectionFeedback.selectionChanged()
+                    })
+                }
+            }
+            
+            // Row 2: 4, 5, 6
+            HStack(spacing: 12) {
+                ForEach(4...6, id: \.self) { number in
+                    SimpleKeypadButton(number: "\(number)", action: {
+                        onKeyPress("\(number)")
+                        selectionFeedback.selectionChanged()
+                    })
+                }
+            }
+            
+            // Row 3: 7, 8, 9
+            HStack(spacing: 12) {
+                ForEach(7...9, id: \.self) { number in
+                    SimpleKeypadButton(number: "\(number)", action: {
+                        onKeyPress("\(number)")
+                        selectionFeedback.selectionChanged()
+                    })
+                }
+            }
+            
+            // Row 4: +/-, 0, delete
+            HStack(spacing: 12) {
+                SimpleKeypadButton(number: "+/-", action: {
+                    onKeyPress("+/-")
+                    selectionFeedback.selectionChanged()
+                })
+                
+                SimpleKeypadButton(number: "0", action: {
+                    onKeyPress("0")
+                    selectionFeedback.selectionChanged()
+                })
+                
+                Button(action: { 
+                    onKeyPress("delete")
+                    selectionFeedback.selectionChanged()
+                }) {
+                    Image(systemName: "delete.left")
+                        .font(.title2)
                                     .foregroundColor(.black)
-                            }
-                            
-                            VStack(spacing: 8) {
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 60)
+                        .background(Color.white)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+}
+
+// MARK: - Keypad Button View
+
+struct KeypadButton: View {
+    let text: String?
+    let icon: String?
+    let action: () -> Void
+    
+    init(text: String, action: @escaping () -> Void) {
+        self.text = text
+        self.icon = nil
+        self.action = action
+    }
+    
+    init(icon: String, action: @escaping () -> Void) {
+        self.text = nil
+        self.icon = icon
+        self.action = action
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            if let text = text {
+                Text(text)
+                    .font(.system(size: text == "+/-" ? 18 : 24, weight: .medium))
+                    .foregroundColor(.black)
+            } else if let icon = icon {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.black)
+            }
+        }
+        .frame(width: 60, height: 60)
+        .background(Color.white)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Adjust Odds Header View
+
+struct AdjustOddsHeaderView: View {
+    @Binding var isPresented: Bool
+    @Binding var showPercentage: Bool
+    let selectionFeedback: UISelectionFeedbackGenerator
+    
+    var body: some View {
+        HStack {
+            Button("Cancel") {
+                isPresented = false
+            }
+            .foregroundColor(.slingBlue)
+            
+            Spacer()
+            
+            Text("Adjust Odds")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.black)
+            
+            Spacer()
+            
+            // Toggle between odds and percentage
+            Button(showPercentage ? "Odds" : "%") {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showPercentage.toggle()
+                }
+                selectionFeedback.selectionChanged()
+            }
+            .foregroundColor(.slingBlue)
+            .fontWeight(.semibold)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.slingBlue.opacity(0.1))
+            )
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+    }
+}
+
+// MARK: - Adjust Odds View
+
+struct AdjustOddsView: View {
+    @Binding var odds: [String]
+    @Binding var percentages: [String]
+    @Binding var isPresented: Bool
+    let outcomes: [String]
+    @State private var selectedOutcomeIndex: Int = 0
+    @State private var currentAngle: Double = 0.0
+    @State private var isDragging: Bool = false
+    @State private var lastAngle: Double = 0.0
+    @State private var showPercentage: Bool = false
+    @State private var currentInput: String = ""
+    
+    // Haptic feedback
+    private let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+    private let selectionFeedback = UISelectionFeedbackGenerator()
+    
+    // Preset odds - organized in sets of 4
+    private let presetOddsSets = [
+        ["-110", "-150", "+110", "+150"],
+        ["-200", "-250", "+200", "+250"],
+        ["-300", "-400", "+300", "+500"]
+    ]
+    
+    // Preset percentage sets - organized in sets of 4
+    private let presetPercentageSets = [
+        ["52%", "60%", "48%", "40%"],
+        ["67%", "71%", "33%", "29%"],
+        ["75%", "80%", "25%", "17%"]
+    ]
+    
+    @State private var currentOddsSetIndex = 0
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                AdjustOddsHeaderView(
+                    isPresented: $isPresented,
+                    showPercentage: $showPercentage,
+                    selectionFeedback: selectionFeedback
+                )
+                
+                
+                // Main Content
+                VStack(spacing: 32) {
+                    // Outcome Selection Boxes
+                    VStack(spacing: 12) {
                                 HStack(spacing: 8) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.caption2)
-                                        .foregroundColor(.green)
-                                    
-                                    Text("Positive odds (+150): Bet $100 to win $150")
-                                        .font(.caption2)
-                                        .foregroundColor(.gray)
-                                }
-                                
+                            ForEach(Array(outcomes.enumerated()), id: \.offset) { index, outcome in
+                                Button(action: {
+                                    handleOutcomeSelection(index: index)
+                                }) {
                                 HStack(spacing: 8) {
-                                    Image(systemName: "minus.circle.fill")
-                                        .font(.caption2)
-                                        .foregroundColor(.red)
-                                    
-                                    Text("Negative odds (-150): Bet $150 to win $100")
-                                        .font(.caption2)
-                                        .foregroundColor(.gray)
-                                }
-                                
-                                HStack(spacing: 8) {
-                                    Image(systemName: "equal.circle.fill")
-                                        .font(.caption2)
-                                        .foregroundColor(.orange)
-                                    
-                                    Text("Even odds (-110): Bet $110 to win $100")
-                                        .font(.caption2)
-                                        .foregroundColor(.gray)
-                                }
-                            }
-                        }
+                                        Text(outcome)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(selectedOutcomeIndex == index ? .white : .black)
+                                        
+                                        Text(showPercentage ? percentages[index] : odds[index])
+                                            .font(.caption)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(selectedOutcomeIndex == index ? .white : .slingBlue)
+                                    }
+                                    .frame(maxWidth: .infinity)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(selectedOutcomeIndex == index ? Color.slingBlue : Color.white)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(selectedOutcomeIndex == index ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                    }
+                    .padding(.top, 20)
+                    
+                    // Main Odds Display
+                    VStack(spacing: 20) {
+                        // Large odds display
+                        MainOddsDisplayView(
+                            odds: odds[selectedOutcomeIndex],
+                            percentage: percentages[selectedOutcomeIndex],
+                            showPercentage: showPercentage
+                        )
+                        .padding(.vertical, 20)
+                        
+                        // Preset Odds Buttons with pagination
+                        VStack(spacing: 16) {
+                            // Page indicator
+                            HStack(spacing: 4) {
+                                ForEach(0..<presetOddsSets.count, id: \.self) { index in
+                                    Circle()
+                                        .fill(index == currentOddsSetIndex ? Color.slingBlue : Color.gray.opacity(0.3))
+                                        .frame(width: 6, height: 6)
+                                }
+                            }
+                            
+                            // Preset buttons
+                            VStack(spacing: 12) {
+                                HStack(spacing: 12) {
+                                    ForEach(Array((showPercentage ? presetPercentageSets : presetOddsSets)[currentOddsSetIndex].prefix(2).enumerated()), id: \.offset) { index, preset in
+                                        Button(action: {
+                                            handlePresetSelection(preset: preset)
+                                        }) {
+                                            Text(preset)
+                                                .font(.subheadline)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
+                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 12)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                                        .background(Color.white)
+                                                )
+                                        }
+                                        .scaleEffect(1.0)
+                                        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: currentOddsSetIndex)
+                                        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: showPercentage)
+                                    }
+                                }
+                                
+                                HStack(spacing: 12) {
+                                    ForEach(Array((showPercentage ? presetPercentageSets : presetOddsSets)[currentOddsSetIndex].suffix(2).enumerated()), id: \.offset) { index, preset in
+                                        Button(action: {
+                                            handlePresetSelection(preset: preset)
+                                        }) {
+                                            Text(preset)
+                                                .font(.subheadline)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 12)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                                        .background(Color.white)
+                                                )
+                                        }
+                                        .scaleEffect(1.0)
+                                        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: currentOddsSetIndex)
+                                        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: showPercentage)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .gesture(
+                            DragGesture()
+                                .onEnded { value in
+                                    handleSwipeGesture(value: value)
+                                }
+                        )
+                        
+                        // Numeric Keypad
+                        NumericKeypadView(selectionFeedback: selectionFeedback) { key in
+                            handleKeyPress(key)
+                        }
                     }
                 }
                 .padding(.horizontal, 24)
-                .padding(.top, 32)
                 
                 Spacer()
-                
-                // Done Button
-                Button("Done") {
-                    isPresented = false
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Color.slingBlue)
-                .cornerRadius(12)
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
             }
             .background(Color.white)
             .navigationBarHidden(true)
             .onAppear {
-                // Initialize slider value based on current odds
-                if odds.hasPrefix("+") {
-                    sliderValue = Double(odds.dropFirst()) ?? 0.0
-                } else {
-                    sliderValue = Double(odds) ?? 0.0
-                }
+                // Initialize angle based on current selected outcome's odds
+                currentAngle = getAngleFromOdds(odds[selectedOutcomeIndex])
+                // Initialize current input
+                currentInput = odds[selectedOutcomeIndex]
             }
         }
     }
     
-    private func updateOddsAndPercentage(from sliderValue: Double) {
-        // Update odds with proper sign
-        if sliderValue > 0 {
-            odds = "+" + String(format: "%.0f", sliderValue)
+    // MARK: - Helper Functions
+    
+    private func handleOutcomeSelection(index: Int) {
+        // Save current odds before switching
+        saveCurrentOdds()
+        
+        // Switch to new outcome
+        selectedOutcomeIndex = index
+        
+        // Update current input to match the selected outcome's odds
+        currentInput = odds[index]
+        
+        // Update dial to show new odds
+        currentAngle = getAngleFromOdds(odds[index])
+        
+        // Haptic feedback
+        selectionFeedback.selectionChanged()
+    }
+    
+    private func handlePresetSelection(preset: String) {
+        if showPercentage {
+            // If in percentage mode, update percentage and calculate odds
+            percentages[selectedOutcomeIndex] = preset
+            
+            // Convert percentage to odds
+            let percentageValue = Double(preset.replacingOccurrences(of: "%", with: "")) ?? 50.0
+            let oddsValue = percentageToOdds(percentageValue)
+            odds[selectedOutcomeIndex] = oddsValue
         } else {
-            odds = String(format: "%.0f", sliderValue)
-        }
+            // If in odds mode, update odds and calculate percentage
+            odds[selectedOutcomeIndex] = preset
         
         // Calculate percentage based on odds
-        let percentageValue = calculatePercentage(from: sliderValue)
-        percentage = String(format: "%.1f%%", percentageValue)
+            let oddsValue = Int(preset.replacingOccurrences(of: "+", with: "")) ?? 0
+            let percentageValue = calculatePercentage(from: Double(oddsValue))
+            percentages[selectedOutcomeIndex] = String(format: "%.0f%%", percentageValue)
+        }
+        
+        selectionFeedback.selectionChanged()
+    }
+    
+    private func handleSwipeGesture(value: DragGesture.Value) {
+        let threshold: CGFloat = 50
+        
+        if value.translation.width > threshold {
+            // Swipe right - go to previous page
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0.2)) {
+                currentOddsSetIndex = (currentOddsSetIndex - 1 + presetOddsSets.count) % presetOddsSets.count
+            }
+            selectionFeedback.selectionChanged()
+        } else if value.translation.width < -threshold {
+            // Swipe left - go to next page
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0.2)) {
+                currentOddsSetIndex = (currentOddsSetIndex + 1) % presetOddsSets.count
+            }
+            selectionFeedback.selectionChanged()
+        }
+    }
+    
+    private func handleKeyPress(_ key: String) {
+        if key == "delete" {
+            if !currentInput.isEmpty {
+                currentInput.removeLast()
+            }
+        } else if key == "+/-" {
+            if currentInput.hasPrefix("+") {
+                currentInput = "-" + String(currentInput.dropFirst())
+            } else if currentInput.hasPrefix("-") {
+                currentInput = "+" + String(currentInput.dropFirst())
+            } else if !currentInput.isEmpty {
+                currentInput = "-" + currentInput
+            }
+        } else {
+            currentInput += key
+        }
+        
+        // Update the odds with the current input
+        if !currentInput.isEmpty {
+            odds[selectedOutcomeIndex] = currentInput
+            let oddsValue = Int(currentInput.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: "")) ?? 0
+            let percentageValue = calculatePercentage(from: Double(oddsValue))
+            percentages[selectedOutcomeIndex] = String(format: "%.0f%%", percentageValue)
+        }
+    }
+    
+    // MARK: - Circular Dial Helper Functions
+    
+    private func updateOddsFromAngle(_ angle: Double) {
+        // Get the odds directly from the angle (now with 25-increment precision)
+        let oddsString = getOddsForAngle(angle)
+        let oddsValue = Int(oddsString.replacingOccurrences(of: "+", with: "")) ?? 0
+        
+        // Update the selected outcome's odds
+        odds[selectedOutcomeIndex] = oddsString
+        
+        // Calculate percentage based on odds
+        let percentageValue = calculatePercentage(from: Double(oddsValue))
+        percentages[selectedOutcomeIndex] = String(format: "%.1f%%", percentageValue)
+    }
+    
+    private func saveCurrentOdds() {
+        // This function is called when switching outcomes to save the current odds
+        // The odds are already updated in the array, so this is mainly for any additional logic
+    }
+    
+    private func getOddsForAngle(_ angle: Double) -> String {
+        // Map angle to odds with 25-increment steps: +100, +125, +150, +175, +200, ..., +800, -800, -775, ..., -100
+        let normalizedAngle = (angle + 360).truncatingRemainder(dividingBy: 360)
+        
+        // Create full odds range with 25-increment steps
+        var oddsRange: [Int] = []
+        
+        // Positive odds: +100 to +800 in increments of 25
+        for i in stride(from: 100, through: 800, by: 25) {
+            oddsRange.append(i)
+        }
+        
+        // Negative odds: -800 to -100 in increments of 25
+        for i in stride(from: -800, through: -100, by: 25) {
+            oddsRange.append(i)
+        }
+        
+        let index = Int((normalizedAngle / 360.0) * Double(oddsRange.count))
+        let clampedIndex = max(0, min(index, oddsRange.count - 1))
+        let oddsValue = oddsRange[clampedIndex]
+        
+        return oddsValue > 0 ? "+\(oddsValue)" : "\(oddsValue)"
+    }
+    
+    private func getFontSizeForOdds(_ oddsValue: Int) -> CGFloat {
+        let absValue = abs(oddsValue)
+        
+        // Scale font size based on odds magnitude - much larger
+        if absValue < 1000 {
+            return 16
+        } else if absValue < 5000 {
+            return 14
+        } else {
+            return 12
+        }
+    }
+    
+    private func getAngleFromOdds(_ oddsString: String) -> Double {
+        let oddsValue = Int(oddsString.replacingOccurrences(of: "+", with: "")) ?? 0
+        
+        // Create the same odds range as in getOddsForAngle
+        var oddsRange: [Int] = []
+        
+        // Positive odds: +100 to +800 in increments of 25
+        for i in stride(from: 100, through: 800, by: 25) {
+            oddsRange.append(i)
+        }
+        
+        // Negative odds: -800 to -100 in increments of 25
+        for i in stride(from: -800, through: -100, by: 25) {
+            oddsRange.append(i)
+        }
+        
+        // Find the index of the odds value in the range
+        if let index = oddsRange.firstIndex(of: oddsValue) {
+            // Map index to angle (0-360 degrees)
+            return (Double(index) / Double(oddsRange.count - 1)) * 360.0
+        }
+        
+        // Fallback to 0 degrees if odds not found
+        return 0.0
     }
     
     private func calculatePercentage(from odds: Double) -> Double {
@@ -12124,58 +12570,22 @@ struct AdjustOddsView: View {
         }
     }
     
-    // MARK: - Auto-Expanding Range Helper Functions
-    private func getSliderRange() -> ClosedRange<Double> {
-        switch zoomLevel {
-        case 0: return -500...500
-        case 1: return -5000...5000
-        case 2: return -100000...100000
-        default: return -500...500
+    private func percentageToOdds(_ percentage: Double) -> String {
+        if percentage > 50 {
+            // For percentages > 50%, calculate negative odds
+            let odds = (percentage / (100 - percentage)) * 100
+            return "-\(Int(odds))"
+        } else {
+            // For percentages <= 50%, calculate positive odds
+            let odds = ((100 - percentage) / percentage) * 100
+            return "+\(Int(odds))"
         }
     }
     
-    private func getMinRangeText() -> String {
-        switch zoomLevel {
-        case 0: return "-500"
-        case 1: return "-5000"
-        case 2: return "-100k"
-        default: return "-500"
-        }
-    }
-    
-    private func getMaxRangeText() -> String {
-        switch zoomLevel {
-        case 0: return "+500"
-        case 1: return "+5000"
-        case 2: return "+100k"
-        default: return "+500"
-        }
-    }
-    
-    private func checkAndExpandRange() {
-        let currentRange = getSliderRange()
-        
-        // If slider is at the edge, expand the range
-        if sliderValue >= currentRange.upperBound - 50 {
-            if zoomLevel == 0 {
-                zoomLevel = 1
-            } else if zoomLevel == 1 {
-                zoomLevel = 2
-            }
-        } else if sliderValue <= currentRange.lowerBound + 50 {
-            if zoomLevel == 0 {
-                zoomLevel = 1
-            } else if zoomLevel == 1 {
-                zoomLevel = 2
-            }
-        }
-        
-        // If slider moves back toward center, contract the range
-        if zoomLevel == 2 && sliderValue >= -5000 && sliderValue <= 5000 {
-            zoomLevel = 1
-        } else if zoomLevel == 1 && sliderValue >= -500 && sliderValue <= 500 {
-            zoomLevel = 0
-        }
+    private func getPercentageFromOdds(_ oddsString: String) -> String {
+        let oddsValue = Double(oddsString.replacingOccurrences(of: "+", with: "")) ?? 0
+        let percentage = calculatePercentage(from: oddsValue)
+        return String(format: "%.0f%%", percentage)
     }
 }
 
@@ -13179,7 +13589,7 @@ struct JoinBetView: View {
                                             
                                             Spacer()
                                             
-                                            Text(bet.odds[option] ?? "-110")
+                                            Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5))
                                                 .font(.subheadline)
                                                 .fontWeight(.semibold)
                                                 .foregroundColor(.black)
@@ -13194,6 +13604,7 @@ struct JoinBetView: View {
                             }
                             .padding(.horizontal, 16)
                         }
+                        
                         
                         // Participant List Section
                         VStack(alignment: .leading, spacing: 12) {
@@ -13773,11 +14184,31 @@ struct BettingInterfaceView: View {
         !betAmount.isEmpty && betAmountDouble > 0 && !hasInsufficientFunds
     }
     
-    // Calculate total potential payout (including initial wager)
+    // Calculate total potential payout using parimutuel system
     private var potentialWinnings: Double {
         if let amount = Double(betAmount), amount > 0 {
-            let payout = calculatePayout(amount: amount, odds: bet.odds[selectedOption] ?? "-110")
-            return payout // Total payout including initial wager
+            let impliedOdds = firestoreService.calculateImpliedOdds(for: bet)
+            let optionImpliedOdds = impliedOdds[selectedOption] ?? 0.5
+            
+            // Calculate potential payout based on current pool distribution
+            if let poolByOption = bet.pool_by_option,
+               let totalPool = bet.total_pool,
+               totalPool > 0 {
+                let currentOptionPool = poolByOption[selectedOption] ?? 0
+                let otherOptionsPool = totalPool - currentOptionPool
+                
+                if currentOptionPool > 0 {
+                    // Parimutuel payout: (totalPool / winningSidePool) * userStake
+                    let payoutMultiplier = Double(totalPool) / Double(currentOptionPool)
+                    return payoutMultiplier * amount
+                } else {
+                    // If no one has bet on this option yet, use implied odds
+                    return amount / optionImpliedOdds
+                }
+            } else {
+                // Fallback to implied odds calculation
+                return amount / optionImpliedOdds
+            }
         }
         return 0
     }
@@ -13919,7 +14350,9 @@ struct BettingInterfaceView: View {
                 ActionSheet(
                     title: Text("Choose Your Bet"),
                     buttons: bet.options.map { option in
-                        .default(Text("\(option) (\(bet.odds[option] ?? "-110"))")) {
+                        let impliedOdds = firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5
+                        let formattedOdds = firestoreService.formatImpliedOdds(impliedOdds)
+                        return .default(Text("\(option) (\(formattedOdds))")) {
                             selectedOption = option
                         }
                     } + [.cancel()]
@@ -14091,7 +14524,7 @@ struct BettingInterfaceView: View {
                             .fontWeight(.medium)
                             .foregroundColor(Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
                         
-                        Text(bet.odds[selectedOption] ?? "-110")
+                        Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[selectedOption] ?? 0.5))
                             .font(.subheadline)
                             .foregroundColor(.black)
                         
@@ -14248,29 +14681,6 @@ struct SimpleKeypadButton: View {
     }
 }
 
-// MARK: - Legacy Keypad Button (for compatibility)
-
-struct KeypadButton: View {
-    let number: String
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Text(number)
-                .font(.title2)
-                .fontWeight(.medium)
-                .foregroundColor(.black)
-                .frame(maxWidth: .infinity)
-                .frame(height: 60)
-                .background(Color.white)
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                )
-        }
-    }
-}
 
 // MARK: - Bet Review View
 
@@ -14335,7 +14745,7 @@ struct BetReviewView: View {
                             
                             Spacer()
                             
-                            Text(bet.odds[selectedOption] ?? "-110")
+                            Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[selectedOption] ?? 0.5))
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                         }
@@ -14365,7 +14775,7 @@ struct BetReviewView: View {
                             Spacer()
                             
                             if let betAmountDouble = Double(betAmount), betAmountDouble > 0 {
-                                let payout = calculatePayout(amount: betAmountDouble, odds: bet.odds[selectedOption] ?? "-110")
+                                let payout = calculatePayout(amount: betAmountDouble, odds: firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[selectedOption] ?? 0.5))
                                 Text("Payout: \(String(format: "%.0f", payout))")
                                     .font(.subheadline)
                                     .foregroundColor(.green)
@@ -14744,7 +15154,7 @@ struct SwipeableBetCard: View {
                                     .foregroundColor(.gray)
                                 
                                 // Option with odds
-                                let optionOdds = bet.odds[participation.chosen_option] ?? ""
+                                let optionOdds = firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[participation.chosen_option] ?? 0.5)
                                 Text("\(participation.chosen_option) \(optionOdds)")
                                     .font(.title2)
                                     .fontWeight(.bold)
@@ -15174,9 +15584,8 @@ struct EnhancedBetCard: View {
     }
     
     private var userOdds: String {
-        if let userBet = userBets.first,
-           let odds = bet.odds[userBet.chosen_option] {
-            return odds
+        if let userBet = userBets.first {
+            return firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[userBet.chosen_option] ?? 0.5)
         }
         return "N/A"
     }
@@ -22071,6 +22480,16 @@ struct PhotosPickerSheet: View {
             }
         }
     }
+}
+
+// MARK: - DateFormatter Extension
+
+extension DateFormatter {
+    static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
 }
 
 

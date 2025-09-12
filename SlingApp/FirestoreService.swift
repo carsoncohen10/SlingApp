@@ -2123,6 +2123,106 @@ class FirestoreService: ObservableObject {
         }
     }
     
+    // MARK: - Dynamic Parimutuel Odds Calculation
+    
+    /// Calculate implied odds for each option based on current pool distribution
+    func calculateImpliedOdds(for bet: FirestoreBet) -> [String: Double] {
+        guard let poolByOption = bet.pool_by_option,
+              let totalPool = bet.total_pool,
+              totalPool > 0 else {
+            // If no pool data, return equal odds for all options
+            let equalOdds = 1.0 / Double(bet.options.count)
+            return Dictionary(uniqueKeysWithValues: bet.options.map { ($0, equalOdds) })
+        }
+        
+        var impliedOdds: [String: Double] = [:]
+        
+        for option in bet.options {
+            let optionPool = poolByOption[option] ?? 0
+            let otherOptionsPool = totalPool - optionPool
+            
+            if optionPool > 0 {
+                // Implied odds = other options pool / total pool
+                impliedOdds[option] = Double(otherOptionsPool) / Double(totalPool)
+            } else {
+                // If no one has bet on this option yet, give it high implied odds
+                impliedOdds[option] = 0.9
+            }
+        }
+        
+        return impliedOdds
+    }
+    
+    /// Calculate payout multiplier for a winning bet using parimutuel system
+    func calculateParimutuelPayout(for bet: FirestoreBet, winningOption: String, userStake: Int) -> Double {
+        guard let poolByOption = bet.pool_by_option,
+              let totalPool = bet.total_pool,
+              let winningPool = poolByOption[winningOption],
+              winningPool > 0 else {
+            return Double(userStake) // Return original stake if no pool data
+        }
+        
+        // Parimutuel payout formula: (totalPool / winningSidePool) * userStake
+        let payoutMultiplier = Double(totalPool) / Double(winningPool)
+        return payoutMultiplier * Double(userStake)
+    }
+    
+    /// Format implied odds as American odds display
+    func formatImpliedOdds(_ impliedOdds: Double) -> String {
+        if impliedOdds >= 0.5 {
+            // Convert to negative American odds (favorite)
+            let americanOdds = -100 * impliedOdds / (1 - impliedOdds)
+            return String(format: "%.0f", americanOdds)
+        } else {
+            // Convert to positive American odds (underdog)
+            let americanOdds = 100 * (1 - impliedOdds) / impliedOdds
+            return "+\(String(format: "%.0f", americanOdds))"
+        }
+    }
+    
+    /// Update pool data when a bet is placed
+    func updateBetPool(betId: String, chosenOption: String, stakeAmount: Int, completion: @escaping (Bool) -> Void) {
+        let betRef = db.collection("Bet").document(betId)
+        
+        betRef.getDocument { [weak self] document, error in
+            if let error = error {
+                print("❌ Error fetching bet for pool update: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            guard let document = document, document.exists,
+                  var data = document.data() else {
+                print("❌ Bet document not found for pool update")
+                completion(false)
+                return
+            }
+            
+            // Initialize pool data if it doesn't exist
+            var poolByOption = data["pool_by_option"] as? [String: Int] ?? [:]
+            var totalPool = data["total_pool"] as? Int ?? 0
+            
+            // Update pool for the chosen option
+            poolByOption[chosenOption] = (poolByOption[chosenOption] ?? 0) + stakeAmount
+            totalPool += stakeAmount
+            
+            // Update the document
+            data["pool_by_option"] = poolByOption
+            data["total_pool"] = totalPool
+            data["updated_date"] = Timestamp(date: Date())
+            
+            betRef.setData(data) { error in
+                if let error = error {
+                    print("❌ Error updating bet pool: \(error.localizedDescription)")
+                    completion(false)
+                } else {
+                    print("✅ Successfully updated bet pool for option '\(chosenOption)' with \(stakeAmount) points")
+                    completion(true)
+                }
+            }
+        }
+    }
+
     func joinBet(betId: String, chosenOption: String, stakeAmount: Int, completion: @escaping (Bool, String?) -> Void) {
         guard let userEmail = currentUser?.email,
               let userId = currentUser?.id else {
@@ -2201,6 +2301,15 @@ class FirestoreService: ObservableObject {
                         completion(false, error.localizedDescription)
                     } else {
                         print("✅ joinBet: Successfully created BetParticipant and deducted \(stakeAmount) points")
+                        
+                        // Update bet pool with new stake
+                        self?.updateBetPool(betId: betId, chosenOption: chosenOption, stakeAmount: stakeAmount) { poolUpdateSuccess in
+                            if poolUpdateSuccess {
+                                print("✅ Successfully updated bet pool")
+                            } else {
+                                print("❌ Failed to update bet pool, but bet was placed")
+                            }
+                        }
                         
                         // Refresh user data and participations
                         DispatchQueue.main.async {
@@ -2303,7 +2412,7 @@ class FirestoreService: ObservableObject {
     private func processBetPayouts(betId: String, winnerOption: String, participants: [QueryDocumentSnapshot], completion: @escaping (Bool) -> Void) {
         print("🎯 processBetPayouts: Processing payouts for \(participants.count) participants")
         
-        // Get bet details to calculate odds
+        // Get bet details to calculate parimutuel payouts
         db.collection("Bet").document(betId).getDocument(source: .default) { [weak self] document, error in
             if let error = error {
                 print("❌ processBetPayouts: Error fetching bet details: \(error.localizedDescription)")
@@ -2312,74 +2421,88 @@ class FirestoreService: ObservableObject {
             }
             
             guard let document = document, document.exists,
-                  let data = document.data(),
-                  let odds = data["odds"] as? [String: String] else {
-                print("❌ processBetPayouts: Bet not found or missing odds")
+                  let data = document.data() else {
+                print("❌ processBetPayouts: Bet not found")
                 completion(false)
                 return
             }
             
-            print("✅ processBetPayouts: Bet odds loaded: \(odds)")
-            
-            // Process each participant
-            var processedCount = 0
-            var totalParticipants = participants.count
-            
-            for participantDoc in participants {
-                guard let participantData = participantDoc.data() as [String: Any]?,
-                      let userEmail = participantData["user_email"] as? String,
-                      let chosenOption = participantData["chosen_option"] as? String,
-                      let stakeAmount = participantData["stake_amount"] as? Int else {
-                    print("❌ processBetPayouts: Invalid participant data for \(participantDoc.documentID)")
-                    processedCount += 1
-                    if processedCount == totalParticipants {
-                        completion(false)
-                    }
-                    continue
-                }
+            // Create a FirestoreBet object for parimutuel calculation
+            do {
+                let bet = try document.data(as: FirestoreBet.self)
+                print("✅ processBetPayouts: Bet loaded for parimutuel calculation")
                 
-                let isWinner = chosenOption == winnerOption
-                let payout = self?.calculatePayout(amount: Double(stakeAmount), odds: odds[chosenOption] ?? "-110") ?? Double(stakeAmount)
+                // Process each participant
+                var processedCount = 0
+                var totalParticipants = participants.count
                 
-                print("🎯 processBetPayouts: \(userEmail) chose '\(chosenOption)', stake: \(stakeAmount), isWinner: \(isWinner), payout: \(payout)")
-                
-                // Update participant with result
-                let participantRef = self?.db.collection("BetParticipant").document(participantDoc.documentID)
-                let participantUpdate: [String: Any] = [
-                    "is_winner": isWinner,
-                    "final_payout": Int(payout),
-                    "updated_date": Date()
-                ]
-                
-                participantRef?.updateData(participantUpdate) { error in
-                    if let error = error {
-                        print("❌ processBetPayouts: Error updating participant \(userEmail): \(error.localizedDescription)")
-                    } else {
-                        print("✅ processBetPayouts: Participant \(userEmail) updated successfully")
-                    }
-                    
-                    // Process payout for user
-                    if isWinner {
-                        // Winner gets their stake back + winnings
-                        let pointsToAdd = Int(payout)
-                        self?.updateUserBlitzPoints(userId: userEmail, pointsToAdd: pointsToAdd) { success, error in
-                            if success {
-                                print("✅ processBetPayouts: \(userEmail) received \(pointsToAdd) points (stake + winnings)")
-                            } else {
-                                print("❌ processBetPayouts: Error adding points to \(userEmail): \(error ?? "Unknown error")")
-                            }
+                for participantDoc in participants {
+                    guard let participantData = participantDoc.data() as [String: Any]?,
+                          let userEmail = participantData["user_email"] as? String,
+                          let chosenOption = participantData["chosen_option"] as? String,
+                          let stakeAmount = participantData["stake_amount"] as? Int else {
+                        print("❌ processBetPayouts: Invalid participant data for \(participantDoc.documentID)")
+                        processedCount += 1
+                        if processedCount == totalParticipants {
+                            completion(false)
                         }
-                    } else {
-                        // Loser gets nothing (points already deducted when bet was placed)
-                        print("ℹ️ processBetPayouts: \(userEmail) lost, no points returned (already deducted)")
+                        continue
                     }
                     
-                    processedCount += 1
-                    if processedCount == totalParticipants {
-                        print("✅ processBetPayouts: All participants processed")
-                        completion(true)
+                    let isWinner = chosenOption == winnerOption
+                    let payout: Double
+                    
+                    if isWinner {
+                        // Use parimutuel payout calculation for winners
+                        payout = self?.calculateParimutuelPayout(for: bet, winningOption: winnerOption, userStake: stakeAmount) ?? Double(stakeAmount)
+                    } else {
+                        // Losers get nothing (points already deducted when bet was placed)
+                        payout = 0
+                    }
+                    
+                    print("🎯 processBetPayouts: \(userEmail) chose '\(chosenOption)', stake: \(stakeAmount), isWinner: \(isWinner), payout: \(payout)")
+                    
+                    // Update participant with result
+                    let participantRef = self?.db.collection("BetParticipant").document(participantDoc.documentID)
+                    let participantUpdate: [String: Any] = [
+                        "is_winner": isWinner,
+                        "final_payout": Int(payout),
+                        "updated_date": Date()
+                    ]
+                    
+                    participantRef?.updateData(participantUpdate) { error in
+                        if let error = error {
+                            print("❌ processBetPayouts: Error updating participant \(userEmail): \(error.localizedDescription)")
+                        } else {
+                            print("✅ processBetPayouts: Participant \(userEmail) updated successfully")
+                        }
+                        
+                        // Process payout for user
+                        if isWinner {
+                            // Winner gets their parimutuel payout
+                            let pointsToAdd = Int(payout)
+                            self?.updateUserBlitzPoints(userId: userEmail, pointsToAdd: pointsToAdd) { success, error in
+                                if success {
+                                    print("✅ processBetPayouts: \(userEmail) received \(pointsToAdd) points (parimutuel payout)")
+                                } else {
+                                    print("❌ processBetPayouts: Error adding points to \(userEmail): \(error ?? "Unknown error")")
+                                }
+                            }
+                        } else {
+                            // Loser gets nothing (points already deducted when bet was placed)
+                            print("ℹ️ processBetPayouts: \(userEmail) lost, no points returned (already deducted)")
+                        }
+                        
+                        processedCount += 1
+                        if processedCount == totalParticipants {
+                            print("✅ processBetPayouts: All participants processed")
+                            completion(true)
+                        }
                     }
                 }
+            } catch {
+                print("❌ processBetPayouts: Error decoding bet data: \(error.localizedDescription)")
+                completion(false)
             }
         }
     }
