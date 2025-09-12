@@ -10897,27 +10897,27 @@ struct CreateBetView: View {
                             // Odds Section - Condensed
                             HStack(spacing: 8) {
                                 VStack(spacing: 4) {
-                                    // Odds Input - More prominent
-                                    VStack(spacing: 2) {
-                                        Text("Odds")
-                                            .font(.caption2)
-                                            .foregroundColor(.gray)
-                                        
+                                // Odds Input - More prominent
+                                VStack(spacing: 2) {
+                                    Text("Odds")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                    
                                         Text(odds[index])
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .multilineTextAlignment(.center)
-                                            .frame(width: 80)
+                                .font(.subheadline)
+                                        .fontWeight(.medium)
+                                .multilineTextAlignment(.center)
+                                        .frame(width: 80)
                                             .padding(.vertical, 6)
-                                            .padding(.horizontal, 12)
-                                            .background(Color(.systemGray6))
-                                            .cornerRadius(8)
+                                        .padding(.horizontal, 12)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
                                     }
                                 }
-                                
+                            
                                 // Arrow indicator
                                 Image(systemName: "chevron.right")
-                                    .font(.caption)
+                                .font(.caption)
                                     .foregroundColor(.gray)
                             }
                             
@@ -12024,37 +12024,76 @@ struct MainOddsDisplayView: View {
     let odds: String
     let percentage: String
     let showPercentage: Bool
+    let currentInput: String
+    
+    // Helper function to convert percentage to odds
+    private func percentageToOdds(_ percentage: Double) -> String {
+        if percentage > 50 {
+            // For percentages > 50%, calculate negative odds
+            let odds = (percentage / (100 - percentage)) * 100
+            return "-\(Int(odds))"
+        } else {
+            // For percentages <= 50%, calculate positive odds
+            let odds = ((100 - percentage) / percentage) * 100
+            return "+\(Int(odds))"
+        }
+    }
     
     var body: some View {
-                    VStack(spacing: 8) {
-            HStack(spacing: 0) {
-                // Fixed width container for the sign to prevent text shifting
-                HStack {
-                    if odds.hasPrefix("+") {
-                        Text("+")
-                            .font(.system(size: 48, weight: .bold))
-                            .foregroundColor(.slingBlue)
-                    } else if odds.hasPrefix("-") {
-                        Text("-")
-                            .font(.system(size: 48, weight: .bold))
-                            .foregroundColor(.slingBlue)
-                    } else {
-                        // Invisible placeholder to maintain consistent spacing
-                        Text("+")
-                            .font(.system(size: 48, weight: .bold))
-                            .foregroundColor(.clear)
-                    }
-                }
-                .frame(width: 30) // Fixed width to prevent shifting
-                
-                Text(odds.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: ""))
-                    .font(.system(size: 48, weight: .bold))
-                            .foregroundColor(.black)
-                    }
+        VStack(spacing: 8) {
+            if showPercentage {
+                // When showing percentages on preset buttons, display current input as percentage
+                HStack(spacing: 0) {
+                    Text(currentInput.replacingOccurrences(of: "%", with: ""))
+                        .font(.system(size: 80, weight: .bold))
+                        .foregroundColor(.black)
                     
-            Text(showPercentage ? "\(percentage.replacingOccurrences(of: "%", with: ""))% Chance" : "\(odds) Odds")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.gray)
+                    Text("%")
+                        .font(.system(size: 80, weight: .bold))
+                        .foregroundColor(Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
+                }
+                
+                // Show equivalent odds below
+                if let percentageValue = Double(currentInput.replacingOccurrences(of: "%", with: "")) {
+                    Text("\(percentageToOdds(percentageValue)) Odds")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+            } else {
+                // When showing odds on preset buttons, display current input as odds
+                HStack(spacing: 0) {
+                    // Fixed width container for the sign to prevent text shifting
+                    HStack {
+                        if currentInput.hasPrefix("+") {
+                            Text("+")
+                                .font(.system(size: 80, weight: .bold))
+                                .foregroundColor(Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
+                        } else if currentInput.hasPrefix("-") {
+                            Text("-")
+                                .font(.system(size: 80, weight: .bold))
+                                .foregroundColor(Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
+                        } else {
+                            // Invisible placeholder to maintain consistent spacing
+                            Text("+")
+                                .font(.system(size: 80, weight: .bold))
+                                .foregroundColor(.clear)
+                        }
+                    }
+                    .frame(width: 50) // Fixed width to prevent shifting
+                    
+                    Text(currentInput.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: ""))
+                        .font(.system(size: 80, weight: .bold))
+                        .foregroundColor(.black)
+                }
+                
+                // Show equivalent percentage below
+                if let oddsValue = Double(currentInput.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: "")) {
+                    let percentage = oddsValue > 0 ? (100 / (oddsValue + 100)) * 100 : (oddsValue / (oddsValue - 100)) * 100
+                    Text("\(String(format: "%.0f", percentage))% Chance")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+            }
         }
     }
 }
@@ -12066,64 +12105,69 @@ struct NumericKeypadView: View {
     let onKeyPress: (String) -> Void
     
     var body: some View {
-        VStack(spacing: 12) {
-            // Row 1: 1, 2, 3
-            HStack(spacing: 12) {
-                ForEach(1...3, id: \.self) { number in
-                    SimpleKeypadButton(number: "\(number)", action: {
-                        onKeyPress("\(number)")
-                        selectionFeedback.selectionChanged()
-                    })
-                }
-            }
+        VStack(spacing: 0) {
+            Spacer()
             
-            // Row 2: 4, 5, 6
-            HStack(spacing: 12) {
-                ForEach(4...6, id: \.self) { number in
-                    SimpleKeypadButton(number: "\(number)", action: {
-                        onKeyPress("\(number)")
-                        selectionFeedback.selectionChanged()
-                    })
+            VStack(spacing: 12) {
+                // Row 1: 1, 2, 3
+                HStack(spacing: 12) {
+                    ForEach(1...3, id: \.self) { number in
+                        SimpleKeypadButton(number: "\(number)", action: {
+                            onKeyPress("\(number)")
+                            selectionFeedback.selectionChanged()
+                        })
+                    }
                 }
-            }
-            
-            // Row 3: 7, 8, 9
-            HStack(spacing: 12) {
-                ForEach(7...9, id: \.self) { number in
-                    SimpleKeypadButton(number: "\(number)", action: {
-                        onKeyPress("\(number)")
-                        selectionFeedback.selectionChanged()
-                    })
-                }
-            }
-            
-            // Row 4: +/-, 0, delete
-            HStack(spacing: 12) {
-                SimpleKeypadButton(number: "+/-", action: {
-                    onKeyPress("+/-")
-                    selectionFeedback.selectionChanged()
-                })
                 
-                SimpleKeypadButton(number: "0", action: {
-                    onKeyPress("0")
-                    selectionFeedback.selectionChanged()
-                })
-                
-                Button(action: { 
-                    onKeyPress("delete")
-                    selectionFeedback.selectionChanged()
-                }) {
-                    Image(systemName: "delete.left")
-                        .font(.title2)
-                                    .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 60)
-                        .background(Color.white)
+                // Row 2: 4, 5, 6
+                HStack(spacing: 12) {
+                    ForEach(4...6, id: \.self) { number in
+                        SimpleKeypadButton(number: "\(number)", action: {
+                            onKeyPress("\(number)")
+                            selectionFeedback.selectionChanged()
+                        })
+                    }
                 }
-                .buttonStyle(PlainButtonStyle())
+                
+                // Row 3: 7, 8, 9
+                HStack(spacing: 12) {
+                    ForEach(7...9, id: \.self) { number in
+                        SimpleKeypadButton(number: "\(number)", action: {
+                            onKeyPress("\(number)")
+                            selectionFeedback.selectionChanged()
+                        })
+                    }
+                }
+                
+                // Row 4: +/-, 0, delete
+                HStack(spacing: 12) {
+                    SimpleKeypadButton(number: "+/-", action: {
+                        onKeyPress("+/-")
+                        selectionFeedback.selectionChanged()
+                    })
+                    
+                    SimpleKeypadButton(number: "0", action: {
+                        onKeyPress("0")
+                        selectionFeedback.selectionChanged()
+                    })
+                    
+                    Button(action: { 
+                        onKeyPress("delete")
+                        selectionFeedback.selectionChanged()
+                    }) {
+                        Image(systemName: "delete.left")
+                            .font(.title2)
+                                        .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 60)
+                            .background(Color.white)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 34) // Add padding for home indicator
         }
-        .padding(.horizontal, 20)
     }
 }
 
@@ -12192,7 +12236,7 @@ struct AdjustOddsHeaderView: View {
             Spacer()
             
             // Toggle between odds and percentage
-            Button(showPercentage ? "Odds" : "%") {
+            Button(showPercentage ? "+/-" : "%") {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     showPercentage.toggle()
                 }
@@ -12258,63 +12302,58 @@ struct AdjustOddsView: View {
                 
                 
                 // Main Content
-                VStack(spacing: 32) {
-                    // Outcome Selection Boxes
-                    VStack(spacing: 12) {
-                                HStack(spacing: 8) {
-                            ForEach(Array(outcomes.enumerated()), id: \.offset) { index, outcome in
-                                Button(action: {
-                                    handleOutcomeSelection(index: index)
-                                }) {
-                                HStack(spacing: 8) {
-                                        Text(outcome)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(selectedOutcomeIndex == index ? .white : .black)
-                                        
-                                        Text(showPercentage ? percentages[index] : odds[index])
-                                            .font(.caption)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(selectedOutcomeIndex == index ? .white : .slingBlue)
+                VStack(spacing: 0) {
+                    // Top content area
+                    VStack(spacing: 32) {
+                        // Outcome Selection Boxes
+                        VStack(spacing: 12) {
+                                    HStack(spacing: 8) {
+                                ForEach(Array(outcomes.enumerated()), id: \.offset) { index, outcome in
+                                    Button(action: {
+                                        handleOutcomeSelection(index: index)
+                                    }) {
+                                    HStack(spacing: 8) {
+                                            Text(outcome)
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                                .foregroundColor(selectedOutcomeIndex == index ? .white : .black)
+                                            
+                                            Text(showPercentage ? percentages[index] : odds[index])
+                                                .font(.caption)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(selectedOutcomeIndex == index ? .white : .slingBlue)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(selectedOutcomeIndex == index ? Color.slingBlue : Color.white)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(selectedOutcomeIndex == index ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1)
+                                        )
                                     }
-                                    .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(selectedOutcomeIndex == index ? Color.slingBlue : Color.white)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(selectedOutcomeIndex == index ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1)
-                                    )
+                                    .buttonStyle(PlainButtonStyle())
                                 }
-                                .buttonStyle(PlainButtonStyle())
                             }
                         }
-                    }
-                    .padding(.top, 20)
-                    
-                    // Main Odds Display
-                    VStack(spacing: 20) {
-                        // Large odds display
-                        MainOddsDisplayView(
-                            odds: odds[selectedOutcomeIndex],
-                            percentage: percentages[selectedOutcomeIndex],
-                            showPercentage: showPercentage
-                        )
-                        .padding(.vertical, 20)
+                        .padding(.top, 20)
                         
+                        // Main Odds Display
+                        VStack(spacing: 20) {
+                            // Large odds display
+                            MainOddsDisplayView(
+                                odds: odds[selectedOutcomeIndex],
+                                percentage: percentages[selectedOutcomeIndex],
+                                showPercentage: showPercentage,
+                                currentInput: currentInput
+                            )
+                            .padding(.vertical, 20)
+                            
                         // Preset Odds Buttons with pagination
                         VStack(spacing: 16) {
-                            // Page indicator
-                            HStack(spacing: 4) {
-                                ForEach(0..<presetOddsSets.count, id: \.self) { index in
-                                    Circle()
-                                        .fill(index == currentOddsSetIndex ? Color.slingBlue : Color.gray.opacity(0.3))
-                                        .frame(width: 6, height: 6)
-                                }
-                            }
                             
                             // Preset buttons
                             VStack(spacing: 12) {
@@ -12327,14 +12366,14 @@ struct AdjustOddsView: View {
                                                 .font(.subheadline)
                                                 .fontWeight(.semibold)
                                                 .foregroundColor(Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
-                .frame(maxWidth: .infinity)
-                                                .padding(.vertical, 12)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 8)
-                                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                                        .background(Color.white)
-                                                )
                                         }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                                .background(Color.white)
+                                        )
                                         .scaleEffect(1.0)
                                         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: currentOddsSetIndex)
                                         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: showPercentage)
@@ -12350,46 +12389,77 @@ struct AdjustOddsView: View {
                                                 .font(.subheadline)
                                                 .fontWeight(.semibold)
                                                 .foregroundColor(Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
-                                                .frame(maxWidth: .infinity)
-                                                .padding(.vertical, 12)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 8)
-                                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                                        .background(Color.white)
-                                                )
                                         }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                                .background(Color.white)
+                                        )
                                         .scaleEffect(1.0)
                                         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: currentOddsSetIndex)
                                         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: showPercentage)
                                     }
                                 }
                             }
-                        }
-                        .padding(.horizontal, 20)
-                        .gesture(
-                            DragGesture()
-                                .onEnded { value in
-                                    handleSwipeGesture(value: value)
+                            
+                            // Page indicator
+                            HStack(spacing: 4) {
+                                ForEach(0..<presetOddsSets.count, id: \.self) { index in
+                                    Circle()
+                                        .fill(index == currentOddsSetIndex ? Color.slingBlue : Color.gray.opacity(0.3))
+                                        .frame(width: 6, height: 6)
                                 }
-                        )
-                        
-                        // Numeric Keypad
-                        NumericKeypadView(selectionFeedback: selectionFeedback) { key in
-                            handleKeyPress(key)
+                            }
+                        }
+                            .padding(.horizontal, 20)
+                            .gesture(
+                                DragGesture()
+                                    .onEnded { value in
+                                        handleSwipeGesture(value: value)
+                                    }
+                            )
                         }
                     }
+                    .padding(.horizontal, 24)
+                    
+                    // Numeric Keypad - takes remaining space and positions at bottom
+                    NumericKeypadView(selectionFeedback: selectionFeedback) { key in
+                        handleKeyPress(key)
+                    }
                 }
-                .padding(.horizontal, 24)
-                
-                Spacer()
             }
             .background(Color.white)
             .navigationBarHidden(true)
             .onAppear {
                 // Initialize angle based on current selected outcome's odds
                 currentAngle = getAngleFromOdds(odds[selectedOutcomeIndex])
-                // Initialize current input
-                currentInput = odds[selectedOutcomeIndex]
+                // Initialize current input with proper default values
+                if showPercentage {
+                    currentInput = "1" // Default to 1% in percentage mode
+                } else {
+                    currentInput = "-110" // Default to -110 in odds mode
+                }
+            }
+            .onChange(of: showPercentage) { _, newValue in
+                // Update currentInput when switching modes
+                if newValue {
+                    // Switching to percentage mode - convert current odds to percentage
+                    if let oddsValue = Double(currentInput.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: "")) {
+                        let percentageValue = calculatePercentage(from: oddsValue)
+                        currentInput = String(format: "%.0f", percentageValue)
+                    } else {
+                        currentInput = "1" // Default to 1% if no valid odds
+                    }
+                } else {
+                    // Switching to odds mode - convert current percentage to odds
+                    if let percentageValue = Double(currentInput.replacingOccurrences(of: "%", with: "")) {
+                        currentInput = percentageToOdds(percentageValue)
+                    } else {
+                        currentInput = "-110" // Default to -110 if no valid percentage
+                    }
+                }
             }
         }
     }
@@ -12403,8 +12473,14 @@ struct AdjustOddsView: View {
         // Switch to new outcome
         selectedOutcomeIndex = index
         
-        // Update current input to match the selected outcome's odds
-        currentInput = odds[index]
+        // Update current input based on current mode
+        if showPercentage {
+            let percentageValue = percentages[index].replacingOccurrences(of: "%", with: "")
+            currentInput = percentageValue.isEmpty ? "1" : percentageValue
+        } else {
+            let oddsValue = odds[index]
+            currentInput = oddsValue.isEmpty ? "-110" : oddsValue
+        }
         
         // Update dial to show new odds
         currentAngle = getAngleFromOdds(odds[index])
@@ -12416,20 +12492,29 @@ struct AdjustOddsView: View {
     private func handlePresetSelection(preset: String) {
         if showPercentage {
             // If in percentage mode, update percentage and calculate odds
-            percentages[selectedOutcomeIndex] = preset
+            let percentageValue = Double(preset.replacingOccurrences(of: "%", with: "")) ?? 50.0
+            // Prevent 0% and 100% to avoid division by zero
+            let clampedPercentage = max(1, min(99, percentageValue))
+            
+            percentages[selectedOutcomeIndex] = String(format: "%.0f%%", clampedPercentage)
             
             // Convert percentage to odds
-            let percentageValue = Double(preset.replacingOccurrences(of: "%", with: "")) ?? 50.0
-            let oddsValue = percentageToOdds(percentageValue)
+            let oddsValue = percentageToOdds(clampedPercentage)
             odds[selectedOutcomeIndex] = oddsValue
+            
+            // Update currentInput to match the preset
+            currentInput = String(format: "%.0f", clampedPercentage)
         } else {
             // If in odds mode, update odds and calculate percentage
             odds[selectedOutcomeIndex] = preset
         
-        // Calculate percentage based on odds
+            // Calculate percentage based on odds
             let oddsValue = Int(preset.replacingOccurrences(of: "+", with: "")) ?? 0
             let percentageValue = calculatePercentage(from: Double(oddsValue))
             percentages[selectedOutcomeIndex] = String(format: "%.0f%%", percentageValue)
+            
+            // Update currentInput to match the preset
+            currentInput = preset
         }
         
         selectionFeedback.selectionChanged()
@@ -12457,25 +12542,57 @@ struct AdjustOddsView: View {
         if key == "delete" {
             if !currentInput.isEmpty {
                 currentInput.removeLast()
+                
+                // Check if we're left with just a sign or empty - reset to default
+                if currentInput.isEmpty || 
+                   (!showPercentage && (currentInput == "+" || currentInput == "-")) {
+                    currentInput = showPercentage ? "1" : "-110"
+                }
             }
         } else if key == "+/-" {
-            if currentInput.hasPrefix("+") {
-                currentInput = "-" + String(currentInput.dropFirst())
-            } else if currentInput.hasPrefix("-") {
-                currentInput = "+" + String(currentInput.dropFirst())
-            } else if !currentInput.isEmpty {
-                currentInput = "-" + currentInput
+            // In percentage mode, +/- doesn't make sense, so we'll ignore it
+            if !showPercentage {
+                if currentInput.hasPrefix("+") {
+                    currentInput = "-" + String(currentInput.dropFirst())
+                } else if currentInput.hasPrefix("-") {
+                    currentInput = "+" + String(currentInput.dropFirst())
+                } else if !currentInput.isEmpty {
+                    currentInput = "-" + currentInput
+                } else {
+                    currentInput = "-110" // Default with sign
+                }
             }
         } else {
-            currentInput += key
+            // If currentInput is empty and we're in odds mode, add a default sign
+            if currentInput.isEmpty && !showPercentage {
+                currentInput = "-" + key
+            } else {
+                currentInput += key
+            }
         }
         
-        // Update the odds with the current input
+        // Update the odds and percentages based on current input
         if !currentInput.isEmpty {
-            odds[selectedOutcomeIndex] = currentInput
-            let oddsValue = Int(currentInput.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: "")) ?? 0
-            let percentageValue = calculatePercentage(from: Double(oddsValue))
-            percentages[selectedOutcomeIndex] = String(format: "%.0f%%", percentageValue)
+            if showPercentage {
+                // In percentage mode, currentInput is the percentage value
+                if let percentageValue = Double(currentInput.replacingOccurrences(of: "%", with: "")) {
+                    // Prevent 0% and 100% to avoid division by zero
+                    let clampedPercentage = max(1, min(99, percentageValue))
+                    if clampedPercentage != percentageValue {
+                        currentInput = String(format: "%.0f", clampedPercentage)
+                    }
+                    
+                    let oddsString = percentageToOdds(clampedPercentage)
+                    odds[selectedOutcomeIndex] = oddsString
+                    percentages[selectedOutcomeIndex] = String(format: "%.0f%%", clampedPercentage)
+                }
+            } else {
+                // In odds mode, currentInput is the odds value
+                odds[selectedOutcomeIndex] = currentInput
+                let oddsValue = Int(currentInput.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: "")) ?? 0
+                let percentageValue = calculatePercentage(from: Double(oddsValue))
+                percentages[selectedOutcomeIndex] = String(format: "%.0f%%", percentageValue)
+            }
         }
     }
     
