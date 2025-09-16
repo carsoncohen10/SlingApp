@@ -1282,7 +1282,20 @@ struct HomeBetCard: View {
                             
                             Spacer()
                             
-                            Text(bet.odds[option] ?? "-110")
+                            Text({
+                                let calculatedOdds = firestoreService.calculateImpliedOdds(for: bet)
+                                let optionOdds = calculatedOdds[option] ?? 0.5
+                                let formattedOdds = firestoreService.formatImpliedOdds(optionOdds)
+                                
+                                // Debug logging for home bet card
+                                print("🔍 HOME_BET_CARD DEBUG - Bet ID: \(bet.id ?? "nil")")
+                                print("🔍 HOME_BET_CARD DEBUG - Option: \(option)")
+                                print("🔍 HOME_BET_CARD DEBUG - Calculated odds: \(calculatedOdds)")
+                                print("🔍 HOME_BET_CARD DEBUG - Option odds: \(optionOdds)")
+                                print("🔍 HOME_BET_CARD DEBUG - Formatted odds: \(formattedOdds)")
+                                
+                                return formattedOdds
+                            }())
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                                 .foregroundColor(.black)

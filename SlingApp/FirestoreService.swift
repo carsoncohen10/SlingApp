@@ -987,6 +987,14 @@ class FirestoreService: ObservableObject {
                             if !sortedBets.isEmpty {
                                 print("🔍 fetchBets: First bet title: \(sortedBets.first?.title ?? "unknown")")
                                 print("🔍 fetchBets: Last bet title: \(sortedBets.last?.title ?? "unknown")")
+                                
+                                // Log pool data for first few bets to debug odds discrepancies
+                                for (index, bet) in sortedBets.prefix(3).enumerated() {
+                                    print("🔍 fetchBets: Bet \(index + 1) - ID: \(bet.id ?? "nil"), Title: \(bet.title)")
+                                    print("🔍 fetchBets: Bet \(index + 1) - Pool by option: \(bet.pool_by_option ?? [:])")
+                                    print("🔍 fetchBets: Bet \(index + 1) - Total pool: \(bet.total_pool ?? 0)")
+                                    print("🔍 fetchBets: Bet \(index + 1) - Options: \(bet.options)")
+                                }
                             }
                             
                             self?.bets = sortedBets
@@ -1532,6 +1540,12 @@ class FirestoreService: ObservableObject {
     
     // MARK: - Notification Creation
     
+    private func formatNumberWithCommas(_ number: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: number)) ?? "\(number)"
+    }
+    
     func createNotification(
         for userEmail: String,
         title: String,
@@ -1594,10 +1608,11 @@ class FirestoreService: ObservableObject {
         completion: @escaping (Bool) -> Void
     ) {
         let title = isWinner ? "You Won! 🎉" : "Bet Settled"
+        let formattedWinnings = formatNumberWithCommas(Int(winnings))
         let message = isWinner 
-            ? "Congratulations! You won \(String(format: "%.2f", winnings)) points on '\(betTitle)'"
+            ? "Congratulations! You won \(formattedWinnings) on '\(betTitle)'"
             : "Your bet on '\(betTitle)' has been settled"
-        let icon = isWinner ? "checkmark.circle" : "chart.line.uptrend.xyaxis"
+        let icon = isWinner ? "checkmark.circle" : "bolt.fill"
         
         createNotification(
             for: userEmail,
@@ -1622,8 +1637,9 @@ class FirestoreService: ObservableObject {
         completion: @escaping (Bool) -> Void
     ) {
         let title = "Bet Joined! 🎯"
-        let message = "You joined '\(betTitle)' with \(stakeAmount) points"
-        let icon = "chart.line.uptrend.xyaxis"
+        let formattedStake = formatNumberWithCommas(stakeAmount)
+        let message = "You joined '\(betTitle)' with \(formattedStake)"
+        let icon = "bolt.fill"
         
         createNotification(
             for: userEmail,
@@ -1647,7 +1663,7 @@ class FirestoreService: ObservableObject {
     ) {
         let title = "Welcome! 👋"
         let message = "You've joined the '\(communityName)' community"
-        let icon = "person.2"
+        let icon = communityIcon ?? "person.2"
         
         createNotification(
             for: userEmail,
@@ -1672,7 +1688,7 @@ class FirestoreService: ObservableObject {
     ) {
         let title = "New Market! 🚀"
         let message = "A new market '\(betTitle)' was created in '\(communityName)'"
-        let icon = "plus.circle"
+        let icon = communityIcon ?? "person.2"
         
         createNotification(
             for: userEmail,
@@ -1697,7 +1713,7 @@ class FirestoreService: ObservableObject {
     ) {
         let title = "New Member! 👋"
         let message = "\(joinedUserName) joined '\(communityName)'"
-        let icon = "person.badge.plus"
+        let icon = communityIcon ?? "person.2"
         
         createNotification(
             for: userEmail,
@@ -1853,6 +1869,8 @@ class FirestoreService: ObservableObject {
                         return
                     }
                     
+                    let communityIcon = communityData["icon"] as? String ?? "person.2"
+                    
                     // Create notifications for all members except the creator
                     for memberDoc in documents {
                         guard let memberData = memberDoc.data() as [String: Any]?,
@@ -1866,7 +1884,7 @@ class FirestoreService: ObservableObject {
                             betTitle: betTitle,
                             communityName: communityName,
                             communityId: communityId,
-                            communityIcon: "plus.circle"
+                            communityIcon: communityIcon
                         ) { success in
                             if success {
                                 print("✅ Created bet created notification for \(userEmail)")
@@ -2125,31 +2143,55 @@ class FirestoreService: ObservableObject {
     
     // MARK: - Dynamic Parimutuel Odds Calculation
     
-    /// Calculate implied odds for each option based on current pool distribution
+    /// Calculate implied odds for each option based on current pool distribution with dynamic smoothing
     func calculateImpliedOdds(for bet: FirestoreBet) -> [String: Double] {
+        print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Bet ID: \(bet.id ?? "nil")")
+        print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Bet title: \(bet.title)")
+        print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Bet options: \(bet.options)")
+        print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Pool by option: \(bet.pool_by_option ?? [:])")
+        print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Total pool: \(bet.total_pool ?? 0)")
+        
         guard let poolByOption = bet.pool_by_option,
               let totalPool = bet.total_pool,
               totalPool > 0 else {
             // If no pool data, return equal odds for all options
             let equalOdds = 1.0 / Double(bet.options.count)
-            return Dictionary(uniqueKeysWithValues: bet.options.map { ($0, equalOdds) })
+            let result = Dictionary(uniqueKeysWithValues: bet.options.map { ($0, equalOdds) })
+            print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Using equal odds (no pool data): \(result)")
+            return result
         }
+        
+        // Calculate dynamic buffer: at least 25 points, or 5% of total pool
+        let minBuffer = 25.0
+        let percentageBuffer = Double(totalPool) * 0.05
+        let dynamicBuffer = max(minBuffer, percentageBuffer)
+        
+        print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Dynamic buffer: \(dynamicBuffer) (min: \(minBuffer), 5% of pool: \(percentageBuffer))")
+        
+        // Add buffer to total pool for smoothing calculations
+        let smoothedTotalPool = Double(totalPool) + dynamicBuffer
         
         var impliedOdds: [String: Double] = [:]
         
         for option in bet.options {
             let optionPool = poolByOption[option] ?? 0
-            let otherOptionsPool = totalPool - optionPool
             
             if optionPool > 0 {
-                // Implied odds = other options pool / total pool
-                impliedOdds[option] = Double(otherOptionsPool) / Double(totalPool)
+                // Add buffer to option pool for smoothing
+                let smoothedOptionPool = Double(optionPool) + (dynamicBuffer / Double(bet.options.count))
+                
+                // Implied odds = smoothed option pool / smoothed total pool
+                impliedOdds[option] = smoothedOptionPool / smoothedTotalPool
+                print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Option '\(option)': pool=\(optionPool), smoothedPool=\(smoothedOptionPool), smoothedTotal=\(smoothedTotalPool), odds=\(smoothedOptionPool / smoothedTotalPool)")
             } else {
-                // If no one has bet on this option yet, give it high implied odds
-                impliedOdds[option] = 0.9
+                // If no one has bet on this option yet, give it buffer-based odds
+                let smoothedOptionPool = dynamicBuffer / Double(bet.options.count)
+                impliedOdds[option] = smoothedOptionPool / smoothedTotalPool
+                print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Option '\(option)': no bets, using buffer-based odds=\(smoothedOptionPool / smoothedTotalPool)")
             }
         }
         
+        print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Final calculated odds: \(impliedOdds)")
         return impliedOdds
     }
     
@@ -2167,17 +2209,418 @@ class FirestoreService: ObservableObject {
         return payoutMultiplier * Double(userStake)
     }
     
-    /// Format implied odds as American odds display
+    /// Format implied odds as American odds display with clamping
     func formatImpliedOdds(_ impliedOdds: Double) -> String {
+        print("🔍 FORMAT_IMPLIED_ODDS DEBUG - Input implied odds: \(impliedOdds)")
+        
+        // Handle edge cases
+        if impliedOdds <= 0 {
+            print("🔍 FORMAT_IMPLIED_ODDS DEBUG - Invalid odds (<= 0), using +1000")
+            return "+1000"
+        }
+        
+        if impliedOdds >= 1.0 {
+            print("🔍 FORMAT_IMPLIED_ODDS DEBUG - Invalid odds (>= 1.0), using -1000")
+            return "-1000"
+        }
+        
+        let result: String
         if impliedOdds >= 0.5 {
             // Convert to negative American odds (favorite)
             let americanOdds = -100 * impliedOdds / (1 - impliedOdds)
-            return String(format: "%.0f", americanOdds)
+            // Clamp to -1000 maximum
+            let clampedOdds = max(americanOdds, -1000)
+            result = String(format: "%.0f", clampedOdds)
+            print("🔍 FORMAT_IMPLIED_ODDS DEBUG - Favorite: americanOdds=\(americanOdds), clamped=\(clampedOdds), result=\(result)")
         } else {
             // Convert to positive American odds (underdog)
             let americanOdds = 100 * (1 - impliedOdds) / impliedOdds
-            return "+\(String(format: "%.0f", americanOdds))"
+            // Clamp to +1000 maximum
+            let clampedOdds = min(americanOdds, 1000)
+            result = "+\(String(format: "%.0f", clampedOdds))"
+            print("🔍 FORMAT_IMPLIED_ODDS DEBUG - Underdog: americanOdds=\(americanOdds), clamped=\(clampedOdds), result=\(result)")
         }
+        
+        print("🔍 FORMAT_IMPLIED_ODDS DEBUG - Final formatted odds: \(result)")
+        return result
+    }
+    
+    // MARK: - Odds Smoothing Test Function
+    
+    /// Test function to demonstrate the new dynamic odds smoothing system
+    func testOddsSmoothing() {
+        print("🧪 TESTING DYNAMIC ODDS SMOOTHING SYSTEM")
+        print(String(repeating: "=", count: 50))
+        
+        // Test case 1: Very small pool (first bets)
+        print("\n📊 Test Case 1: Small Pool (Total: 10 points)")
+        let smallPoolBet = FirestoreBet(
+            id: "test1",
+            bet_type: "binary",
+            community_id: "test",
+            community_name: "Test Community",
+            created_by: "test_user",
+            creator_email: "test@example.com",
+            deadline: Date(),
+            odds: [:],
+            outcomes: nil,
+            options: ["Option A", "Option B"],
+            status: "active",
+            title: "Small Pool Test",
+            description: "Testing small pool odds",
+            winner_option: nil,
+            winner: nil,
+            image_url: nil,
+            pool_by_option: ["Option A": 8, "Option B": 2],
+            total_pool: 10,
+            total_participants: 2,
+            created_date: Date(),
+            updated_date: nil
+        )
+        
+        let smallPoolOdds = calculateImpliedOdds(for: smallPoolBet)
+        print("Small pool odds: \(smallPoolOdds)")
+        for (option, odds) in smallPoolOdds {
+            let formatted = formatImpliedOdds(odds)
+            print("  \(option): \(formatted)")
+        }
+        
+        // Test case 2: Medium pool
+        print("\n📊 Test Case 2: Medium Pool (Total: 1000 points)")
+        let mediumPoolBet = FirestoreBet(
+            id: "test2",
+            bet_type: "binary",
+            community_id: "test",
+            community_name: "Test Community",
+            created_by: "test_user",
+            creator_email: "test@example.com",
+            deadline: Date(),
+            odds: [:],
+            outcomes: nil,
+            options: ["Option A", "Option B"],
+            status: "active",
+            title: "Medium Pool Test",
+            description: "Testing medium pool odds",
+            winner_option: nil,
+            winner: nil,
+            image_url: nil,
+            pool_by_option: ["Option A": 800, "Option B": 200],
+            total_pool: 1000,
+            total_participants: 20,
+            created_date: Date(),
+            updated_date: nil
+        )
+        
+        let mediumPoolOdds = calculateImpliedOdds(for: mediumPoolBet)
+        print("Medium pool odds: \(mediumPoolOdds)")
+        for (option, odds) in mediumPoolOdds {
+            let formatted = formatImpliedOdds(odds)
+            print("  \(option): \(formatted)")
+        }
+        
+        // Test case 3: Large pool
+        print("\n📊 Test Case 3: Large Pool (Total: 10000 points)")
+        let largePoolBet = FirestoreBet(
+            id: "test3",
+            bet_type: "binary",
+            community_id: "test",
+            community_name: "Test Community",
+            created_by: "test_user",
+            creator_email: "test@example.com",
+            deadline: Date(),
+            odds: [:],
+            outcomes: nil,
+            options: ["Option A", "Option B"],
+            status: "active",
+            title: "Large Pool Test",
+            description: "Testing large pool odds",
+            winner_option: nil,
+            winner: nil,
+            image_url: nil,
+            pool_by_option: ["Option A": 8000, "Option B": 2000],
+            total_pool: 10000,
+            total_participants: 200,
+            created_date: Date(),
+            updated_date: nil
+        )
+        
+        let largePoolOdds = calculateImpliedOdds(for: largePoolBet)
+        print("Large pool odds: \(largePoolOdds)")
+        for (option, odds) in largePoolOdds {
+            let formatted = formatImpliedOdds(odds)
+            print("  \(option): \(formatted)")
+        }
+        
+        // Test case 4: Unbalanced small pool (one option has no bets)
+        print("\n📊 Test Case 4: Unbalanced Small Pool (One option has no bets)")
+        let unbalancedBet = FirestoreBet(
+            id: "test4",
+            bet_type: "binary",
+            community_id: "test",
+            community_name: "Test Community",
+            created_by: "test_user",
+            creator_email: "test@example.com",
+            deadline: Date(),
+            odds: [:],
+            outcomes: nil,
+            options: ["Option A", "Option B"],
+            status: "active",
+            title: "Unbalanced Pool Test",
+            description: "Testing unbalanced pool odds",
+            winner_option: nil,
+            winner: nil,
+            image_url: nil,
+            pool_by_option: ["Option A": 10, "Option B": 0],
+            total_pool: 10,
+            total_participants: 1,
+            created_date: Date(),
+            updated_date: nil
+        )
+        
+        let unbalancedOdds = calculateImpliedOdds(for: unbalancedBet)
+        print("Unbalanced pool odds: \(unbalancedOdds)")
+        for (option, odds) in unbalancedOdds {
+            let formatted = formatImpliedOdds(odds)
+            print("  \(option): \(formatted)")
+        }
+        
+        print("\n✅ Odds smoothing test completed!")
+        print(String(repeating: "=", count: 50))
+    }
+
+    // MARK: - Odds History Tracking
+    
+    private var oddsTrackingTimer: Timer?
+    private var cleanupTimer: Timer?
+    private var trackedBets: Set<String> = []
+    
+    /// Start automatic odds tracking for all active bets
+    func startAutomaticOddsTracking() {
+        // Stop any existing timer
+        stopAutomaticOddsTracking()
+        
+        // Track odds every hour for active bets
+        oddsTrackingTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+            self?.trackOddsForAllActiveBets()
+        }
+        
+        // Clean up old odds history every week
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 7 * 24 * 60 * 60, repeats: true) { [weak self] _ in
+            self?.cleanupOldOddsHistory()
+        }
+        
+        // Also track immediately
+        trackOddsForAllActiveBets()
+        
+        print("🕒 Started automatic odds tracking (every hour) and cleanup (weekly)")
+    }
+    
+    /// Stop automatic odds tracking
+    func stopAutomaticOddsTracking() {
+        oddsTrackingTimer?.invalidate()
+        oddsTrackingTimer = nil
+        cleanupTimer?.invalidate()
+        cleanupTimer = nil
+        print("⏹️ Stopped automatic odds tracking")
+    }
+    
+    /// Track odds for all active bets
+    private func trackOddsForAllActiveBets() {
+        guard let userEmail = currentUser?.email else { return }
+        
+        // Use existing bets from the service
+        let activeBets = bets.filter { bet in
+            bet.status.lowercased() == "open" && bet.deadline > Date()
+        }
+        
+        print("📊 Tracking odds for \(activeBets.count) active bets")
+        
+        for bet in activeBets {
+            if let betId = bet.id {
+                trackOddsHistory(for: betId, forceUpdate: false)
+            }
+        }
+    }
+    
+    /// Track odds history for a bet after pool changes
+    func trackOddsHistory(for betId: String, forceUpdate: Bool = false) {
+        // Fetch the current bet data
+        db.collection("Bet").document(betId).getDocument { [weak self] document, error in
+            if let error = error {
+                print("❌ trackOddsHistory: Error fetching bet: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let document = document,
+                  let betData = try? document.data(as: FirestoreBet.self),
+                  let poolByOption = betData.pool_by_option,
+                  let totalPool = betData.total_pool else {
+                print("❌ trackOddsHistory: Invalid bet data or missing pool information")
+                return
+            }
+            
+            // Calculate current odds
+            let currentOdds = self?.calculateImpliedOdds(for: betData) ?? [:]
+            
+            print("📊 trackOddsHistory: Processing bet \(betId)")
+            print("📊 Force update: \(forceUpdate)")
+            print("📊 Calculated odds: \(currentOdds)")
+            print("📊 Total pool: \(totalPool)")
+            print("📊 Pool by option: \(poolByOption)")
+            
+            // Check if we should track this change (avoid duplicates)
+            if !forceUpdate {
+                self?.checkAndTrackOddsChange(betId: betId, currentOdds: currentOdds, totalPool: totalPool, poolByOption: poolByOption)
+            } else {
+                print("📊 Saving initial odds history for new bet")
+                self?.saveOddsHistoryEntry(betId: betId, odds: currentOdds, totalPool: totalPool, poolByOption: poolByOption)
+            }
+        }
+    }
+    
+    /// Check if odds have changed significantly and track if needed
+    private func checkAndTrackOddsChange(betId: String, currentOdds: [String: Double], totalPool: Int, poolByOption: [String: Int]) {
+        // Get the most recent odds history entry
+        db.collection("OddsHistory")
+            .whereField("bet_id", isEqualTo: betId)
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ checkAndTrackOddsChange: Error fetching recent odds: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents,
+                      !documents.isEmpty else {
+                    // No previous entry, save this one
+                    self?.saveOddsHistoryEntry(betId: betId, odds: currentOdds, totalPool: totalPool, poolByOption: poolByOption)
+                    return
+                }
+                
+                // Get the most recent entry by sorting on client side
+                let sortedDocuments = documents.sorted { doc1, doc2 in
+                    let timestamp1 = doc1.data()["timestamp"] as? Timestamp ?? Timestamp(date: Date.distantPast)
+                    let timestamp2 = doc2.data()["timestamp"] as? Timestamp ?? Timestamp(date: Date.distantPast)
+                    return timestamp1.dateValue() > timestamp2.dateValue()
+                }
+                
+                guard let lastEntry = sortedDocuments.first,
+                      let lastOdds = lastEntry.data()["odds_by_option"] as? [String: Double] else {
+                    // Invalid entry, save this one
+                    self?.saveOddsHistoryEntry(betId: betId, odds: currentOdds, totalPool: totalPool, poolByOption: poolByOption)
+                    return
+                }
+                
+                // Check if odds have changed significantly (more than 1% or pool changed)
+                let lastTotalPool = lastEntry.data()["total_pool"] as? Int ?? 0
+                let hasSignificantChange = self?.hasSignificantOddsChange(currentOdds: currentOdds, lastOdds: lastOdds, currentPool: totalPool, lastPool: lastTotalPool) ?? true
+                
+                if hasSignificantChange {
+                    self?.saveOddsHistoryEntry(betId: betId, odds: currentOdds, totalPool: totalPool, poolByOption: poolByOption)
+                } else {
+                    print("📊 Odds haven't changed significantly for bet \(betId), skipping tracking")
+                }
+            }
+    }
+    
+    /// Check if there's a significant change in odds or pool
+    private func hasSignificantOddsChange(currentOdds: [String: Double], lastOdds: [String: Double], currentPool: Int, lastPool: Int) -> Bool {
+        // Check if pool changed significantly (more than 10 points)
+        if abs(currentPool - lastPool) > 10 {
+            return true
+        }
+        
+        // Check if any option's odds changed by more than 1%
+        for (option, currentOddsValue) in currentOdds {
+            if let lastOddsValue = lastOdds[option] {
+                let change = abs(currentOddsValue - lastOddsValue)
+                if change > 0.01 { // 1% change
+                    return true
+                }
+            }
+        }
+        
+        return false
+    }
+    
+    /// Save odds history entry to Firestore
+    private func saveOddsHistoryEntry(betId: String, odds: [String: Double], totalPool: Int, poolByOption: [String: Int]) {
+        let historyEntry = OddsHistoryEntry(
+            bet_id: betId,
+            odds_by_option: odds,
+            total_pool: totalPool,
+            pool_by_option: poolByOption
+        )
+        
+        do {
+            try db.collection("OddsHistory").document().setData(from: historyEntry)
+            print("✅ trackOddsHistory: Successfully saved odds history for bet \(betId)")
+            print("📊 Initial odds saved: \(odds)")
+            print("📊 Total pool: \(totalPool)")
+            print("📊 Pool by option: \(poolByOption)")
+            print("📊 Timestamp: \(historyEntry.timestamp)")
+        } catch {
+            print("❌ trackOddsHistory: Error saving odds history: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Fetch odds history for a specific bet
+    func fetchOddsHistory(for betId: String, completion: @escaping ([OddsHistoryEntry]) -> Void) {
+        db.collection("OddsHistory")
+            .whereField("bet_id", isEqualTo: betId)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ fetchOddsHistory: Error fetching odds history: \(error.localizedDescription)")
+                    completion([])
+                    return
+                }
+                
+                let historyEntries = snapshot?.documents.compactMap { document in
+                    try? document.data(as: OddsHistoryEntry.self)
+                } ?? []
+                
+                // Sort by timestamp on the client side to avoid index requirement
+                let sortedEntries = historyEntries.sorted { $0.timestamp < $1.timestamp }
+                
+                print("✅ fetchOddsHistory: Retrieved \(sortedEntries.count) odds history entries")
+                completion(sortedEntries)
+            }
+    }
+    
+    /// Clean up old odds history data (keep only last 30 days)
+    func cleanupOldOddsHistory() {
+        let thirtyDaysAgo = Date().addingTimeInterval(-30 * 24 * 60 * 60) // 30 days ago
+        
+        db.collection("OddsHistory")
+            .whereField("timestamp", isLessThan: Timestamp(date: thirtyDaysAgo))
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ cleanupOldOddsHistory: Error fetching old entries: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else { return }
+                
+                let batch = self?.db.batch()
+                var deleteCount = 0
+                
+                for document in documents {
+                    batch?.deleteDocument(document.reference)
+                    deleteCount += 1
+                    
+                    // Firestore batch limit is 500 operations
+                    if deleteCount >= 500 {
+                        break
+                    }
+                }
+                
+                batch?.commit { error in
+                    if let error = error {
+                        print("❌ cleanupOldOddsHistory: Error deleting old entries: \(error.localizedDescription)")
+                    } else {
+                        print("✅ cleanupOldOddsHistory: Deleted \(deleteCount) old odds history entries")
+                    }
+                }
+            }
     }
     
     /// Update pool data when a bet is placed
@@ -2306,15 +2749,18 @@ class FirestoreService: ObservableObject {
                         self?.updateBetPool(betId: betId, chosenOption: chosenOption, stakeAmount: stakeAmount) { poolUpdateSuccess in
                             if poolUpdateSuccess {
                                 print("✅ Successfully updated bet pool")
+                                // Track odds history after pool update (force update for immediate changes)
+                                self?.trackOddsHistory(for: betId, forceUpdate: true)
                             } else {
                                 print("❌ Failed to update bet pool, but bet was placed")
                             }
                         }
                         
-                        // Refresh user data and participations
+                        // Refresh user data, participations, and bet data
                         DispatchQueue.main.async {
                             self?.refreshCurrentUser()
                             self?.fetchUserBetParticipations()
+                            self?.fetchBets() // Refresh bet data to update odds on bet cards
                         }
                         
                         // Create notification for joining the bet
@@ -2537,6 +2983,9 @@ class FirestoreService: ObservableObject {
                 completion(false, error.localizedDescription)
             } else {
                 print("✅ Bet created successfully with ID: \(betId)")
+                
+                // Track initial odds history for the new bet (force update for new bets)
+                self?.trackOddsHistory(for: betId, forceUpdate: true)
                 
                 // Create notifications for all community members about the new bet
                 if let communityId = betData["community_id"] as? String,
@@ -3623,6 +4072,18 @@ class FirestoreService: ObservableObject {
             } else {
                 let username = "@\(email.components(separatedBy: "@").first ?? email)"
                 completion(email, username)
+            }
+        }
+    }
+    
+    func getUserProfilePicture(email: String, completion: @escaping (String?) -> Void) {
+        db.collection("Users").document(email).getDocument { document, error in
+            if let document = document, document.exists,
+               let data = document.data() {
+                let profilePictureUrl = data["profile_picture_url"] as? String
+                completion(profilePictureUrl)
+            } else {
+                completion(nil)
             }
         }
     }

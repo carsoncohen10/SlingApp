@@ -425,6 +425,26 @@ struct FirestoreCommunityMessage: Identifiable, Codable, Equatable {
 
 // MARK: - Error Log Model
 
+// MARK: - Odds History Models
+
+struct OddsHistoryEntry: Identifiable, Codable {
+    var id: String
+    var bet_id: String
+    var timestamp: Date
+    var odds_by_option: [String: Double] // option -> implied odds percentage
+    var total_pool: Int
+    var pool_by_option: [String: Int]
+    
+    init(bet_id: String, odds_by_option: [String: Double], total_pool: Int, pool_by_option: [String: Int]) {
+        self.id = UUID().uuidString
+        self.bet_id = bet_id
+        self.timestamp = Date()
+        self.odds_by_option = odds_by_option
+        self.total_pool = total_pool
+        self.pool_by_option = pool_by_option
+    }
+}
+
 struct FirestoreErrorLog: Identifiable, Codable {
     @DocumentID var id: String?
     var error_message: String

@@ -1068,7 +1068,22 @@ struct EnhancedBetCardView: View {
                                 
                                 Spacer()
                                 
-                                Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5))
+                                Text({
+                                    let calculatedOdds = firestoreService.calculateImpliedOdds(for: bet)
+                                    let optionOdds = calculatedOdds[option] ?? 0.5
+                                    let formattedOdds = firestoreService.formatImpliedOdds(optionOdds)
+                                    
+                                    // Debug logging for bet card
+                                    print("🔍 BET CARD DEBUG - Bet ID: \(bet.id ?? "nil")")
+                                    print("🔍 BET CARD DEBUG - Option: \(option)")
+                                    print("🔍 BET CARD DEBUG - Bet pool_by_option: \(bet.pool_by_option ?? [:])")
+                                    print("🔍 BET CARD DEBUG - Bet total_pool: \(bet.total_pool ?? 0)")
+                                    print("🔍 BET CARD DEBUG - Calculated odds dict: \(calculatedOdds)")
+                                    print("🔍 BET CARD DEBUG - Option odds: \(optionOdds)")
+                                    print("🔍 BET CARD DEBUG - Formatted odds: \(formattedOdds)")
+                                    
+                                    return formattedOdds
+                                }())
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                     .foregroundColor(.black)
@@ -1084,7 +1099,7 @@ struct EnhancedBetCardView: View {
                 
                 // Footer with Deadline and Action
                 HStack {
-                    Text("Deadline: \(formatDate(bet.deadline))")
+                    Text("Deadline: \(formatDeadline(bet.deadline))")
                         .font(.caption)
                         .foregroundColor(.gray)
                     
@@ -1116,6 +1131,14 @@ struct EnhancedBetCardView: View {
                 firestoreService: firestoreService,
                 onBetPlaced: nil
             )
+        }
+        .onAppear {
+            print("🔍 ENHANCED_BET_CARD onAppear - Bet ID: \(bet.id ?? "nil")")
+            print("🔍 ENHANCED_BET_CARD onAppear - Bet title: \(bet.title)")
+            print("🔍 ENHANCED_BET_CARD onAppear - Bet status: \(bet.status)")
+            print("🔍 ENHANCED_BET_CARD onAppear - Pool by option: \(bet.pool_by_option ?? [:])")
+            print("🔍 ENHANCED_BET_CARD onAppear - Total pool: \(bet.total_pool ?? 0)")
+            print("🔍 ENHANCED_BET_CARD onAppear - Options: \(bet.options)")
         }
     }
     
@@ -1162,6 +1185,13 @@ struct EnhancedBetCardView: View {
         
         // Return first name as fallback while fetching
         return email.components(separatedBy: "@").first ?? email
+    }
+    
+    // Helper function to format deadline
+    private func formatDeadline(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
     }
 }
 
@@ -1839,6 +1869,34 @@ struct ActiveBetCard: View {
                     .foregroundColor(.gray)
                     .padding(.bottom, 8)
                 
+                // Show odds for user's choice
+                HStack {
+                    Text("\(userChoice)")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                    
+                    Spacer()
+                    
+                    Text({
+                        let calculatedOdds = firestoreService.calculateImpliedOdds(for: bet)
+                        let optionOdds = calculatedOdds[userChoice] ?? 0.5
+                        let formattedOdds = firestoreService.formatImpliedOdds(optionOdds)
+                        
+                        // Debug logging for active bet card
+                        print("🔍 ACTIVE_BET_CARD DEBUG - Bet ID: \(bet.id ?? "nil")")
+                        print("🔍 ACTIVE_BET_CARD DEBUG - User choice: \(userChoice)")
+                        print("🔍 ACTIVE_BET_CARD DEBUG - Calculated odds: \(calculatedOdds)")
+                        print("🔍 ACTIVE_BET_CARD DEBUG - Option odds: \(optionOdds)")
+                        print("🔍 ACTIVE_BET_CARD DEBUG - Formatted odds: \(formattedOdds)")
+                        
+                        return formattedOdds
+                    }())
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.slingBlue)
+                }
+                .padding(.bottom, 8)
+                
                 // Wager or Settle Bet line
                 if isCreatorWithoutWager {
                     // Show Settle Bet for creators who haven't wagered
@@ -1932,6 +1990,7 @@ struct ActiveBetDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingSettleBetModal = false
     @State private var userFullNames: [String: String] = [:]
+    @State private var oddsHistory: [OddsHistoryEntry] = []
     
     private var communityName: String {
         if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
@@ -1953,7 +2012,10 @@ struct ActiveBetDetailView: View {
     }
     
     var body: some View {
-        NavigationView {
+        let _ = print("🔍 ActiveBetDetailView: Rendering body for bet: \(bet.title)")
+        let _ = print("🔍 ActiveBetDetailView: Current oddsHistory count: \(oddsHistory.count)")
+        
+        return NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Header
@@ -2002,7 +2064,22 @@ struct ActiveBetDetailView: View {
                                     
                                     Spacer()
                                     
-                                    Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5))
+                                    Text({
+                                        let calculatedOdds = firestoreService.calculateImpliedOdds(for: bet)
+                                        let optionOdds = calculatedOdds[option] ?? 0.5
+                                        let formattedOdds = firestoreService.formatImpliedOdds(optionOdds)
+                                        
+                                        // Debug logging for bet details view
+                                        print("🔍 BET DETAILS DEBUG - Bet ID: \(bet.id ?? "nil")")
+                                        print("🔍 BET DETAILS DEBUG - Option: \(option)")
+                                        print("🔍 BET DETAILS DEBUG - Bet pool_by_option: \(bet.pool_by_option ?? [:])")
+                                        print("🔍 BET DETAILS DEBUG - Bet total_pool: \(bet.total_pool ?? 0)")
+                                        print("🔍 BET DETAILS DEBUG - Calculated odds dict: \(calculatedOdds)")
+                                        print("🔍 BET DETAILS DEBUG - Option odds: \(optionOdds)")
+                                        print("🔍 BET DETAILS DEBUG - Formatted odds: \(formattedOdds)")
+                                        
+                                        return formattedOdds
+                                    }())
                                         .font(.subheadline)
                                         .fontWeight(.medium)
                                         .foregroundColor(.gray)
@@ -2012,6 +2089,23 @@ struct ActiveBetDetailView: View {
                                 .background(Color.gray.opacity(0.05))
                                 .cornerRadius(8)
                             }
+                        }
+                    }
+                    
+                    // Odds History Chart
+                    let _ = print("🔍 ActiveBetDetailView: About to render OddsHistoryChart with \(oddsHistory.count) entries")
+                    
+                    // Test view to see if this section is rendering at all
+                    VStack {
+                        Text("TEST: Chart section is rendering")
+                            .foregroundColor(.red)
+                            .font(.headline)
+                            .padding()
+                            .background(Color.yellow)
+                        
+                        OddsHistoryChart(bet: bet, oddsHistory: oddsHistory, firestoreService: firestoreService)
+                            .onAppear {
+                                print("🔍 ActiveBetDetailView: OddsHistoryChart appeared on screen")
                         }
                     }
                     
@@ -2131,6 +2225,15 @@ struct ActiveBetDetailView: View {
                     dismiss()
                 }
             )
+            .onAppear {
+                print("🔍 ActiveBetDetailView: onAppear called for bet: \(bet.title)")
+                print("🔍 ActiveBetDetailView: Bet ID: \(bet.id ?? "nil")")
+                print("🔍 ActiveBetDetailView: Bet status: \(bet.status)")
+                print("🔍 ActiveBetDetailView: Pool by option: \(bet.pool_by_option ?? [:])")
+                print("🔍 ActiveBetDetailView: Total pool: \(bet.total_pool ?? 0)")
+                print("🔍 ActiveBetDetailView: Options: \(bet.options)")
+                loadOddsHistory()
+            }
         }
         .sheet(isPresented: $showingSettleBetModal) {
             SettleBetModal(bet: bet, firestoreService: firestoreService)
@@ -2141,6 +2244,77 @@ struct ActiveBetDetailView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
         return formatter.string(from: date)
+    }
+    
+    private func loadOddsHistory() {
+        guard let betId = bet.id else { 
+            print("❌ loadOddsHistory: No bet ID available")
+            return 
+        }
+        
+        print("🔍 loadOddsHistory: Loading odds history for bet: \(betId)")
+        
+        firestoreService.fetchOddsHistory(for: betId) { historyEntries in
+            DispatchQueue.main.async {
+                print("📊 loadOddsHistory: Received \(historyEntries.count) history entries")
+                
+                if historyEntries.isEmpty {
+                    // If no real data, show sample data for demonstration
+                    print("📊 loadOddsHistory: No real data, generating sample data")
+                    self.generateSampleOddsHistory()
+                } else {
+                    print("📊 loadOddsHistory: Using real data")
+                    self.oddsHistory = historyEntries
+                }
+                
+                print("📊 loadOddsHistory: Final oddsHistory count: \(self.oddsHistory.count)")
+            }
+        }
+    }
+    
+    private func generateSampleOddsHistory() {
+        guard let betId = bet.id else { 
+            print("❌ generateSampleOddsHistory: No bet ID available")
+            return 
+        }
+        
+        print("🔍 generateSampleOddsHistory: Generating sample data for bet: \(betId)")
+        print("🔍 generateSampleOddsHistory: Bet options: \(bet.options)")
+        
+        var sampleHistory: [OddsHistoryEntry] = []
+        let options = bet.options
+        
+        // Generate sample data points over the last 7 days
+        for i in 0..<10 {
+            let timestamp = Calendar.current.date(byAdding: .hour, value: -i * 12, to: Date()) ?? Date()
+            
+            var oddsByOption: [String: Double] = [:]
+            var poolByOption: [String: Int] = [:]
+            
+            // Generate realistic odds progression
+            for (index, option) in options.enumerated() {
+                let baseOdds = Double(index + 1) / Double(options.count)
+                let variation = sin(Double(i) * 0.5 + Double(index)) * 0.2
+                let odds = max(0.1, min(0.9, baseOdds + variation))
+                
+                oddsByOption[option] = odds
+                poolByOption[option] = Int(odds * 1000) + Int.random(in: 0...200)
+            }
+            
+            let totalPool = poolByOption.values.reduce(0, +)
+            
+            let entry = OddsHistoryEntry(
+                bet_id: betId,
+                odds_by_option: oddsByOption,
+                total_pool: totalPool,
+                pool_by_option: poolByOption
+            )
+            
+            sampleHistory.append(entry)
+        }
+        
+        oddsHistory = sampleHistory.reversed() // Show oldest to newest
+        print("✅ generateSampleOddsHistory: Generated \(oddsHistory.count) sample entries")
     }
     
     // Function to get user's full name, with caching
@@ -2579,12 +2753,17 @@ struct MyBetCard: View {
                             Button(action: {
                                 activeSheet = .placeBet
                             }) {
-                                Text("Place Bet")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(Color.slingBlue)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(Color.slingLightBlue)
+                                HStack(spacing: 4) {
+                                    Text("place bet")
+                                        .font(.system(size: 14, weight: .semibold))
+                                    
+                                    Image(systemName: "arrow.right")
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                .foregroundColor(Color.slingBlue)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.slingLightBlue)
                                     .cornerRadius(6)
                             }
                         }
@@ -3356,6 +3535,37 @@ struct AvailableBetCard: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                
+                // Show odds for each option
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(bet.options, id: \.self) { option in
+                        HStack {
+                            Text(option)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                            
+                            Spacer()
+                            
+                            Text({
+                                let calculatedOdds = firestoreService.calculateImpliedOdds(for: bet)
+                                let optionOdds = calculatedOdds[option] ?? 0.5
+                                let formattedOdds = firestoreService.formatImpliedOdds(optionOdds)
+                                
+                                // Debug logging for available bet card
+                                print("🔍 AVAILABLE_BET_CARD DEBUG - Bet ID: \(bet.id ?? "nil")")
+                                print("🔍 AVAILABLE_BET_CARD DEBUG - Option: \(option)")
+                                print("🔍 AVAILABLE_BET_CARD DEBUG - Calculated odds: \(calculatedOdds)")
+                                print("🔍 AVAILABLE_BET_CARD DEBUG - Option odds: \(optionOdds)")
+                                print("🔍 AVAILABLE_BET_CARD DEBUG - Formatted odds: \(formattedOdds)")
+                                
+                                return formattedOdds
+                            }())
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                        }
+                    }
                 }
                 
                 // Bet Now Button
@@ -5591,9 +5801,12 @@ struct PlaceBetView: View {
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 .scaleEffect(0.8)
                         } else {
-                            Text("Place Bet")
-                                .font(.headline)
+                            Text("place bet")
+                                .font(.subheadline)
                                 .fontWeight(.semibold)
+                            
+                            Image(systemName: "arrow.right")
+                                .font(.subheadline)
                         }
                     }
                     .foregroundColor(.white)
@@ -5636,7 +5849,7 @@ struct PlaceBetView: View {
         }
         .alert("Confirm Bet", isPresented: $showingConfirmation) {
             Button("Cancel", role: .cancel) { }
-            Button("Place Bet") {
+            Button("place bet") {
                 placeBet()
             }
         } message: {
@@ -9780,11 +9993,10 @@ struct EnhancedNotificationRow: View {
                 
                 // Enhanced Content
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(notification.text)
-                        .font(.system(size: 15, weight: notification.isUnread ? .semibold : .regular))
-                        .foregroundColor(notification.isUnread ? .primary : .secondary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(3)
+                     NotificationTextView(
+                         text: notification.text,
+                         isUnread: notification.isUnread
+                     )
                     
                     HStack(spacing: 8) {
                         if let communityName = notification.communityName {
@@ -11393,8 +11605,8 @@ struct CreateBetView: View {
             "description": marketQuestion, // Use the title as description for now
             "image_url": NSNull(), // Will be populated later with Unsplash image
             "pool_by_option": Dictionary(uniqueKeysWithValues: outcomes.map { ($0, 0) }), // Initialize pool with 0 for each option
-            "total_pool": NSNull(), // Initialize total pool to null
-            "total_participants": NSNull(), // Initialize total participants to null
+            "total_pool": 0, // Initialize total pool to 0
+            "total_participants": 0, // Initialize total participants to 0
             "winner_option": NSNull(), // Will be set when bet is settled
             "created_date": Date(),
             "updated_date": Date(),
@@ -12167,6 +12379,1473 @@ struct NumericKeypadView: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 34) // Add padding for home indicator
+        }
+    }
+}
+
+// MARK: - Odds History Chart View
+
+struct OddsHistoryChart: View {
+    let bet: FirestoreBet
+    let oddsHistory: [OddsHistoryEntry]
+    @ObservedObject var firestoreService: FirestoreService
+    @State private var selectedOption: String? = nil
+    @State private var touchLocation: CGPoint? = nil
+    @State private var hoveredOdds: [String: Double] = [:]
+    @State private var hoveredDate: Date? = nil
+    @State private var selectedTimeframe: String = "ALL"
+    
+    private var chartData: [(option: String, points: [ChartPoint])] {
+        let options = selectedOption != nil ? [selectedOption!] : bet.options
+        var result: [(option: String, points: [ChartPoint])] = []
+        
+        print("📊 chartData: Starting with timeframe: \(selectedTimeframe)")
+        print("📊 chartData: Total odds history entries: \(oddsHistory.count)")
+        
+        // Filter odds history based on selected timeframe
+        let filteredHistory = filterOddsHistoryByTimeframe(oddsHistory, timeframe: selectedTimeframe)
+        print("📊 chartData: Filtered history entries for \(selectedTimeframe): \(filteredHistory.count)")
+        
+        // Check if we have meaningful data (more than just initial odds entry)
+        let hasRealBettingData = filteredHistory.count > 1 || 
+                                (filteredHistory.count == 1 && hasSignificantBettingActivity())
+        
+        for option in options {
+            let points = filteredHistory.map { entry in
+                ChartPoint(
+                    timestamp: entry.timestamp,
+                    odds: entry.odds_by_option[option] ?? 0.0
+                )
+            }.sorted { $0.timestamp < $1.timestamp }
+            
+            print("📊 chartData: Option '\(option)' has \(points.count) points after filtering")
+            
+            // If no real betting data, don't create artificial lines
+            if !hasRealBettingData {
+                print("📊 chartData: No real betting data yet for '\(option)' - skipping artificial data creation")
+                continue
+            }
+            
+            // For shorter timeframes (1H, 3H, 6H), always create granular data for better user experience
+            // For longer timeframes (1D, ALL), use real data when available
+            let shouldUseGranularData = points.isEmpty || (selectedTimeframe == "1H" || selectedTimeframe == "3H" || selectedTimeframe == "6H")
+            
+            if shouldUseGranularData {
+                print("📊 chartData: Creating granular data for '\(option)' in \(selectedTimeframe) (points.count: \(points.count))")
+                
+                // Get the most recent data point and create proper timeframe window
+                if let mostRecentEntry = oddsHistory.max(by: { $0.timestamp < $1.timestamp }),
+                   let odds = mostRecentEntry.odds_by_option[option] {
+                    
+                    // Create proper timeframe window (e.g., 7pm-8pm for 1H, 7pm-10pm for 3H)
+                    let now = Date()
+                    let endTime = now
+                    let startTime = endTime.addingTimeInterval(-getTimeframeInterval(selectedTimeframe))
+                    
+                    let granularPoints = createGranularPoints(
+                        startTime: startTime,
+                        endTime: endTime,
+                        odds: odds,
+                        timeframe: selectedTimeframe
+                    )
+                    
+                    result.append((option: option, points: granularPoints))
+                    print("📊 chartData: Created \(granularPoints.count) granular points for '\(option)' in \(selectedTimeframe) from \(startTime) to \(endTime)")
+                } else {
+                    // If absolutely no data, create a default granular line for proper timeframe
+                    let now = Date()
+                    let endTime = now
+                    let startTime = endTime.addingTimeInterval(-getTimeframeInterval(selectedTimeframe))
+                    
+                    let granularPoints = createGranularPoints(
+                        startTime: startTime,
+                        endTime: endTime,
+                        odds: 0.5,
+                        timeframe: selectedTimeframe
+                    )
+                    result.append((option: option, points: granularPoints))
+                    print("📊 chartData: Created \(granularPoints.count) default granular points for '\(option)' in \(selectedTimeframe) from \(startTime) to \(endTime)")
+                }
+            } else if points.count == 1 {
+                // If only one point in timeframe, create a second point to form a line
+                let singlePoint = points[0]
+                let earlierPoint = ChartPoint(
+                    timestamp: singlePoint.timestamp.addingTimeInterval(-3600), // 1 hour earlier
+                    odds: singlePoint.odds
+                )
+                result.append((option: option, points: [earlierPoint, singlePoint]))
+                print("📊 chartData: Created line from single timeframe point for '\(option)'")
+            } else {
+                result.append((option: option, points: points))
+                print("📊 chartData: Using timeframe data for '\(option)' (\(points.count) points)")
+            }
+        }
+        
+        print("📊 chartData: Final result has \(result.count) options")
+        for (index, data) in result.enumerated() {
+            print("📊 chartData: Option \(index): '\(data.option)' with \(data.points.count) points")
+        }
+        
+        return result
+    }
+    
+    private func getTimeframeInterval(_ timeframe: String) -> TimeInterval {
+        switch timeframe {
+        case "1H":
+            return 3600 // 1 hour
+        case "3H":
+            return 10800 // 3 hours
+        case "6H":
+            return 21600 // 6 hours
+        case "1D":
+            return 86400 // 1 day
+        case "ALL":
+            return 86400 * 30 // 30 days
+        default:
+            return 3600 // Default to 1 hour
+        }
+    }
+    
+    private func hasSignificantBettingActivity() -> Bool {
+        // Check if there's actual betting activity (not just initial odds)
+        guard let totalPool = bet.total_pool,
+              let poolByOption = bet.pool_by_option else {
+            return false
+        }
+        
+        // Consider it significant if total pool is > 0 (someone has actually bet)
+        return totalPool > 0
+    }
+    
+    private func createGranularPoints(startTime: Date, endTime: Date, odds: Double, timeframe: String) -> [ChartPoint] {
+        let calendar = Calendar.current
+        var points: [ChartPoint] = []
+        
+        let timeInterval: TimeInterval
+        let maxPoints: Int
+        
+        switch timeframe {
+        case "1H":
+            timeInterval = 60 // 1 minute intervals
+            maxPoints = 60 // 60 points for 1 hour
+        case "3H":
+            timeInterval = 300 // 5 minute intervals
+            maxPoints = 36 // 36 points for 3 hours (180 minutes / 5)
+        case "6H":
+            timeInterval = 600 // 10 minute intervals
+            maxPoints = 36 // 36 points for 6 hours (360 minutes / 10)
+        case "1D":
+            timeInterval = 3600 // 1 hour intervals
+            maxPoints = 24 // 24 points for 1 day
+        case "ALL":
+            // For ALL, use smart intervals based on total time span
+            let totalSpan = endTime.timeIntervalSince(startTime)
+            if totalSpan > 86400 * 7 { // More than a week
+                timeInterval = 86400 // Daily intervals
+                maxPoints = min(30, Int(totalSpan / timeInterval))
+            } else if totalSpan > 86400 { // More than a day
+                timeInterval = 3600 * 6 // 6 hour intervals
+                maxPoints = min(28, Int(totalSpan / timeInterval))
+            } else {
+                timeInterval = 3600 // Hourly intervals
+                maxPoints = min(24, Int(totalSpan / timeInterval))
+            }
+        default:
+            timeInterval = 3600
+            maxPoints = 24
+        }
+        
+        // Generate points
+        for i in 0..<maxPoints {
+            let timestamp = startTime.addingTimeInterval(TimeInterval(i) * timeInterval)
+            if timestamp <= endTime {
+                points.append(ChartPoint(timestamp: timestamp, odds: odds))
+            }
+        }
+        
+        // Always include the end time point
+        if !points.isEmpty && points.last!.timestamp < endTime {
+            points.append(ChartPoint(timestamp: endTime, odds: odds))
+        }
+        
+        return points
+    }
+    
+    private var colors: [Color] {
+        [Color(red: 0.2, green: 0.7, blue: 0.3), Color(red: 0.1, green: 0.4, blue: 0.8), Color(red: 0.8, green: 0.4, blue: 0.1), Color(red: 0.6, green: 0.3, blue: 0.8)]
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            chartHeader
+            
+            if oddsHistory.isEmpty {
+                emptyStateView
+            } else {
+                VStack(spacing: 12) {
+                    chartLegend
+                    chartWithData
+                }
+            }
+        }
+    }
+    
+    private var chartHeader: some View {
+        HStack {
+            Text("Odds History")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.black)
+            
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
+    }
+    
+    
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.system(size: 40))
+                .foregroundColor(.gray.opacity(0.5))
+            
+            Text("No odds history available")
+                .font(.subheadline)
+                .foregroundColor(.gray)
+            
+            Text("Odds will appear here as participants place bets")
+                .font(.caption)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+            
+                }
+                .frame(height: 120)
+                .frame(maxWidth: .infinity)
+                .background(Color.gray.opacity(0.05))
+        .cornerRadius(12)
+        .padding(.horizontal, 20)
+    }
+    
+    private var chartWithData: some View {
+        VStack(spacing: 0) {
+            // Check if we have real betting data
+            let filteredHistory = filterOddsHistoryByTimeframe(oddsHistory, timeframe: selectedTimeframe)
+            let hasRealBettingData = filteredHistory.count > 1 || 
+                                    (filteredHistory.count == 1 && hasSignificantBettingActivity())
+            
+            if !hasRealBettingData {
+                // Show "Not enough data yet" message
+                VStack(spacing: 12) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 32))
+                        .foregroundColor(.gray.opacity(0.4))
+                    
+                    Text("Not enough data yet")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.gray)
+                    
+                    Text("Odds will appear here once people start betting")
+                        .font(.caption)
+                        .foregroundColor(.gray.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(height: 140)
+                .frame(maxWidth: .infinity)
+                .background(Color.gray.opacity(0.05))
+                .cornerRadius(12)
+            } else {
+                // 100% label above the graph
+                HStack {
+                    Text("100%")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.gray.opacity(0.6))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 16)
+                    Spacer()
+                }
+                .padding(.bottom, 8)
+                
+                // Chart area only (no Y-axis labels)
+                chartArea
+                
+                // 0% label below the graph
+                HStack {
+                    Text("0%")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.gray.opacity(0.6))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 16)
+                    Spacer()
+                }
+                .padding(.top, 8)
+            }
+            
+            // Bottom section with volume and timeframe selector
+            HStack {
+                // Total volume display (bottom left) - aligned with chart edge
+                totalVolumeDisplay
+                    .padding(.leading, 16)
+                
+                Spacer()
+                
+                // Timeframe selector (bottom right) - aligned with chart edge
+                timeframeSelector
+                    .padding(.trailing, 16)
+            }
+            .padding(.top, 12)
+        }
+        .padding(.horizontal, 8)
+    }
+    
+    private var chartLegend: some View {
+        HStack(spacing: 16) {
+            ForEach(Array(bet.options.enumerated()), id: \.offset) { index, option in
+                Button(action: {
+                    if selectedOption == option {
+                        selectedOption = nil // Deselect if already selected
+                    } else {
+                        selectedOption = option
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(colors[index % colors.count])
+                            .frame(width: 8, height: 8)
+                            .opacity(selectedOption == nil || selectedOption == option ? 1.0 : 0.3)
+                        
+                        Text(option)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(selectedOption == nil || selectedOption == option ? .black : .gray)
+                            .lineLimit(1)
+                        
+                        // Show current odds percentage or hovered odds if dragging
+                        Text("\(Int((hoveredOdds[option] ?? firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5) * 100))%")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.gray)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 4)
+    }
+    
+    private var chartArea: some View {
+        GeometryReader { geometry in
+            ZStack {
+                gridLines(geometry: geometry)
+                chartLines(geometry: geometry)
+                
+                // Vertical line for touch interaction
+                if let touchLoc = touchLocation {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 1)
+                        .position(x: touchLoc.x, y: geometry.size.height / 2)
+                        .allowsHitTesting(false) // Allow drag gesture to pass through
+                    
+                    // Date label above the line
+                    if let date = hoveredDate {
+                        VStack {
+                            Text(formatDate(date))
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.gray)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.white)
+                                .cornerRadius(4)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .stroke(Color.gray.opacity(0.2), lineWidth: 0.5)
+                                )
+                            
+                            Spacer()
+                        }
+                        .position(x: touchLoc.x, y: 10)
+                        .allowsHitTesting(false) // Allow drag gesture to pass through
+                    }
+                }
+                
+                // Transparent overlay to capture all touches
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                handleChartTouch(at: value.location, geometry: geometry)
+                            }
+                            .onEnded { _ in
+                                // Clear touch location when drag ends
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                    touchLocation = nil
+                                    hoveredOdds = [:]
+                                    hoveredDate = nil
+                                }
+                            }
+                    )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(height: 140)
+        .padding(.horizontal, 16)
+    }
+    
+    private func gridLines(geometry: GeometryProxy) -> some View {
+        ForEach([0, 2, 4], id: \.self) { i in
+            let y = CGFloat(i) * (geometry.size.height / 4)
+            Rectangle()
+                .fill(Color.gray.opacity(0.1))
+                .frame(height: 0.5)
+                .offset(y: y - geometry.size.height / 2)
+                .allowsHitTesting(false) // Allow drag gesture to pass through
+        }
+    }
+    
+    private func chartLines(geometry: GeometryProxy) -> some View {
+        ForEach(0..<chartData.count, id: \.self) { index in
+            let data = chartData[index]
+            if !data.points.isEmpty {
+                ZStack {
+                    // Only draw path if we have more than one point
+                    if data.points.count > 1 {
+                        chartPath(data: data, geometry: geometry, colorIndex: index)
+                            .animation(.easeInOut(duration: 0.6), value: selectedTimeframe)
+                            .allowsHitTesting(false) // Allow drag gesture to pass through
+                    }
+                    
+                    // Always show bouncing dot at the end (or only point)
+                    if let lastPoint = data.points.last {
+                        bouncingDot(at: lastPoint, geometry: geometry, colorIndex: index)
+                            .allowsHitTesting(false) // Allow drag gesture to pass through
+                            .onAppear {
+                                print("🔴 BouncingDot appeared for \(data.option) in \(selectedTimeframe) timeframe at point: \(lastPoint.timestamp), odds: \(lastPoint.odds)")
+                            }
+                    }
+                }
+                .onAppear {
+                    // Debug logging moved to onAppear to avoid view builder issues
+                    DispatchQueue.main.async {
+                        print("🔵 Chart data for \(data.option) in \(selectedTimeframe): \(data.points.count) points")
+                        if let first = data.points.first, let last = data.points.last {
+                            print("🔵 First point: \(first.timestamp), odds: \(first.odds)")
+                            print("🔵 Last point: \(last.timestamp), odds: \(last.odds)")
+                        }
+                    }
+                }
+            } else {
+                // Debug logging moved to onAppear to avoid view builder issues
+                let _ = DispatchQueue.main.async {
+                    print("🔵 No points for \(data.option) in \(selectedTimeframe)")
+                }
+            }
+        }
+        .onAppear {
+            print("🔵 chartLines onAppear - selectedTimeframe: \(selectedTimeframe), chartData.count: \(chartData.count)")
+        }
+    }
+    
+    private func chartPath(data: (option: String, points: [ChartPoint]), geometry: GeometryProxy, colorIndex: Int) -> some View {
+        Path { path in
+            let width = geometry.size.width
+            let height = geometry.size.height
+            
+            guard data.points.count > 1 else { return }
+            
+            // Start with the first point
+            let firstPoint = data.points[0]
+            let firstX = CGFloat(0) * (width / CGFloat(data.points.count - 1))
+            let firstY = height - (CGFloat(firstPoint.odds) * height)
+            path.move(to: CGPoint(x: firstX, y: firstY))
+            
+            // Create smooth curves between points
+            for pointIndex in 1..<data.points.count {
+                let currentPoint = data.points[pointIndex]
+                let prevPoint = data.points[pointIndex - 1]
+                
+                let currentX = CGFloat(pointIndex) * (width / CGFloat(data.points.count - 1))
+                let currentY = height - (CGFloat(currentPoint.odds) * height)
+                
+                let prevX = CGFloat(pointIndex - 1) * (width / CGFloat(data.points.count - 1))
+                let prevY = height - (CGFloat(prevPoint.odds) * height)
+                
+                // Create control points for smooth curves
+                let controlPoint1X = prevX + (currentX - prevX) * 0.5
+                let controlPoint1Y = prevY
+                let controlPoint2X = prevX + (currentX - prevX) * 0.5
+                let controlPoint2Y = currentY
+                
+                path.addCurve(
+                    to: CGPoint(x: currentX, y: currentY),
+                    control1: CGPoint(x: controlPoint1X, y: controlPoint1Y),
+                    control2: CGPoint(x: controlPoint2X, y: controlPoint2Y)
+                )
+            }
+        }
+        .stroke(colors[colorIndex % colors.count], lineWidth: 2.5)
+        .animation(.easeInOut(duration: 0.6).delay(0.1), value: selectedTimeframe)
+    }
+    
+    private func bouncingDot(at point: ChartPoint, geometry: GeometryProxy, colorIndex: Int) -> some View {
+        BouncingDotView(
+            point: point,
+            geometry: geometry,
+            colorIndex: colorIndex,
+            chartData: chartData,
+            colors: colors
+        )
+    }
+    
+    
+    
+    private func handleChartTouch(at location: CGPoint, geometry: GeometryProxy) {
+        // Constrain touch location within chart boundaries
+        let chartWidth = geometry.size.width
+        let chartHeight = geometry.size.height
+        
+        // Clamp X coordinate to chart width
+        let clampedX = max(0, min(location.x, chartWidth))
+        // Clamp Y coordinate to chart height (prevent dragging beyond 0% and 100% lines)
+        let clampedY = max(0, min(location.y, chartHeight))
+        
+        let constrainedLocation = CGPoint(x: clampedX, y: clampedY)
+        touchLocation = constrainedLocation
+        
+        // Use the actual chart data that's being displayed (including granular points)
+        let currentChartData = chartData
+        guard !currentChartData.isEmpty else { return }
+        
+        let xRatio = clampedX / chartWidth
+        
+        // Get the first option's data to determine time range (all options have same time range)
+        let firstOptionData = currentChartData[0]
+        guard firstOptionData.points.count > 1 else { return }
+        
+        let startTime = firstOptionData.points.first!.timestamp
+        let endTime = firstOptionData.points.last!.timestamp
+        
+        // Calculate the exact time at this position
+        let totalTimeSpan = endTime.timeIntervalSince(startTime)
+        let targetTime = startTime.addingTimeInterval(xRatio * totalTimeSpan)
+        
+        // Find the two data points to interpolate between for each option
+        var interpolatedOdds: [String: Double] = [:]
+        
+        for optionData in currentChartData {
+            let option = optionData.option
+            let points = optionData.points
+            
+            var leftIndex = 0
+            var rightIndex = points.count - 1
+            
+            // Find the two points that bracket the target time
+            for i in 0..<points.count - 1 {
+                if points[i].timestamp <= targetTime && points[i + 1].timestamp >= targetTime {
+                    leftIndex = i
+                    rightIndex = i + 1
+                    break
+                }
+            }
+            
+            let leftPoint = points[leftIndex]
+            let rightPoint = points[rightIndex]
+            
+            // Calculate interpolation factor
+            let leftTime = leftPoint.timestamp.timeIntervalSince(startTime)
+            let rightTime = rightPoint.timestamp.timeIntervalSince(startTime)
+            let targetTimeRelative = targetTime.timeIntervalSince(startTime)
+            
+            let interpolationFactor: Double
+            if rightTime == leftTime {
+                interpolationFactor = 0
+            } else {
+                interpolationFactor = (targetTimeRelative - leftTime) / (rightTime - leftTime)
+            }
+            
+            // Interpolate odds for this option
+            let leftOdds = leftPoint.odds
+            let rightOdds = rightPoint.odds
+            interpolatedOdds[option] = leftOdds + interpolationFactor * (rightOdds - leftOdds)
+        }
+        
+        hoveredOdds = interpolatedOdds
+        hoveredDate = targetTime
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        
+        switch selectedTimeframe {
+        case "1H":
+            // Show minutes for 1H timeframe
+            formatter.dateFormat = "h:mm a"
+            return formatter.string(from: date)
+        case "3H":
+            // Show 5-minute increments for 3H timeframe
+            let calendar = Calendar.current
+            let minute = calendar.component(.minute, from: date)
+            let roundedMinute = (minute / 5) * 5 // Round to nearest 5 minutes
+            let roundedDate = calendar.date(bySettingHour: calendar.component(.hour, from: date), 
+                                          minute: roundedMinute, 
+                                          second: 0, 
+                                          of: date) ?? date
+            formatter.dateFormat = "h:mm a"
+            return formatter.string(from: roundedDate)
+        case "6H":
+            // Show 10-minute increments for 6H timeframe
+            let calendar = Calendar.current
+            let minute = calendar.component(.minute, from: date)
+            let roundedMinute = (minute / 10) * 10 // Round to nearest 10 minutes
+            let roundedDate = calendar.date(bySettingHour: calendar.component(.hour, from: date), 
+                                          minute: roundedMinute, 
+                                          second: 0, 
+                                          of: date) ?? date
+            formatter.dateFormat = "h:mm a"
+            return formatter.string(from: roundedDate)
+        case "1D":
+            // Show hours for 1D timeframe - round to nearest hour
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+            let roundedDate = calendar.date(from: components) ?? date
+            formatter.dateFormat = "MMM d, h a"
+            return formatter.string(from: roundedDate)
+        case "ALL":
+            // Smart display for ALL timeframe
+            let now = Date()
+            let daysDifference = Calendar.current.dateComponents([.day], from: date, to: now).day ?? 0
+            
+            if daysDifference >= 1 {
+                formatter.dateFormat = "MMM d"
+            } else {
+                // Round to nearest hour for recent data
+                let calendar = Calendar.current
+                let components = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+                let roundedDate = calendar.date(from: components) ?? date
+                formatter.dateFormat = "MMM d, h a"
+                return formatter.string(from: roundedDate)
+            }
+        default:
+            formatter.dateFormat = "MMM d, h a"
+        }
+        
+        return formatter.string(from: date)
+    }
+    
+    
+    private func filterOddsHistoryByTimeframe(_ history: [OddsHistoryEntry], timeframe: String) -> [OddsHistoryEntry] {
+        let now = Date()
+        let cutoffDate: Date
+        
+        print("📊 filterOddsHistoryByTimeframe: Filtering for timeframe '\(timeframe)'")
+        print("📊 filterOddsHistoryByTimeframe: Input history has \(history.count) entries")
+        print("📊 filterOddsHistoryByTimeframe: Current time: \(now)")
+        
+        switch timeframe {
+        case "1H":
+            cutoffDate = now.addingTimeInterval(-1 * 60 * 60) // 1 hour ago
+            print("📊 filterOddsHistoryByTimeframe: 1H cutoff: \(cutoffDate)")
+        case "3H":
+            cutoffDate = now.addingTimeInterval(-3 * 60 * 60) // 3 hours ago
+            print("📊 filterOddsHistoryByTimeframe: 3H cutoff: \(cutoffDate)")
+        case "6H":
+            cutoffDate = now.addingTimeInterval(-6 * 60 * 60) // 6 hours ago
+            print("📊 filterOddsHistoryByTimeframe: 6H cutoff: \(cutoffDate)")
+        case "1D":
+            cutoffDate = now.addingTimeInterval(-24 * 60 * 60) // 1 day ago
+            print("📊 filterOddsHistoryByTimeframe: 1D cutoff: \(cutoffDate)")
+        default: // "ALL"
+            print("📊 filterOddsHistoryByTimeframe: ALL timeframe - returning all \(history.count) entries")
+            return history
+        }
+        
+        let filtered = history.filter { $0.timestamp >= cutoffDate }
+        print("📊 filterOddsHistoryByTimeframe: Filtered result has \(filtered.count) entries")
+        
+        // Log some sample timestamps for debugging
+        if !history.isEmpty {
+            print("📊 filterOddsHistoryByTimeframe: Sample timestamps:")
+            for (index, entry) in history.prefix(3).enumerated() {
+                print("📊 filterOddsHistoryByTimeframe: Entry \(index): \(entry.timestamp)")
+            }
+        }
+        
+        return filtered
+    }
+    
+    private var totalVolumeDisplay: some View {
+        let totalVolume = oddsHistory.reduce(0) { total, entry in
+            total + (entry.total_pool ?? 0)
+        }
+        
+        return HStack(spacing: 6) {
+            Text("Total Volume")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.gray)
+            
+            HStack(spacing: 4) {
+                // Lightning bolt with Sling gradient - moved to front of volume number
+                Image(systemName: "bolt.fill")
+                    .font(.caption)
+                    .foregroundStyle(AnyShapeStyle(Color.slingGradient))
+                
+                Text("\(totalVolume)")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+            }
+        }
+    }
+    
+     private var timeframeSelector: some View {
+         HStack(spacing: 6) {
+             ForEach(["1H", "3H", "6H", "1D", "ALL"], id: \.self) { timeframe in
+                 Button(action: {
+                     withAnimation(.easeInOut(duration: 0.3)) {
+                         selectedTimeframe = timeframe
+                     }
+                 }) {
+                     Text(timeframe)
+                         .font(.caption2)
+                         .fontWeight(.medium)
+                         .foregroundColor(selectedTimeframe == timeframe ? .white : .gray)
+                         .padding(.horizontal, 6)
+                         .padding(.vertical, 3)
+                         .background(
+                             RoundedRectangle(cornerRadius: 4)
+                                 .fill(selectedTimeframe == timeframe ? AnyShapeStyle(Color.slingGradient) : AnyShapeStyle(Color.clear))
+                         )
+                 }
+                 .buttonStyle(PlainButtonStyle())
+             }
+         }
+     }
+}
+
+struct ChartPoint {
+    let timestamp: Date
+    let odds: Double
+}
+
+// MARK: - Notification Text View
+
+struct NotificationTextView: View {
+    let text: String
+    let isUnread: Bool
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            let components = parseNotificationText(text)
+            
+            // Debug logging
+            let _ = DispatchQueue.main.async {
+                print("🔔 NotificationTextView: Original text: '\(text)'")
+                print("🔔 NotificationTextView: Parsed components: \(components.count)")
+                for (i, comp) in components.enumerated() {
+                    print("🔔 Component \(i): '\(comp.text)' isNumber: \(comp.isNumber)")
+                }
+            }
+            
+            ForEach(Array(components.enumerated()), id: \.offset) { index, component in
+                if component.isNumber {
+                    // Number - show with comma formatting
+                    Text(component.text)
+                        .font(.system(size: 15, weight: isUnread ? .semibold : .regular))
+                        .foregroundColor(isUnread ? .primary : .secondary)
+                } else {
+                    // Regular text
+                    Text(component.text)
+                        .font(.system(size: 15, weight: isUnread ? .semibold : .regular))
+                        .foregroundColor(isUnread ? .primary : .secondary)
+                }
+            }
+        }
+        .multilineTextAlignment(.leading)
+        .lineLimit(3)
+    }
+    
+    private func parseNotificationText(_ text: String) -> [TextComponent] {
+        var components: [TextComponent] = []
+        
+        // First, remove any legacy [LIGHTNING_BOLT] placeholders
+        let cleanedText = text.replacingOccurrences(of: "[LIGHTNING_BOLT]", with: "")
+        
+        // Debug logging for notification text cleaning
+        if text != cleanedText {
+            print("🔔 NotificationTextView: Cleaned legacy [LIGHTNING_BOLT] from: '\(text)' -> '\(cleanedText)'")
+        }
+        
+        // Process the cleaned text
+        let words = cleanedText.trimmingCharacters(in: .whitespaces).components(separatedBy: " ")
+        
+        for (wordIndex, word) in words.enumerated() {
+            if !word.isEmpty {
+                // Check if this word is a number
+                if let number = Int(word.replacingOccurrences(of: ",", with: "")) {
+                    let formatter = NumberFormatter()
+                    formatter.numberStyle = .decimal
+                    let formattedNumber = formatter.string(from: NSNumber(value: number)) ?? word
+                    components.append(TextComponent(text: formattedNumber, isNumber: true))
+                } else {
+                    // Add space after word except for the last word
+                    let textToAdd = word + (wordIndex < words.count - 1 ? " " : "")
+                    components.append(TextComponent(text: textToAdd, isNumber: false))
+                }
+            }
+        }
+        
+        return components
+    }
+}
+
+struct TextComponent {
+    let text: String
+    let isNumber: Bool
+    
+    init(text: String, isNumber: Bool = false) {
+        self.text = text
+        self.isNumber = isNumber
+    }
+}
+
+struct BouncingDotView: View {
+    let point: ChartPoint
+    let geometry: GeometryProxy
+    let colorIndex: Int
+    let chartData: [(option: String, points: [ChartPoint])]
+    let colors: [Color]
+    
+    @State private var pulseScale: CGFloat = 1.0
+    
+    var body: some View {
+        let width = geometry.size.width
+        let height = geometry.size.height
+        
+        // Find the index of this point in the data - use approximate matching for granular data
+        guard let dataIndex = chartData.firstIndex(where: { data in
+            data.points.contains { chartPoint in
+                abs(chartPoint.timestamp.timeIntervalSince(point.timestamp)) < 1.0 // Within 1 second
+            }
+        }) else {
+            print("🔴 BouncingDotView: Could not find point in chartData - timestamp: \(point.timestamp)")
+            print("🔴 Available timestamps: \(chartData.flatMap { $0.points.map { $0.timestamp } })")
+            return AnyView(Circle().frame(width: 0, height: 0))
+        }
+        
+        guard let pointIndex = chartData[dataIndex].points.firstIndex(where: { chartPoint in
+            abs(chartPoint.timestamp.timeIntervalSince(point.timestamp)) < 1.0
+        }) else {
+            print("🔴 BouncingDotView: Could not find point index for timestamp: \(point.timestamp)")
+            return AnyView(Circle().frame(width: 0, height: 0))
+        }
+        
+        let x: CGFloat
+        let y = height - (CGFloat(point.odds) * height)
+        
+        // Handle single point case
+        if chartData[dataIndex].points.count == 1 {
+            x = width / 2 // Center single points
+        } else {
+            x = CGFloat(pointIndex) * (width / CGFloat(chartData[dataIndex].points.count - 1))
+        }
+        
+        print("🔴 BouncingDotView positioning - pointIndex: \(pointIndex), totalPoints: \(chartData[dataIndex].points.count), x: \(x), y: \(y), width: \(width), height: \(height)")
+        
+        return AnyView(
+            ZStack {
+                // Inner dot - stays fixed in position, no scaling
+                Circle()
+                    .fill(colors[colorIndex % colors.count])
+                    .frame(width: 6, height: 6)
+                
+                // Outer pulsing ring - this scales around the inner dot
+                Circle()
+                    .stroke(colors[colorIndex % colors.count], lineWidth: 2)
+                    .frame(width: 16, height: 16)
+                    .opacity(0.4)
+                    .scaleEffect(pulseScale)
+                    .onAppear {
+                        withAnimation(
+                            .easeInOut(duration: 1.0)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(colorIndex) * 0.3)
+                        ) {
+                            pulseScale = 1.08
+                        }
+                    }
+            }
+            .position(x: x, y: y)
+        )
+    }
+}
+
+// MARK: - Enhanced Participant List
+
+struct EnhancedParticipantList: View {
+    let bet: FirestoreBet
+    let firestoreService: FirestoreService
+    let getBetParticipants: () -> [BetParticipant]?
+    let getUserFullName: (String) -> String
+    
+    @State private var showingDetailSheet = false
+    @State private var selectedOption: String = ""
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Participant List:")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.black)
+                .padding(.horizontal, 16)
+            
+            if let participants = getBetParticipants() {
+                if participants.isEmpty {
+                    emptyStateView
+                } else {
+                    // Group participants by outcome
+                    let groupedParticipants = groupParticipantsByOutcome(participants)
+                    
+                    VStack(spacing: 0) {
+                        ForEach(Array(bet.options.enumerated()), id: \.offset) { index, option in
+                            let optionParticipants = groupedParticipants[option] ?? []
+                            let isLastOption = index == bet.options.count - 1
+                            participantOptionRow(
+                                option: option,
+                                participants: optionParticipants,
+                                showDivider: !isLastOption
+                            )
+                        }
+                    }
+                }
+            } else {
+                emptyStateView
+            }
+        }
+        .sheet(isPresented: $showingDetailSheet) {
+            ParticipantDetailView(
+                option: selectedOption,
+                participants: getBetParticipants()?.filter { $0.chosen_option == selectedOption } ?? [],
+                getUserFullName: getUserFullName,
+                bet: bet,
+                firestoreService: firestoreService
+            )
+        }
+    }
+    
+    private var emptyStateView: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "person.2.slash")
+                .font(.title2)
+                .foregroundColor(.gray.opacity(0.6))
+            
+            Text("No active bettors yet")
+                .font(.subheadline)
+                .foregroundColor(.gray)
+                .fontWeight(.medium)
+            
+            Text("Be the first to place a bet!")
+                .font(.caption)
+                .foregroundColor(.gray.opacity(0.8))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+    }
+    
+    private func groupParticipantsByOutcome(_ participants: [BetParticipant]) -> [String: [BetParticipant]] {
+        var grouped: [String: [BetParticipant]] = [:]
+        
+        for participant in participants {
+            let outcome = participant.chosen_option
+            if grouped[outcome] == nil {
+                grouped[outcome] = []
+            }
+            grouped[outcome]?.append(participant)
+        }
+        
+        // Sort each group by stake amount (largest first)
+        for outcome in grouped.keys {
+            grouped[outcome]?.sort { $0.stake_amount > $1.stake_amount }
+        }
+        
+        return grouped
+    }
+    
+    private func participantOptionRow(option: String, participants: [BetParticipant], showDivider: Bool = true) -> some View {
+        let totalWagered = participants.reduce(0) { $0 + $1.stake_amount }
+        let color = getColorForOption(option)
+        let icon = getIconForOption(option)
+        
+        return Button(action: {
+            selectedOption = option
+            showingDetailSheet = true
+        }) {
+            VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                // Option name - regular weight, left aligned
+                Text(option)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .frame(width: 50, alignment: .leading)
+                
+                // Stacked profile pictures with better overlap - moved closer to option
+                if participants.isEmpty {
+                    // Show "No bets yet" message when no participants
+                    Text("No bets yet")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.gray)
+                        .italic()
+                } else {
+                    HStack(spacing: -4) {
+                        ForEach(Array(participants.prefix(3).enumerated()), id: \.offset) { index, participant in
+                            ParticipantProfilePictureView(
+                                userEmail: participant.user_email,
+                                size: 32,
+                                borderWidth: 1.5
+                            )
+                            .zIndex(Double(3 - index))
+                            .overlay(
+                                Circle()
+                                    .stroke(LinearGradient(
+                                        gradient: Gradient(colors: [Color(red: 0.2, green: 0.6, blue: 1.0), Color(red: 0.4, green: 0.8, blue: 1.0)]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ), lineWidth: 1.5)
+                            )
+                        }
+                        
+                        // Show "+X more" if there are more than 3 participants
+                        if participants.count > 3 {
+                            Circle()
+                                .fill(Color.slingBlue)
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Text("+\(participants.count - 3)")
+                                        .font(.caption2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                )
+                                .zIndex(0)
+                                .overlay(
+                                    Circle()
+                                        .stroke(LinearGradient(
+                                            gradient: Gradient(colors: [Color(red: 0.2, green: 0.6, blue: 1.0), Color(red: 0.4, green: 0.8, blue: 1.0)]),
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ), lineWidth: 1.5)
+                                )
+                        }
+                    }
+                }
+                    
+                    Spacer()
+                    
+                    // Total wagered with Sling gradient lightning bolt
+                    HStack(spacing: 6) {
+                        Image(systemName: "bolt.fill")
+                            .font(.caption)
+                            .foregroundStyle(AnyShapeStyle(Color.slingGradient))
+                        
+                        Text(formatNumberWithCommas(totalWagered))
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Right arrow to indicate clickability
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .background(Color(.systemBackground))
+                
+                // Faint horizontal divider line - only show if not last option
+                if showDivider {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 0.5)
+                        .padding(.horizontal, 16)
+                }
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func getColorForOption(_ option: String) -> Color {
+        switch option.lowercased() {
+        case "yes":
+            return Color.slingBlue
+        case "no":
+            return Color.slingPurple
+        default:
+            return Color.gray
+        }
+    }
+    
+    private func getIconForOption(_ option: String) -> String {
+        switch option.lowercased() {
+        case "yes":
+            return "checkmark.circle.fill"
+        case "no":
+            return "xmark.circle.fill"
+        default:
+            return "circle.fill"
+        }
+    }
+    
+    private func getUserInitials(from email: String) -> String {
+        let fullName = getUserFullName(email)
+        let components = fullName.components(separatedBy: " ")
+        
+        if components.count >= 2 {
+            let firstInitial = String(components[0].prefix(1)).uppercased()
+            let lastInitial = String(components[1].prefix(1)).uppercased()
+            return "\(firstInitial)\(lastInitial)"
+        } else if components.count == 1 {
+            return String(components[0].prefix(2)).uppercased()
+        } else {
+            return String(email.prefix(2)).uppercased()
+        }
+    }
+    
+    private func formatNumberWithCommas(_ number: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: number)) ?? "\(number)"
+    }
+}
+
+// MARK: - Participant Detail View
+
+struct ParticipantDetailView: View {
+    let option: String
+    let participants: [BetParticipant]
+    let getUserFullName: (String) -> String
+    let bet: FirestoreBet
+    let firestoreService: FirestoreService
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    private var communityName: String {
+        if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
+            return community.name
+        }
+        return "Community"
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header with X button in top left
+            HStack {
+                Button(action: {
+                    dismiss()
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.black)
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 20)
+            
+            // Bet Choice section - left aligned, larger font
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Text("Bet Choice:")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                        
+                        Text(option)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.slingBlue)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            
+            // Summary section
+            HStack {
+                Image(systemName: "person.2")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                
+                Text(communityName)
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.fill")
+                        .font(.subheadline)
+                        .foregroundColor(.slingBlue)
+                    
+                    Text("\(formatNumberWithCommas(totalWagered))")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.slingBlue)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            
+            // Divider
+            Rectangle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(height: 0.5)
+                .padding(.horizontal, 16)
+            
+            // Participants List with fixed bottom button
+            VStack(spacing: 0) {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if participants.isEmpty {
+                            // No bets placed message
+                            VStack(spacing: 16) {
+                                Image(systemName: "person.2.slash")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.gray.opacity(0.6))
+                                
+                                Text("No bets placed yet")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.gray)
+                                
+                                Text("Be the first to place a bet on this option!")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray.opacity(0.8))
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                        } else {
+                            ForEach(participants, id: \.user_email) { participant in
+                                participantDetailRow(participant: participant)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 20) // Bottom padding for content
+                }
+                
+            }
+        }
+        .background(Color.white)
+        .cornerRadius(16, corners: [.topLeft, .topRight])
+        .ignoresSafeArea(.all, edges: .bottom)
+    }
+    
+    private var totalWagered: Int {
+        participants.reduce(0) { $0 + $1.stake_amount }
+    }
+    
+    private func formatNumberWithCommas(_ number: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: number)) ?? "\(number)"
+    }
+    
+    private func participantDetailRow(participant: BetParticipant) -> some View {
+        HStack(spacing: 12) {
+            // Blue circle with white initials
+            Circle()
+                .fill(Color.slingBlue)
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Text(getUserInitials(from: participant.user_email))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                )
+            
+            // User info section
+            VStack(alignment: .leading, spacing: 2) {
+                Text(getUserFullName(participant.user_email))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.black)
+                    .lineLimit(1)
+                
+                Text("1d ago")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            // Blue text with lightning bolt
+            HStack(spacing: 4) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.slingBlue)
+                
+                Text(formatNumberWithCommas(participant.stake_amount))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.slingBlue)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+    
+    private func getColorForOption(_ option: String) -> Color {
+        switch option.lowercased() {
+        case "yes":
+            return Color.slingBlue
+        case "no":
+            return Color.slingPurple
+        default:
+            return Color.slingBlue
+        }
+    }
+    
+    private func getIconForOption(_ option: String) -> String {
+        switch option.lowercased() {
+        case "yes":
+            return "checkmark.circle.fill"
+        case "no":
+            return "xmark.circle.fill"
+        default:
+            return "circle.fill"
+        }
+    }
+    
+    private func getUserInitials(from email: String) -> String {
+        let fullName = getUserFullName(email)
+        let components = fullName.components(separatedBy: " ")
+        
+        if components.count >= 2 {
+            let firstInitial = String(components[0].prefix(1)).uppercased()
+            let lastInitial = String(components[1].prefix(1)).uppercased()
+            return "\(firstInitial)\(lastInitial)"
+        } else if components.count == 1 {
+            return String(components[0].prefix(2)).uppercased()
+        } else {
+            return String(email.prefix(2)).uppercased()
+        }
+    }
+}
+
+// MARK: - Participant Profile Picture View
+
+struct ParticipantProfilePictureView: View {
+    let userEmail: String
+    let size: CGFloat
+    let borderWidth: CGFloat
+    
+    @State private var profileImageUrl: String?
+    @State private var isLoading = true
+    @State private var userFullName: String = ""
+    
+    var body: some View {
+        Group {
+            if let imageUrl = profileImageUrl, !imageUrl.isEmpty {
+                AsyncImage(url: URL(string: imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Circle()
+                        .fill(Color.slingBlue.opacity(0.2))
+                        .overlay(
+                            Text(getInitials())
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.slingBlue)
+                        )
+                }
+            } else {
+                Circle()
+                    .fill(Color.slingBlue.opacity(0.2))
+                    .overlay(
+                        Text(getInitials())
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.slingBlue)
+                    )
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(
+            Circle()
+                .stroke(LinearGradient(
+                    gradient: Gradient(colors: [Color(red: 0.2, green: 0.6, blue: 1.0), Color(red: 0.4, green: 0.8, blue: 1.0)]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ), lineWidth: borderWidth)
+        )
+        .onAppear {
+            loadUserData()
+        }
+    }
+    
+    private func loadUserData() {
+        // Use FirestoreService to get user details and profile picture
+        let firestoreService = FirestoreService()
+        
+        // Get user details for better initials
+        firestoreService.getUserDetails(email: userEmail) { fullName, username in
+            DispatchQueue.main.async {
+                self.userFullName = fullName
+            }
+        }
+        
+        // Get profile picture URL from database
+        firestoreService.getUserProfilePicture(email: userEmail) { profilePictureUrl in
+            DispatchQueue.main.async {
+                self.profileImageUrl = profilePictureUrl
+                self.isLoading = false
+            }
+        }
+    }
+    
+    private func getInitials() -> String {
+        // Use full name if available, otherwise fall back to email parsing
+        if !userFullName.isEmpty {
+            let nameComponents = userFullName.components(separatedBy: " ")
+            if nameComponents.count >= 2 {
+                let firstInitial = String(nameComponents[0].prefix(1)).uppercased()
+                let lastInitial = String(nameComponents[1].prefix(1)).uppercased()
+                return "\(firstInitial)\(lastInitial)"
+            } else if nameComponents.count == 1 {
+                return String(nameComponents[0].prefix(2)).uppercased()
+            }
+        }
+        
+        // Fallback to email parsing
+        let components = userEmail.components(separatedBy: "@")
+        let namePart = components.first ?? ""
+        let nameComponents = namePart.components(separatedBy: ".")
+        
+        if nameComponents.count >= 2 {
+            let firstInitial = String(nameComponents[0].prefix(1)).uppercased()
+            let lastInitial = String(nameComponents[1].prefix(1)).uppercased()
+            return "\(firstInitial)\(lastInitial)"
+        } else {
+            return String(namePart.prefix(2)).uppercased()
         }
     }
 }
@@ -13555,6 +15234,7 @@ struct JoinBetView: View {
     @State private var showingCommunityDetails = false
     @State private var showingCreateBet = false
     @State private var userFullNames: [String: String] = [:]
+    @State private var oddsHistory: [OddsHistoryEntry] = []
     
     private var communityName: String {
         if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
@@ -13599,7 +15279,7 @@ struct JoinBetView: View {
     
     private var formattedDeadline: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM d'st', yyyy"
+        formatter.dateFormat = "MMMM d, yyyy"
         return formatter.string(from: bet.deadline)
     }
     
@@ -13723,97 +15403,16 @@ struct JoinBetView: View {
                         }
                         
                         
-                        // Participant List Section
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Participant List:")
-                                .font(.headline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 16)
-                            
-                            if let participants = getBetParticipants() {
-                                if participants.isEmpty {
-                                    VStack(spacing: 8) {
-                                        Image(systemName: "person.2.slash")
-                                            .font(.title2)
-                                            .foregroundColor(.gray.opacity(0.6))
-                                        
-                                        Text("No active bettors yet")
-                                            .font(.subheadline)
-                                            .foregroundColor(.gray)
-                                            .fontWeight(.medium)
-                                        
-                                        Text("Be the first to place a bet!")
-                                            .font(.caption)
-                                            .foregroundColor(.gray.opacity(0.8))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 24)
-                                } else {
-                                    VStack(spacing: 8) {
-                                        ForEach(participants, id: \.user_email) { participant in
-                                            HStack(spacing: 12) {
-                                                Circle()
-                                                    .fill(Color.slingGradient)
-                                                    .frame(width: 32, height: 32)
-                                                    .overlay(
-                                                        Text(String(participant.user_email.prefix(1)).uppercased())
-                                                            .font(.caption)
-                                                            .fontWeight(.semibold)
-                                                            .foregroundColor(.white)
-                                                    )
-                                                
-                                                VStack(alignment: .leading, spacing: 2) {
-                                                    Text(getUserFullName(from: participant.user_email))
-                                                        .font(.subheadline)
-                                                        .fontWeight(.medium)
-                                                        .foregroundColor(.black)
-                                                    
-                                                    HStack(spacing: 4) {
-                                                        Text(participant.chosen_option)
-                                                            .font(.caption)
-                                                            .foregroundColor(.gray)
-                                                        
-                                                        Text("•")
-                                                            .font(.caption)
-                                                            .foregroundColor(.gray)
-                                                        
-                                                        Image(systemName: "bolt.fill")
-                                                            .font(.caption)
-                                                            .foregroundColor(.yellow)
-                                                        
-                                                        Text(String(format: "%.2f", Double(participant.stake_amount)))
-                                                            .font(.caption)
-                                                            .foregroundColor(.gray)
-                                                    }
-                                                }
-                                                
-                                                Spacer()
-                                            }
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 8)
-                                        }
-                                    }
-                                }
-                            } else {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "person.2.slash")
-                                        .font(.title2)
-                                        .foregroundColor(.gray.opacity(0.6))
-                                    
-                                    Text("No active bettors yet")
-                                        .font(.subheadline)
-                                        .foregroundColor(.gray)
-                                        .fontWeight(.medium)
-                                    
-                                    Text("Be the first to place a bet!")
-                                        .font(.caption)
-                                        .foregroundColor(.gray.opacity(0.8))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 24)
-                            }
-                        }
+                        // Odds History Chart
+                        OddsHistoryChart(bet: bet, oddsHistory: oddsHistory, firestoreService: firestoreService)
+                        
+                        // Enhanced Participant List Section
+                        EnhancedParticipantList(
+                            bet: bet,
+                            firestoreService: firestoreService,
+                            getBetParticipants: getBetParticipants,
+                            getUserFullName: getUserFullName
+                        )
                         
                         // Betting Rules Section
                         VStack(alignment: .leading, spacing: 12) {
@@ -13969,13 +15568,87 @@ struct JoinBetView: View {
                 CreateBetView(firestoreService: firestoreService, preSelectedCommunity: nil)
             }
             .onAppear {
+                print("🔍 JoinBetView: onAppear called for bet: \(bet.title)")
+                print("🔍 JoinBetView: Bet ID: \(bet.id ?? "nil")")
                 loadBetParticipants()
                 loadOtherBets()
+                loadOddsHistory()
             }
         }
     }
     
     // MARK: - Helper Functions
+    
+    private func loadOddsHistory() {
+        guard let betId = bet.id else { 
+            print("❌ JoinBetView loadOddsHistory: No bet ID available")
+            return 
+        }
+        
+        print("🔍 JoinBetView loadOddsHistory: Loading odds history for bet: \(betId)")
+        
+        firestoreService.fetchOddsHistory(for: betId) { historyEntries in
+            DispatchQueue.main.async {
+                print("📊 JoinBetView loadOddsHistory: Received \(historyEntries.count) history entries")
+                
+                if historyEntries.isEmpty {
+                    // If no real data, show sample data for demonstration
+                    print("📊 JoinBetView loadOddsHistory: No real data, generating sample data")
+                    self.generateSampleOddsHistory()
+                } else {
+                    print("📊 JoinBetView loadOddsHistory: Using real data")
+                    self.oddsHistory = historyEntries
+                }
+                
+                print("📊 JoinBetView loadOddsHistory: Final oddsHistory count: \(self.oddsHistory.count)")
+            }
+        }
+    }
+    
+    private func generateSampleOddsHistory() {
+        guard let betId = bet.id else { 
+            print("❌ JoinBetView generateSampleOddsHistory: No bet ID available")
+            return 
+        }
+        
+        print("🔍 JoinBetView generateSampleOddsHistory: Generating sample data for bet: \(betId)")
+        print("🔍 JoinBetView generateSampleOddsHistory: Bet options: \(bet.options)")
+        
+        var sampleHistory: [OddsHistoryEntry] = []
+        let options = bet.options
+        
+        // Generate sample data points over the last 7 days
+        for i in 0..<10 {
+            let timestamp = Calendar.current.date(byAdding: .hour, value: -i * 12, to: Date()) ?? Date()
+            
+            var oddsByOption: [String: Double] = [:]
+            var poolByOption: [String: Int] = [:]
+            
+            // Generate realistic odds progression
+            for (index, option) in options.enumerated() {
+                let baseOdds = Double(index + 1) / Double(options.count)
+                let variation = sin(Double(i) * 0.5 + Double(index)) * 0.2
+                let odds = max(0.1, min(0.9, baseOdds + variation))
+                
+                oddsByOption[option] = odds
+                poolByOption[option] = Int(odds * 1000) + Int.random(in: 0...200)
+            }
+            
+            let totalPool = poolByOption.values.reduce(0, +)
+            
+            let entry = OddsHistoryEntry(
+                bet_id: betId,
+                odds_by_option: oddsByOption,
+                total_pool: totalPool,
+                pool_by_option: poolByOption
+            )
+            
+            sampleHistory.append(entry)
+        }
+        
+        oddsHistory = sampleHistory.reversed() // Show oldest to newest
+        print("✅ JoinBetView generateSampleOddsHistory: Generated \(oddsHistory.count) sample entries")
+    }
     
     private func extractUsername(from email: String) -> String {
         return String(email.split(separator: "@").first ?? "Unknown")
@@ -16124,12 +17797,17 @@ struct EnhancedBetCard: View {
             
             if bet.status.lowercased() == "open" {
                 Button(action: { showingPlaceBetSheet = true }) {
-                    Text("Place Bet")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                    HStack {
+                        Text("place bet")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        Image(systemName: "arrow.right")
+                            .font(.subheadline)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
                         .background(Color.slingGradient)
                         .cornerRadius(10)
                 }
@@ -21872,7 +23550,7 @@ struct RecentBetRow: View {
                     .foregroundColor(.black)
                     .lineLimit(1)
                 
-                Text("Deadline: \(formatDate(bet.deadline))")
+                Text("Deadline: \(formatDeadline(bet.deadline))")
                     .font(.caption)
                     .foregroundColor(.gray)
             }
@@ -21896,6 +23574,13 @@ struct RecentBetRow: View {
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+    
+    // Helper function to format deadline
+    private func formatDeadline(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
         return formatter.string(from: date)
     }
     

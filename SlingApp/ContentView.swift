@@ -49,6 +49,10 @@ struct ContentView: View {
             } else if firestoreService.isAuthenticated {
                 MainAppView(firestoreService: firestoreService)
                     .onAppear {
+                        // Start automatic odds tracking for authenticated users
+                        firestoreService.startAutomaticOddsTracking()
+                        
+                        // Track analytics
                         AnalyticsService.shared.trackUserFlowStep(step: .mainApp)
                         AnalyticsService.shared.setUserProperties(user: firestoreService.currentUser)
                     }
