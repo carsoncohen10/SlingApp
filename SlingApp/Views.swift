@@ -3549,7 +3549,7 @@ struct CondensedBetCard: View {
         if let community = firestoreService.userCommunities.first(where: { $0.id == communityId }) {
             return community.name
         }
-        return "Unknown Community"
+        return "General"
     }
     
     private var creatorDisplayName: String {
@@ -3987,7 +3987,7 @@ struct AvailableBetCard: View {
         if let community = firestoreService.userCommunities.first(where: { $0.id == communityId }) {
             return community.name
         }
-        return "Unknown Community"
+        return "General"
     }
     
     private func getOddsForOption(_ option: String) -> String {
@@ -6817,6 +6817,7 @@ struct CommunitiesView: View {
     @State private var showingJoinCommunityModal = false
     @State private var showingCreateCommunityModal = false
     @State private var outstandingBalances: [OutstandingBalance] = []
+    @State private var resolvedBalances: [ResolvedBalance] = []
     @State private var showingAllBalances = false
     @StateObject private var timeTracker = TimeTracker()
     
@@ -6908,6 +6909,7 @@ struct CommunitiesView: View {
             timeTracker.startTracking(for: "communities_page")
             
             loadOutstandingBalances()
+            loadResolvedBalances()
             firestoreService.fetchUserCommunities()
             updateCommunityStatistics()
         }
@@ -6928,7 +6930,7 @@ struct CommunitiesView: View {
             CreateCommunityPage(firestoreService: firestoreService)
         }
         .sheet(isPresented: $showingAllBalances) {
-            AllBalancesView(balances: outstandingBalances, firestoreService: firestoreService)
+            AllBalancesView(balances: outstandingBalances, resolvedBalances: resolvedBalances, firestoreService: firestoreService)
         }
     }
     
@@ -6936,51 +6938,13 @@ struct CommunitiesView: View {
     
     // MARK: - Outstanding Balances Section
     private var outstandingBalancesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Outstanding Balances")
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.black)
-            
-            // Main Outstanding Balances Card
-            HStack(spacing: 16) {
-                // Status Indicator (Left) - Dynamic based on balances
-                HStack(spacing: 8) {
-                    if outstandingBalances.isEmpty {
-                        // Green checkmark circle for no outstanding balances
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 24, height: 24)
-                            .overlay(
-                                Image(systemName: "checkmark")
-                                    .font(.caption)
-                                    .foregroundColor(.white)
-                            )
-                        
-                        // Status text
-                        Text("All Bets Settled 🎉")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.black)
-                    } else {
-                        // Orange/yellow circle for outstanding balances
-                        Circle()
-                            .fill(Color.orange)
-                            .frame(width: 24, height: 24)
-                            .overlay(
-                                Image(systemName: "exclamationmark")
-                                    .font(.caption)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                            )
-                        
-                        // Status text with count
-                        Text("\(outstandingBalances.count) Outstanding")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.black)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            // Header with title and View All button
+            HStack {
+                Text("Outstanding Balances")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
                 
                 Spacer()
                 
@@ -6993,22 +6957,67 @@ struct CommunitiesView: View {
                         Text("View All")
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.white)
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                            )
+                            .foregroundColor(.slingBlue)
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(outstandingBalances.isEmpty ? Color.green.opacity(0.1) : Color.orange.opacity(0.1))
-            .cornerRadius(12)
+            
+            // Balance Cards or Empty State
+            if outstandingBalances.isEmpty {
+                // Empty state card with optional history access
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Image(systemName: "checkmark")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                        )
+                    
+                    Text("All Bets Settled 🎉")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    // Show "View Past Settlements" button if there are resolved balances
+                    if !resolvedBalances.isEmpty {
+                        Button(action: {
+                            AnalyticsService.shared.trackCommunitiesInteraction(action: .balanceView, details: ["balance_count": 0, "resolved_count": resolvedBalances.count])
+                            showingAllBalances = true
+                        }) {
+                            Text("View Past Settlements")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.green)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.white)
+                                .cornerRadius(6)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(12)
+            } else {
+                // Horizontal scroll of balance cards
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(outstandingBalances.prefix(10)) { balance in
+                            OutstandingBalanceCard(balance: balance, firestoreService: firestoreService)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
         }
     }
     
@@ -7091,6 +7100,16 @@ struct CommunitiesView: View {
         }
     }
     
+    private func loadResolvedBalances() {
+        // Fetch resolved balances from Firestore
+        firestoreService.fetchResolvedBalances { balances in
+            DispatchQueue.main.async {
+                self.resolvedBalances = balances
+                print("✅ Loaded \(balances.count) resolved balances from Firestore")
+            }
+        }
+    }
+    
     private func updateCommunityStatistics() {
             for community in firestoreService.userCommunities {
                 if let communityId = community.id {
@@ -7106,6 +7125,7 @@ struct CommunitiesView: View {
     private func refreshData() async {
             firestoreService.fetchUserCommunities()
         loadOutstandingBalances()
+        loadResolvedBalances()
     }
 }
 
@@ -7126,20 +7146,12 @@ struct OutstandingBalance: Identifiable {
     var isPositive: Bool { netAmount > 0 }
 }
 
-struct BalanceTransaction: Identifiable {
-    let id: String
-    let betId: String
-    let betTitle: String
-    let amount: Double
-    let isOwed: Bool // true = you owe them, false = they owe you
-    let date: Date
-    let communityName: String
-}
 
 // MARK: - All Balances View
 
 struct AllBalancesView: View {
     let balances: [OutstandingBalance]
+    let resolvedBalances: [ResolvedBalance]
     let firestoreService: FirestoreService
     @Environment(\.dismiss) private var dismiss
     
@@ -7190,8 +7202,8 @@ struct AllBalancesView: View {
                 .background(Color.white)
                 
                 // Content
-                if sortedBalances.isEmpty {
-                    // Empty state when no balances
+                if sortedBalances.isEmpty && resolvedBalances.isEmpty {
+                    // Empty state when no balances at all
                     VStack(spacing: 20) {
                         Spacer()
                         
@@ -7214,15 +7226,97 @@ struct AllBalancesView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.white)
-                } else {
+                } else if sortedBalances.isEmpty && !resolvedBalances.isEmpty {
+                    // Show only settled balances when no outstanding balances
                     ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(sortedBalances) { balance in
-                                DetailedBalanceRow(balance: balance, firestoreService: firestoreService)
+                        VStack(spacing: 24) {
+                            // All Settled Header
+                            VStack(spacing: 20) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.green)
+                                
+                                Text("All Settled!")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                
+                                Text("All your balances have been settled. Here's your transaction history:")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 32)
+                            }
+                            .padding(.vertical, 20)
+                            
+                            // Settled Balances History
+                            VStack(alignment: .leading, spacing: 16) {
+                                // History Section Header
+                                HStack {
+                                    Text("Settled Transactions")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.black)
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(resolvedBalances.count) settled")
+                                        .font(.subheadline)
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(.horizontal, 16)
+                                
+                                // Resolved Balances
+                                ForEach(resolvedBalances.sorted(by: { $0.resolvedDate > $1.resolvedDate })) { resolvedBalance in
+                                    ResolvedBalanceRow(resolvedBalance: resolvedBalance)
+                                }
                             }
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 20)
+                        .padding(.bottom, 20)
+                    }
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 24) {
+                            // Outstanding Balances Section
+                            if !sortedBalances.isEmpty {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    ForEach(sortedBalances) { balance in
+                                        DetailedBalanceRow(balance: balance, firestoreService: firestoreService)
+                                    }
+                                }
+                            }
+                            
+                            // History Section
+                            if !resolvedBalances.isEmpty {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    // History Section Header
+                                    HStack {
+                                        Text("History")
+                                            .font(.headline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.black)
+                                        
+                                        Spacer()
+                                        
+                                        Text("\(resolvedBalances.count) resolved")
+                                            .font(.subheadline)
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 8)
+                                    
+                                    // Resolved Balances
+                                    ForEach(resolvedBalances.sorted(by: { $0.resolvedDate > $1.resolvedDate })) { resolvedBalance in
+                                        ResolvedBalanceRow(resolvedBalance: resolvedBalance)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                        .padding(.bottom, 20)
                     }
                 }
             }
@@ -7376,6 +7470,187 @@ struct DetailedBalanceRow: View {
     }
 }
 
+// MARK: - Resolved Balance Row
+
+struct ResolvedBalanceRow: View {
+    let resolvedBalance: ResolvedBalance
+    @State private var showingBreakdownModal = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Main resolved balance row
+            HStack(spacing: 16) {
+                // Profile Picture
+                if let profilePicture = resolvedBalance.profilePicture, !profilePicture.isEmpty {
+                    AsyncImage(url: URL(string: profilePicture)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(AnyShapeStyle(Color.gray))
+                            .overlay(
+                                Text(String(resolvedBalance.name.prefix(1)).uppercased())
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                    }
+                    .frame(width: 56, height: 56)
+                    .clipShape(Circle())
+                    .opacity(0.6)
+                } else {
+                    Circle()
+                        .fill(AnyShapeStyle(Color.gray))
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            Text(String(resolvedBalance.name.prefix(1)).uppercased())
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        )
+                        .opacity(0.6)
+                }
+                
+                // User Info
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(resolvedBalance.name)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.gray)
+                    
+                    Text(resolvedBalance.username)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                // Amount and Status
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                        
+                        Text("\(String(format: "%.0f", resolvedBalance.displayAmount))")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.gray)
+                            .strikethrough()
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    Text(resolvedBalance.resolvedBy.capitalized)
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .fontWeight(.medium)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+        }
+        .background(Color.gray.opacity(0.05))
+        .cornerRadius(16)
+        .onTapGesture {
+            showingBreakdownModal = true
+        }
+        .sheet(isPresented: $showingBreakdownModal) {
+            ResolvedBalanceBreakdownModal(resolvedBalance: resolvedBalance)
+        }
+    }
+}
+
+// MARK: - Resolved Balance Breakdown Modal
+
+struct ResolvedBalanceBreakdownModal: View {
+    let resolvedBalance: ResolvedBalance
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title3)
+                            .foregroundColor(.gray)
+                            .frame(width: 40, height: 40)
+                            .background(Color.gray.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Resolved Balance")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Color.clear
+                        .frame(width: 40, height: 40)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .background(Color.white)
+                
+                // Content
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Resolved balance summary
+                        VStack(spacing: 16) {
+                            Text("This balance was marked as \(resolvedBalance.resolvedBy) on \(DateFormatter.shortDateFormatter.string(from: resolvedBalance.resolvedDate))")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 20)
+                            
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.green)
+                                
+                                Text("\(String(format: "%.0f", resolvedBalance.displayAmount))")
+                                    .font(.title)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.green)
+                                    .strikethrough()
+                            }
+                        }
+                        .padding(.vertical, 20)
+                        
+                        // Transaction breakdown
+                        if !resolvedBalance.transactions.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Transaction History")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 16)
+                                
+                                ForEach(resolvedBalance.transactions) { transaction in
+                                    BetBreakdownRow(transaction: transaction)
+                                        .opacity(0.7)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
+                }
+            }
+            .background(Color.white)
+            .navigationBarHidden(true)
+        }
+    }
+}
+
 // MARK: - Bet Breakdown Row
 
 struct BetBreakdownRow: View {
@@ -7401,7 +7676,8 @@ struct BetBreakdownRow: View {
                     .foregroundColor(.black)
                     .lineLimit(1)
                 
-                Text(transaction.communityName)
+                // Always show community name, with fallback for empty/unknown
+                Text(transaction.communityName.isEmpty || transaction.communityName == "General" ? "General" : transaction.communityName)
                     .font(.caption)
                     .foregroundColor(.gray)
                     .lineLimit(1)
@@ -7409,7 +7685,7 @@ struct BetBreakdownRow: View {
             
             Spacer()
             
-            // Amount
+            // Amount and Date
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 4) {
                     Image(systemName: "bolt.fill")
@@ -7422,7 +7698,7 @@ struct BetBreakdownRow: View {
                         .foregroundColor(transaction.isOwed ? .red : .green)
                 }
                 
-                Text(transaction.date, style: .date)
+                Text(DateFormatter.shortDateFormatter.string(from: transaction.date))
                     .font(.caption)
                     .foregroundColor(.gray)
             }
@@ -7953,6 +8229,19 @@ struct BalanceResolutionModal: View {
         isResolving = true
         errorMessage = ""
         
+        // Create resolved balance entry for history
+        let resolvedBalance = ResolvedBalance(
+            id: balance.id,
+            profilePicture: balance.profilePicture,
+            username: balance.username,
+            name: balance.name,
+            netAmount: balance.netAmount,
+            transactions: balance.transactions,
+            counterpartyId: balance.counterpartyId,
+            resolvedDate: Date(),
+            resolvedBy: balance.isOwed ? "paid" : "received"
+        )
+        
         // Use the appropriate function based on whether user owes or is owed
         if balance.isOwed {
             // User owes money - mark as paid
@@ -7961,6 +8250,13 @@ struct BalanceResolutionModal: View {
                     isResolving = false
                     
                     if success {
+                        // Add to resolved balances history
+                        firestoreService.addResolvedBalance(resolvedBalance) { historySuccess, historyError in
+                            if !historySuccess {
+                                print("⚠️ Failed to add resolved balance to history: \(historyError ?? "Unknown error")")
+                            }
+                        }
+                        
                         dismiss()
                         
                         // Show success feedback
@@ -7978,6 +8274,13 @@ struct BalanceResolutionModal: View {
                     isResolving = false
                     
                     if success {
+                        // Add to resolved balances history
+                        firestoreService.addResolvedBalance(resolvedBalance) { historySuccess, historyError in
+                            if !historySuccess {
+                                print("⚠️ Failed to add resolved balance to history: \(historyError ?? "Unknown error")")
+                            }
+                        }
+                        
                         dismiss()
                         
                         // Show success feedback
@@ -11937,23 +12240,11 @@ struct CreateBetView: View {
                                 }
                             } else {
                                 // Multiple Choice and Prop Bet outcomes are editable
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        TextField("Enter outcome...", text: $outcomes[index])
+                                    TextField("Option \(index + 1)", text: $outcomes[index])
                                         .textFieldStyle(PlainTextFieldStyle())
                                         .font(.headline)
                                         .fontWeight(.semibold)
                                         .foregroundColor(.black)
-                                    
-                                        HStack(spacing: 4) {
-                                    Image(systemName: "pencil.circle.fill")
-                                                .font(.caption2)
-                                        .foregroundColor(.slingBlue)
-                                            
-                                            Text("Tap to edit")
-                                                .font(.caption2)
-                                                .foregroundColor(.gray)
-                                        }
-                                    }
                                 }
                             }
                             
@@ -12016,14 +12307,6 @@ struct CreateBetView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(Color.white)
                                 .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(
-                                    (selectedMarketType == "Multiple Choice" || selectedMarketType == "Prop Bet") ? 
-                                    Color.slingBlue.opacity(0.3) : Color.clear,
-                                    lineWidth: 1.5
-                                )
                         )
                     }
                     }
@@ -12340,7 +12623,7 @@ struct CreateBetView: View {
             spreadLine = ""
             overUnderLine = ""
         case "Multiple Choice":
-            outcomes = ["Option 1", "Option 2", "Option 3"]
+            outcomes = ["", "", ""]
             odds = ["-110", "-110", "-110"]
             percentages = ["33.3%", "33.3%", "33.3%"]
             spreadLine = ""
@@ -12358,7 +12641,7 @@ struct CreateBetView: View {
             spreadLine = ""
             overUnderLine = ""
         case "Prop Bet":
-            outcomes = ["Option 1", "Option 2"]
+            outcomes = ["", ""]
             odds = ["-110", "-110"]
             percentages = ["52.4%", "52.4%"]
             spreadLine = ""
@@ -14074,62 +14357,33 @@ struct NotificationTextView: View {
     let isUnread: Bool
     
     var body: some View {
-        HStack(spacing: 0) {
-            let components = parseNotificationText(text)
-            
-            // Debug logging
-            let _ = DispatchQueue.main.async {
-                print("🔔 NotificationTextView: Original text: '\(text)'")
-                print("🔔 NotificationTextView: Parsed components: \(components.count)")
-                for (i, comp) in components.enumerated() {
-                    print("🔔 Component \(i): '\(comp.text)' isNumber: \(comp.isNumber)")
-                }
-            }
-            
-            ForEach(Array(components.enumerated()), id: \.offset) { index, component in
-                if component.isNumber {
-                    // Number - show with comma formatting
-                    Text(component.text)
-                        .font(.system(size: 15, weight: isUnread ? .semibold : .regular))
-                        .foregroundColor(isUnread ? .primary : .secondary)
-                } else {
-                    // Regular text
-                    Text(component.text)
-                        .font(.system(size: 15, weight: isUnread ? .semibold : .regular))
-                        .foregroundColor(isUnread ? .primary : .secondary)
-                }
-            }
-        }
-        .multilineTextAlignment(.leading)
-        .lineLimit(3)
+        // Simple text display without any special formatting
+        Text(cleanNotificationText())
+            .font(.system(size: 15, weight: isUnread ? .semibold : .regular))
+            .foregroundColor(isUnread ? .primary : .secondary)
+            .multilineTextAlignment(.leading)
+            .lineLimit(3)
     }
     
-    private func parseNotificationText(_ text: String) -> [TextComponent] {
-        var components: [TextComponent] = []
+    private func cleanNotificationText() -> String {
+        // Clean the text and remove point values entirely
+        var cleanedText = text.replacingOccurrences(of: "[LIGHTNING_BOLT]", with: "")
         
-        // First, remove any legacy [LIGHTNING_BOLT] placeholders
-        let cleanedText = text.replacingOccurrences(of: "[LIGHTNING_BOLT]", with: "")
+        // Remove common patterns with point values
+        cleanedText = cleanedText.replacingOccurrences(of: #" with \d+"#, with: "", options: .regularExpression)
+        cleanedText = cleanedText.replacingOccurrences(of: #" with ⚡\d+"#, with: "", options: .regularExpression)
+        cleanedText = cleanedText.replacingOccurrences(of: #" \d+ points"#, with: "", options: .regularExpression)
+        cleanedText = cleanedText.replacingOccurrences(of: #" ⚡\d+ points"#, with: "", options: .regularExpression)
+        cleanedText = cleanedText.replacingOccurrences(of: #" won \d+"#, with: " won", options: .regularExpression)
+        cleanedText = cleanedText.replacingOccurrences(of: #" won ⚡\d+"#, with: " won", options: .regularExpression)
+        cleanedText = cleanedText.replacingOccurrences(of: #" \d+"#, with: "", options: .regularExpression)
+        cleanedText = cleanedText.replacingOccurrences(of: #" ⚡\d+"#, with: "", options: .regularExpression)
         
-        // Debug logging for notification text cleaning
-        if text != cleanedText {
-            print("🔔 NotificationTextView: Cleaned legacy [LIGHTNING_BOLT] from: '\(text)' -> '\(cleanedText)'")
-        }
+        // Clean up any double spaces that might have been created
+        cleanedText = cleanedText.replacingOccurrences(of: "  ", with: " ")
+        cleanedText = cleanedText.trimmingCharacters(in: .whitespaces)
         
-        // Additional text cleaning for corrupted/garbled text
-        let furtherCleanedText = cleanCorruptedText(cleanedText)
-        
-        // Debug logging for corrupted text cleaning
-        if cleanedText != furtherCleanedText {
-            print("🔔 NotificationTextView: Cleaned corrupted text from: '\(cleanedText)' -> '\(furtherCleanedText)'")
-        }
-        
-        // Simple approach: just return the cleaned text as a single component
-        // This avoids the word-by-word processing that was causing character-by-character display
-        if !furtherCleanedText.isEmpty {
-            components.append(TextComponent(text: furtherCleanedText, isNumber: false))
-        }
-        
-        return components
+        return cleanCorruptedText(cleanedText)
     }
     
     private func cleanCorruptedText(_ text: String) -> String {
@@ -14171,15 +14425,6 @@ struct NotificationTextView: View {
     }
 }
 
-struct TextComponent {
-    let text: String
-    let isNumber: Bool
-    
-    init(text: String, isNumber: Bool = false) {
-        self.text = text
-        self.isNumber = isNumber
-    }
-}
 
 struct BouncingDotView: View {
     let point: ChartPoint
@@ -25435,6 +25680,12 @@ extension DateFormatter {
     static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
+    
+    static let shortDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
         return formatter
     }()
 }

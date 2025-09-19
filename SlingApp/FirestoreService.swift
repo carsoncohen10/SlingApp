@@ -5,6 +5,35 @@ import FirebaseAuth
 import FirebaseStorage
 import UIKit
 
+// MARK: - Balance Data Structures
+
+struct BalanceTransaction: Identifiable {
+    let id: String
+    let betId: String
+    let betTitle: String
+    let amount: Double
+    let isOwed: Bool // true = you owe them, false = they owe you
+    let date: Date
+    let communityName: String
+}
+
+struct ResolvedBalance: Identifiable {
+    let id: String
+    let profilePicture: String?
+    let username: String
+    let name: String
+    let netAmount: Double // Net amount that was resolved
+    let transactions: [BalanceTransaction] // Individual transactions that made up this balance
+    let counterpartyId: String
+    let resolvedDate: Date // When it was marked as resolved
+    let resolvedBy: String // "paid" or "received"
+    
+    // Computed properties
+    var wasOwed: Bool { netAmount < 0 } // true = you owed them, false = they owed you
+    var displayAmount: Double { abs(netAmount) }
+    var isPositive: Bool { netAmount > 0 }
+}
+
 struct CommunityMemberInfo: Identifiable, Hashable {
     let id: String
     let email: String
@@ -3246,7 +3275,10 @@ class FirestoreService: ObservableObject {
             
             let betTitle = data["title"] as? String ?? "Unknown Bet"
             let communityId = data["community_id"] as? String ?? ""
-            let communityName = data["community_name"] as? String ?? "Unknown Community"
+            
+            // Get proper community name from user communities
+            let communityName = self?.userCommunities.first { $0.id == communityId }?.name ?? 
+                               data["community_name"] as? String ?? "General"
             
             // Calculate how much each loser owes the winner
             // For now, distribute the winner's payout proportionally among losers
@@ -4158,6 +4190,114 @@ class FirestoreService: ObservableObject {
     
     // MARK: - Helper Methods
     
+    private func getCommunityNameFromId(_ communityId: String?) -> String? {
+        guard let communityId = communityId else { return nil }
+        return userCommunities.first { $0.id == communityId }?.name
+    }
+    
+    private func updateOutstandingBalanceStatus(
+        currentUserEmail: String,
+        counterpartyEmail: String,
+        newStatus: String,
+        completion: @escaping (Bool) -> Void
+    ) {
+        print("🔄 Updating outstanding balance status to \(newStatus) between \(currentUserEmail) and \(counterpartyEmail)")
+        
+        // Query for outstanding balances between these two users
+        let payerQuery = db.collection("OutstandingBalances")
+            .whereField("payer_email", isEqualTo: currentUserEmail)
+            .whereField("payee_email", isEqualTo: counterpartyEmail)
+            .whereField("status", isEqualTo: "pending")
+        
+        let payeeQuery = db.collection("OutstandingBalances")
+            .whereField("payee_email", isEqualTo: currentUserEmail)
+            .whereField("payer_email", isEqualTo: counterpartyEmail)
+            .whereField("status", isEqualTo: "pending")
+        
+        let group = DispatchGroup()
+        var hasError = false
+        
+        // Update records where current user is the payer
+        group.enter()
+        payerQuery.getDocuments { snapshot, error in
+            if let error = error {
+                print("❌ Error fetching payer balance records: \(error.localizedDescription)")
+                hasError = true
+                group.leave()
+            } else {
+                let documents = snapshot?.documents ?? []
+                print("📝 Found \(documents.count) payer balance records to update")
+                
+                if documents.isEmpty {
+                    group.leave()
+                } else {
+                    let updateGroup = DispatchGroup()
+                    for document in documents {
+                        updateGroup.enter()
+                        document.reference.updateData([
+                            "status": newStatus,
+                            "resolved_date": Timestamp(date: Date())
+                        ]) { error in
+                            if let error = error {
+                                print("❌ Error updating payer balance record: \(error.localizedDescription)")
+                                hasError = true
+                            } else {
+                                print("✅ Updated payer balance record: \(document.documentID)")
+                            }
+                            updateGroup.leave()
+                        }
+                    }
+                    
+                    updateGroup.notify(queue: .global()) {
+                        group.leave()
+                    }
+                }
+            }
+        }
+        
+        // Update records where current user is the payee
+        group.enter()
+        payeeQuery.getDocuments { snapshot, error in
+            if let error = error {
+                print("❌ Error fetching payee balance records: \(error.localizedDescription)")
+                hasError = true
+                group.leave()
+            } else {
+                let documents = snapshot?.documents ?? []
+                print("📝 Found \(documents.count) payee balance records to update")
+                
+                if documents.isEmpty {
+                    group.leave()
+                } else {
+                    let updateGroup = DispatchGroup()
+                    for document in documents {
+                        updateGroup.enter()
+                        document.reference.updateData([
+                            "status": newStatus,
+                            "resolved_date": Timestamp(date: Date())
+                        ]) { error in
+                            if let error = error {
+                                print("❌ Error updating payee balance record: \(error.localizedDescription)")
+                                hasError = true
+                            } else {
+                                print("✅ Updated payee balance record: \(document.documentID)")
+                            }
+                            updateGroup.leave()
+                        }
+                    }
+                    
+                    updateGroup.notify(queue: .global()) {
+                        group.leave()
+                    }
+                }
+            }
+        }
+        
+        group.notify(queue: .main) {
+            completion(!hasError)
+        }
+    }
+    
     private func updateUserBlitzPoints(userId: String, pointsToAdd: Int, completion: @escaping (Bool, String?) -> Void) {
         // Try to update using email as document ID first
         if let userEmail = currentUser?.email {
@@ -4510,7 +4650,8 @@ class FirestoreService: ObservableObject {
                     "user_role": userRole,
                     "bet_title": record["bet_title"] as? String ?? "",
                     "bet_id": record["bet_id"] as? String ?? "",
-                    "community_name": record["community_name"] as? String ?? "Unknown Community",
+                    "community_name": self.getCommunityNameFromId(record["community_id"] as? String) ?? 
+                                     record["community_name"] as? String ?? "General",
                     "created_date": record["created_date"] as? Timestamp ?? Timestamp()
                 ])
                 counterpartyBalances[counterpartyEmail]?["transactions"] = transactions
@@ -4535,7 +4676,7 @@ class FirestoreService: ObservableObject {
                             amount: transData["amount"] as? Double ?? 0.0,
                             isOwed: transData["user_role"] as? String == "payer",
                             date: (transData["created_date"] as? Timestamp)?.dateValue() ?? Date(),
-                            communityName: transData["community_name"] as? String ?? "Unknown Community"
+                            communityName: transData["community_name"] as? String ?? "General"
                         )
                     }
                     
@@ -4701,6 +4842,128 @@ class FirestoreService: ObservableObject {
         return Array(groupedBalances.values)
     }
     
+    // MARK: - Resolved Balances Management
+    
+    func fetchResolvedBalances(completion: @escaping ([ResolvedBalance]) -> Void) {
+        guard let currentUserEmail = currentUser?.email else {
+            print("❌ No current user email available")
+            completion([])
+            return
+        }
+        
+        print("🔍 Fetching resolved balances for user: \(currentUserEmail)")
+        
+        // Fetch from ResolvedBalances collection
+        let query = db.collection("ResolvedBalances")
+            .whereField("user_email", isEqualTo: currentUserEmail)
+            .order(by: "resolved_date", descending: true)
+            .limit(to: 50) // Limit to recent 50 resolved balances
+        
+        query.getDocuments { snapshot, error in
+            if let error = error {
+                print("❌ Error fetching resolved balances: \(error.localizedDescription)")
+                completion([])
+                return
+            }
+            
+            var resolvedBalances: [ResolvedBalance] = []
+            let group = DispatchGroup()
+            
+            for document in snapshot?.documents ?? [] {
+                let data = document.data()
+                
+                guard let counterpartyEmail = data["counterparty_email"] as? String,
+                      let netAmount = data["net_amount"] as? Double,
+                      let resolvedBy = data["resolved_by"] as? String,
+                      let resolvedDate = (data["resolved_date"] as? Timestamp)?.dateValue(),
+                      let transactionsData = data["transactions"] as? [[String: Any]] else {
+                    continue
+                }
+                
+                group.enter()
+                self.getUserDetails(email: counterpartyEmail) { userName, username in
+                    let transactions = transactionsData.map { transData in
+                        BalanceTransaction(
+                            id: transData["id"] as? String ?? UUID().uuidString,
+                            betId: transData["bet_id"] as? String ?? "",
+                            betTitle: transData["bet_title"] as? String ?? "",
+                            amount: transData["amount"] as? Double ?? 0.0,
+                            isOwed: transData["is_owed"] as? Bool ?? false,
+                            date: (transData["date"] as? Timestamp)?.dateValue() ?? Date(),
+                            communityName: transData["community_name"] as? String ?? "General"
+                        )
+                    }
+                    
+                    let resolvedBalance = ResolvedBalance(
+                        id: document.documentID,
+                        profilePicture: data["profile_picture"] as? String,
+                        username: username,
+                        name: userName,
+                        netAmount: netAmount,
+                        transactions: transactions,
+                        counterpartyId: counterpartyEmail,
+                        resolvedDate: resolvedDate,
+                        resolvedBy: resolvedBy
+                    )
+                    
+                    resolvedBalances.append(resolvedBalance)
+                    group.leave()
+                }
+            }
+            
+            group.notify(queue: .main) {
+                print("✅ Fetched \(resolvedBalances.count) resolved balances")
+                completion(resolvedBalances)
+            }
+        }
+    }
+    
+    func addResolvedBalance(_ resolvedBalance: ResolvedBalance, completion: @escaping (Bool, String?) -> Void) {
+        guard let currentUserEmail = currentUser?.email else {
+            print("❌ No current user email available")
+            completion(false, "No current user")
+            return
+        }
+        
+        print("💾 Adding resolved balance to history: \(resolvedBalance.id)")
+        
+        // Convert transactions to dictionary format
+        let transactionsData = resolvedBalance.transactions.map { transaction in
+            [
+                "id": transaction.id,
+                "bet_id": transaction.betId,
+                "bet_title": transaction.betTitle,
+                "amount": transaction.amount,
+                "is_owed": transaction.isOwed,
+                "date": Timestamp(date: transaction.date),
+                "community_name": transaction.communityName
+            ]
+        }
+        
+        let resolvedBalanceData: [String: Any] = [
+            "user_email": currentUserEmail,
+            "counterparty_email": resolvedBalance.counterpartyId,
+            "counterparty_name": resolvedBalance.name,
+            "counterparty_username": resolvedBalance.username,
+            "profile_picture": resolvedBalance.profilePicture ?? "",
+            "net_amount": resolvedBalance.netAmount,
+            "transactions": transactionsData,
+            "resolved_date": Timestamp(date: resolvedBalance.resolvedDate),
+            "resolved_by": resolvedBalance.resolvedBy,
+            "created_date": Timestamp()
+        ]
+        
+        db.collection("ResolvedBalances").document(resolvedBalance.id).setData(resolvedBalanceData) { error in
+            if let error = error {
+                print("❌ Error adding resolved balance: \(error.localizedDescription)")
+                completion(false, error.localizedDescription)
+            } else {
+                print("✅ Successfully added resolved balance to history")
+                completion(true, nil)
+            }
+        }
+    }
+    
     // MARK: - Balance Resolution
     
     func resolveOutstandingBalance(balanceId: String, completion: @escaping (Bool, String?) -> Void) {
@@ -4715,86 +4978,26 @@ class FirestoreService: ObservableObject {
         if balanceId.hasPrefix("outstanding_") {
             let counterpartyEmail = String(balanceId.dropFirst("outstanding_".count))
             
-            // Update all pending balances between current user and counterparty
-            let payerQuery = db.collection("OutstandingBalances")
-                .whereField("payer_email", isEqualTo: currentUserEmail)
-                .whereField("payee_email", isEqualTo: counterpartyEmail)
-                .whereField("status", isEqualTo: "pending")
-            
-            let payeeQuery = db.collection("OutstandingBalances")
-                .whereField("payee_email", isEqualTo: currentUserEmail)
-                .whereField("payer_email", isEqualTo: counterpartyEmail)
-                .whereField("status", isEqualTo: "pending")
-            
-            let group = DispatchGroup()
-            var totalUpdated = 0
-            var totalToUpdate = 0
-            
-            // Update records where current user is payer
-            group.enter()
-            payerQuery.getDocuments { snapshot, error in
-                if let error = error {
-                    print("❌ Error fetching payer balances: \(error.localizedDescription)")
-                } else {
-                    let documents = snapshot?.documents ?? []
-                    totalToUpdate += documents.count
-                    
-                    for document in documents {
-                        document.reference.updateData([
-                            "status": "resolved",
-                            "resolved_date": Timestamp(date: Date()),
-                            "resolved_by": currentUserEmail
-                        ]) { error in
-                            if let error = error {
-                                print("❌ Error updating payer balance: \(error.localizedDescription)")
-                            } else {
-                                totalUpdated += 1
-                            }
-                        }
-                    }
-                }
-                group.leave()
-            }
-            
-            // Update records where current user is payee
-            group.enter()
-            payeeQuery.getDocuments { snapshot, error in
-                if let error = error {
-                    print("❌ Error fetching payee balances: \(error.localizedDescription)")
-                } else {
-                    let documents = snapshot?.documents ?? []
-                    totalToUpdate += documents.count
-                    
-                    for document in documents {
-                        document.reference.updateData([
-                            "status": "resolved",
-                            "resolved_date": Timestamp(date: Date()),
-                            "resolved_by": currentUserEmail
-                        ]) { error in
-                            if let error = error {
-                                print("❌ Error updating payee balance: \(error.localizedDescription)")
-                            } else {
-                                totalUpdated += 1
-                            }
-                        }
-                    }
-                }
-                group.leave()
-            }
-            
-            group.notify(queue: .main) {
-                if totalUpdated == totalToUpdate && totalToUpdate > 0 {
-                    print("✅ Successfully resolved \(totalUpdated) balance records")
+            // Use the same method as markBalanceAsPaid but with "resolved" status
+            updateOutstandingBalanceStatus(
+                currentUserEmail: currentUserEmail,
+                counterpartyEmail: counterpartyEmail,
+                newStatus: "resolved"
+            ) { success in
+                if success {
+                    print("✅ Successfully resolved outstanding balance")
                     
                     // Refresh outstanding balances
-                    self.fetchOutstandingBalances { _ in
-                        // Updated balances will be reflected in UI
+                    DispatchQueue.main.async {
+                        self.fetchOutstandingBalances { _ in
+                            // Updated balances will be reflected in UI
+                        }
                     }
                     
                     completion(true, nil)
                 } else {
-                    print("❌ Failed to resolve all balance records: \(totalUpdated)/\(totalToUpdate)")
-                    completion(false, "Failed to resolve all balance records")
+                    print("❌ Failed to resolve outstanding balance")
+                    completion(false, "Failed to resolve balance records")
                 }
             }
         } else {
@@ -4847,21 +5050,34 @@ class FirestoreService: ObservableObject {
         ]
         
         // Add to Payments collection
-        db.collection("Payments").addDocument(data: paymentData) { error in
+        db.collection("Payments").addDocument(data: paymentData) { [weak self] error in
             if let error = error {
                 print("❌ Error recording payment: \(error.localizedDescription)")
                 completion(false, error.localizedDescription)
             } else {
                 print("✅ Successfully recorded payment of \(amount) to \(counterpartyId)")
                 
-                // Refresh outstanding balances
-                DispatchQueue.main.async {
-                    self.fetchOutstandingBalances { _ in
-                        // Updated balances will be reflected in UI
+                // Now update the status of outstanding balance records to "paid"
+                self?.updateOutstandingBalanceStatus(
+                    currentUserEmail: currentUserEmail,
+                    counterpartyEmail: counterpartyId,
+                    newStatus: "paid"
+                ) { updateSuccess in
+                    if updateSuccess {
+                        print("✅ Successfully updated outstanding balance status to paid")
+                    } else {
+                        print("⚠️ Payment recorded but failed to update balance status")
                     }
+                    
+                    // Refresh outstanding balances regardless
+                    DispatchQueue.main.async {
+                        self?.fetchOutstandingBalances { _ in
+                            // Updated balances will be reflected in UI
+                        }
+                    }
+                    
+                    completion(true, nil)
                 }
-                
-                completion(true, nil)
             }
         }
     }
