@@ -814,7 +814,9 @@ class FirestoreService: ObservableObject {
     }
 
     func fetchBets() {
-        print("🔍 fetchBets() called for user: \(currentUser?.email ?? "unknown")")
+        print("🔄 fetchBets: ===== REFRESHING BET DATA =====")
+        print("🔄 fetchBets: Called for user: \(currentUser?.email ?? "unknown")")
+        print("🔄 fetchBets: This will fetch updated odds after bet placement")
         guard let userEmail = currentUser?.email else { 
             print("❌ No user email available")
             return 
@@ -980,8 +982,20 @@ class FirestoreService: ObservableObject {
                             // Check for expired bets and update their status
                             self?.checkAndUpdateExpiredBets(fetchedBets)
                             
+                            // Filter out expired bets for home page display
+                            let now = Date()
+                            let activeBets = fetchedBets.filter { bet in
+                                let isExpired = bet.deadline <= now
+                                if isExpired {
+                                    print("🏠 fetchBets: Hiding expired bet from home page: '\(bet.title)' (deadline: \(bet.deadline))")
+                                }
+                                return !isExpired
+                            }
+                            
+                            print("🏠 fetchBets: Filtered out \(fetchedBets.count - activeBets.count) expired bets, showing \(activeBets.count) active bets")
+                            
                             // Sort bets by creation date (most recent first) to show newest bets at the top
-                            let sortedBets = fetchedBets.sorted { $0.created_date > $1.created_date }
+                            let sortedBets = activeBets.sorted { $0.created_date > $1.created_date }
                             
                             print("🔍 fetchBets: Successfully processed \(sortedBets.count) bets")
                             if !sortedBets.isEmpty {
@@ -994,6 +1008,18 @@ class FirestoreService: ObservableObject {
                                     print("🔍 fetchBets: Bet \(index + 1) - Pool by option: \(bet.pool_by_option ?? [:])")
                                     print("🔍 fetchBets: Bet \(index + 1) - Total pool: \(bet.total_pool ?? 0)")
                                     print("🔍 fetchBets: Bet \(index + 1) - Options: \(bet.options)")
+                                    
+                                    // Calculate and log the odds that will be displayed in UI
+                                    let calculatedOdds = self?.calculateImpliedOdds(for: bet) ?? [:]
+                                    print("🔍 fetchBets: Bet \(index + 1) - CALCULATED ODDS FOR UI: \(calculatedOdds)")
+                                    
+                                    // Format the odds as they would appear in the UI
+                                    for option in bet.options {
+                                        if let odds = calculatedOdds[option] {
+                                            let formattedOdds = self?.formatImpliedOdds(odds) ?? "N/A"
+                                            print("🔍 fetchBets: Bet \(index + 1) - Option '\(option)': \(odds) -> \(formattedOdds)")
+                                        }
+                                    }
                                 }
                             }
                             
@@ -1088,6 +1114,9 @@ class FirestoreService: ObservableObject {
     func fetchUserBetParticipations() {
         guard let userEmail = currentUser?.email else { return }
         
+        print("🔄 fetchUserBetParticipations: ===== FETCHING USER BET PARTICIPATIONS =====")
+        print("🔄 fetchUserBetParticipations: User: \(userEmail)")
+        
         db.collection("BetParticipant")
             .whereField("user_email", isEqualTo: userEmail)
             .getDocuments { [weak self] snapshot, error in
@@ -1102,8 +1131,20 @@ class FirestoreService: ObservableObject {
                         try? document.data(as: BetParticipant.self)
                     } ?? []
                     
+                    print("🔄 fetchUserBetParticipations: Found \(participations.count) participations")
+                    
+                    // Log locked odds for each participation
+                    for (index, participation) in participations.enumerated() {
+                        print("🔄 fetchUserBetParticipations: Participation \(index + 1) - Bet ID: \(participation.bet_id)")
+                        print("🔄 fetchUserBetParticipations: Participation \(index + 1) - Chosen option: \(participation.chosen_option)")
+                        print("🔄 fetchUserBetParticipations: Participation \(index + 1) - Stake: \(participation.stake_amount)")
+                        print("🔄 fetchUserBetParticipations: Participation \(index + 1) - LOCKED ODDS: \(participation.locked_odds ?? [:])")
+                        print("🔄 fetchUserBetParticipations: Participation \(index + 1) - Created: \(participation.created_date)")
+                    }
+                    
                     self?.userBetParticipations = participations
-                    print("✅ Fetched \(participations.count) bet participations")
+                    print("✅ fetchUserBetParticipations: Successfully loaded \(participations.count) bet participations")
+                    print("🔄 fetchUserBetParticipations: ================================================")
                 }
             }
     }
@@ -1513,12 +1554,22 @@ class FirestoreService: ObservableObject {
                     do {
                         let notification = try document.data(as: FirestoreNotification.self)
                         print("🔍 fetchNotifications: Successfully parsed notification: \(notification.title)")
+                        print("🔍 fetchNotifications: Raw message data: '\(notification.message)'")
+                        
+                        // Check for garbled text patterns
+                        if notification.message.contains(where: { char in
+                            !char.isASCII || (char.isASCII && char.asciiValue! < 32 && char != "\n" && char != "\r" && char != "\t")
+                        }) {
+                            print("⚠️ fetchNotifications: Detected potentially garbled text in notification: '\(notification.message)'")
+                        }
+                        
                         return notification
                     } catch {
                         print("❌ fetchNotifications: Failed to parse notification document \(document.documentID): \(error)")
+                        print("❌ fetchNotifications: Raw document data: \(document.data())")
                         return nil
                     }
-                    } ?? []
+                } ?? []
                     
                 print("🔍 fetchNotifications: Successfully parsed \(notifications.count) notifications")
                 
@@ -1612,7 +1663,7 @@ class FirestoreService: ObservableObject {
         let message = isWinner 
             ? "Congratulations! You won \(formattedWinnings) on '\(betTitle)'"
             : "Your bet on '\(betTitle)' has been settled"
-        let icon = isWinner ? "checkmark.circle" : "bolt.fill"
+        let icon = isWinner ? "trophy.fill" : "flag.fill"
         
         createNotification(
             for: userEmail,
@@ -1646,6 +1697,31 @@ class FirestoreService: ObservableObject {
             title: title,
             message: message,
             type: "bet_joined",
+            icon: icon,
+            communityId: communityId,
+            communityName: communityName,
+            communityIcon: communityIcon,
+            completion: completion
+        )
+    }
+    
+    func createRemindToSettleNotification(
+        for creatorEmail: String,
+        betTitle: String,
+        communityId: String? = nil,
+        communityName: String? = nil,
+        communityIcon: String? = nil,
+        completion: @escaping (Bool) -> Void
+    ) {
+        let title = "Reminder to Settle Bet 🔔"
+        let message = "Someone is reminding you to settle '\(betTitle)'"
+        let icon = "exclamationmark.triangle.fill"
+        
+        createNotification(
+            for: creatorEmail,
+            title: title,
+            message: message,
+            type: "remind_settle",
             icon: icon,
             communityId: communityId,
             communityName: communityName,
@@ -1688,7 +1764,7 @@ class FirestoreService: ObservableObject {
     ) {
         let title = "New Market! 🚀"
         let message = "A new market '\(betTitle)' was created in '\(communityName)'"
-        let icon = communityIcon ?? "person.2"
+        let icon = "plus.circle"
         
         createNotification(
             for: userEmail,
@@ -2077,6 +2153,26 @@ class FirestoreService: ObservableObject {
         fetchUserBets(completion: completion)
     }
     
+    func fetchAllBetParticipants(for betId: String, completion: @escaping ([BetParticipant]) -> Void) {
+        db.collection("BetParticipant")
+            .whereField("bet_id", isEqualTo: betId)
+            .getDocuments(source: .default) { snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching all bet participants: \(error.localizedDescription)")
+                    completion([])
+                    return
+                }
+                
+                let participants = snapshot?.documents.compactMap { document in
+                    try? document.data(as: BetParticipant.self)
+                } ?? []
+                
+                // Sort by created_date in descending order (most recent first)
+                let sortedParticipants = participants.sorted(by: { $0.created_date > $1.created_date })
+                completion(sortedParticipants)
+            }
+    }
+    
     func fetchBetStatus(betId: String, completion: @escaping (String?) -> Void) {
         db.collection("Bet").document(betId).getDocument(source: .default) { document, error in
             if let error = error {
@@ -2143,6 +2239,18 @@ class FirestoreService: ObservableObject {
     
     // MARK: - Dynamic Parimutuel Odds Calculation
     
+    /// Convert American odds to implied odds (decimal format)
+    private func americanOddsToImplied(americanOdds: Double) -> Double {
+        if americanOdds > 0 {
+            // Positive odds: implied = 100 / (americanOdds + 100)
+            return 100.0 / (americanOdds + 100.0)
+        } else {
+            // Negative odds: implied = |americanOdds| / (|americanOdds| + 100)
+            let absOdds = abs(americanOdds)
+            return absOdds / (absOdds + 100.0)
+        }
+    }
+    
     /// Calculate implied odds for each option based on current pool distribution with dynamic smoothing
     func calculateImpliedOdds(for bet: FirestoreBet) -> [String: Double] {
         print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Bet ID: \(bet.id ?? "nil")")
@@ -2154,11 +2262,25 @@ class FirestoreService: ObservableObject {
         guard let poolByOption = bet.pool_by_option,
               let totalPool = bet.total_pool,
               totalPool > 0 else {
-            // If no pool data, return equal odds for all options
-            let equalOdds = 1.0 / Double(bet.options.count)
-            let result = Dictionary(uniqueKeysWithValues: bet.options.map { ($0, equalOdds) })
-            print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Using equal odds (no pool data): \(result)")
-            return result
+            // If no pool data, try to use the stored odds from bet creation
+            if !bet.odds.isEmpty {
+                // Convert stored odds (American format) to implied odds (decimal format)
+                var impliedOdds: [String: Double] = [:]
+                for (option, americanOdds) in bet.odds {
+                    if let oddsValue = Double(americanOdds) {
+                        let implied = americanOddsToImplied(americanOdds: oddsValue)
+                        impliedOdds[option] = implied
+                    }
+                }
+                print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Using stored odds from bet creation: \(impliedOdds)")
+                return impliedOdds
+            } else {
+                // Fallback to equal odds if no stored odds
+                let equalOdds = 1.0 / Double(bet.options.count)
+                let result = Dictionary(uniqueKeysWithValues: bet.options.map { ($0, equalOdds) })
+                print("🔍 CALCULATE_IMPLIED_ODDS DEBUG - Using equal odds (no pool data or stored odds): \(result)")
+                return result
+            }
         }
         
         // Calculate dynamic buffer: at least 25 points, or 5% of total pool
@@ -2195,7 +2317,8 @@ class FirestoreService: ObservableObject {
         return impliedOdds
     }
     
-    /// Calculate payout multiplier for a winning bet using parimutuel system
+    /// Calculate payout for a winning bet using proportional distribution
+    /// Total payout to winners = total amount wagered by losers + winners get their stakes back
     func calculateParimutuelPayout(for bet: FirestoreBet, winningOption: String, userStake: Int) -> Double {
         guard let poolByOption = bet.pool_by_option,
               let totalPool = bet.total_pool,
@@ -2204,9 +2327,87 @@ class FirestoreService: ObservableObject {
             return Double(userStake) // Return original stake if no pool data
         }
         
-        // Parimutuel payout formula: (totalPool / winningSidePool) * userStake
-        let payoutMultiplier = Double(totalPool) / Double(winningPool)
-        return payoutMultiplier * Double(userStake)
+        // Calculate losing pool (total amount wagered by losers)
+        let losingPool = totalPool - winningPool
+        
+        // If no losing pool, winners just get their stake back (no profit)
+        guard losingPool > 0 else {
+            return Double(userStake)
+        }
+        
+        // Winners get their stake back + proportional share of losing pool
+        // User's share = (userStake / totalWinningPool) * totalLosingPool
+        let userShareOfWinnings = (Double(userStake) / Double(winningPool)) * Double(losingPool)
+        let totalPayout = Double(userStake) + userShareOfWinnings
+        
+        print("💰 calculateParimutuelPayout: User stake: \(userStake), Winning pool: \(winningPool), Losing pool: \(losingPool)")
+        print("💰 calculateParimutuelPayout: User share of winnings: \(userShareOfWinnings), Total payout: \(totalPayout)")
+        
+        return totalPayout
+    }
+    
+    /// Get locked odds for a user's bet participation
+    func getLockedOddsForUserBet(betId: String, userEmail: String) -> [String: Double]? {
+        // Find the most recent participation by this user for this bet
+        let userParticipations = userBetParticipations.filter { participation in
+            participation.bet_id == betId && participation.user_email == userEmail
+        }
+        
+        // Sort by creation date (most recent first) and get the latest
+        let sortedParticipations = userParticipations.sorted { $0.created_date > $1.created_date }
+        
+        if let latestParticipation = sortedParticipations.first {
+            print("🔒 getLockedOddsForUserBet: Found locked odds for user \(userEmail) on bet \(betId): \(latestParticipation.locked_odds ?? [:])")
+            return latestParticipation.locked_odds
+        }
+        
+        print("🔒 getLockedOddsForUserBet: No locked odds found for user \(userEmail) on bet \(betId)")
+        return nil
+    }
+    
+    /// Calculate countdown time for a bet deadline
+    func getCountdownTime(for deadline: Date) -> (timeString: String, isUrgent: Bool, isExpired: Bool) {
+        let now = Date()
+        let timeInterval = deadline.timeIntervalSince(now)
+        
+        print("⏰ getCountdownTime: Deadline: \(deadline)")
+        print("⏰ getCountdownTime: Current time: \(now)")
+        print("⏰ getCountdownTime: Time interval: \(timeInterval) seconds")
+        
+        // Check if expired
+        if timeInterval <= 0 {
+            print("⏰ getCountdownTime: Bet is EXPIRED")
+            return ("Expired", true, true)
+        }
+        
+        // Check if urgent (within 24 hours)
+        let isUrgent = timeInterval <= 86400 // 24 hours in seconds
+        print("⏰ getCountdownTime: Is urgent (within 24h): \(isUrgent)")
+        
+        let hours = Int(timeInterval) / 3600
+        let minutes = Int(timeInterval.truncatingRemainder(dividingBy: 3600)) / 60
+        let seconds = Int(timeInterval) % 60
+        
+        print("⏰ getCountdownTime: Hours: \(hours), Minutes: \(minutes), Seconds: \(seconds)")
+        
+            let timeString: String
+            if hours >= 24 {
+                let days = hours / 24
+                timeString = "\(days)d \(hours % 24)h"
+            } else if hours > 0 {
+                if minutes > 0 {
+                    timeString = "\(hours)h \(minutes)m"
+                } else {
+                    timeString = "\(hours)h"
+                }
+            } else if minutes > 0 {
+                timeString = "\(minutes)m"
+            } else {
+                timeString = "Less than 1 minute"
+            }
+        
+        print("⏰ getCountdownTime: Final time string: '\(timeString)'")
+        return (timeString, isUrgent, false)
     }
     
     /// Format implied odds as American odds display with clamping
@@ -2627,16 +2828,19 @@ class FirestoreService: ObservableObject {
     func updateBetPool(betId: String, chosenOption: String, stakeAmount: Int, completion: @escaping (Bool) -> Void) {
         let betRef = db.collection("Bet").document(betId)
         
+        print("🔄 updateBetPool: Starting pool update for bet \(betId)")
+        print("🔄 updateBetPool: Adding \(stakeAmount) points to option '\(chosenOption)'")
+        
         betRef.getDocument { [weak self] document, error in
             if let error = error {
-                print("❌ Error fetching bet for pool update: \(error.localizedDescription)")
+                print("❌ updateBetPool: Error fetching bet for pool update: \(error.localizedDescription)")
                 completion(false)
                 return
             }
             
             guard let document = document, document.exists,
                   var data = document.data() else {
-                print("❌ Bet document not found for pool update")
+                print("❌ updateBetPool: Bet document not found for pool update")
                 completion(false)
                 return
             }
@@ -2645,9 +2849,15 @@ class FirestoreService: ObservableObject {
             var poolByOption = data["pool_by_option"] as? [String: Int] ?? [:]
             var totalPool = data["total_pool"] as? Int ?? 0
             
+            print("🔄 updateBetPool: BEFORE UPDATE - Pool by option: \(poolByOption)")
+            print("🔄 updateBetPool: BEFORE UPDATE - Total pool: \(totalPool)")
+            
             // Update pool for the chosen option
             poolByOption[chosenOption] = (poolByOption[chosenOption] ?? 0) + stakeAmount
             totalPool += stakeAmount
+            
+            print("🔄 updateBetPool: AFTER UPDATE - Pool by option: \(poolByOption)")
+            print("🔄 updateBetPool: AFTER UPDATE - Total pool: \(totalPool)")
             
             // Update the document
             data["pool_by_option"] = poolByOption
@@ -2656,10 +2866,11 @@ class FirestoreService: ObservableObject {
             
             betRef.setData(data) { error in
                 if let error = error {
-                    print("❌ Error updating bet pool: \(error.localizedDescription)")
+                    print("❌ updateBetPool: Error updating bet pool: \(error.localizedDescription)")
                     completion(false)
                 } else {
-                    print("✅ Successfully updated bet pool for option '\(chosenOption)' with \(stakeAmount) points")
+                    print("✅ updateBetPool: Successfully updated bet pool for option '\(chosenOption)' with \(stakeAmount) points")
+                    print("🔄 updateBetPool: Pool update complete - odds will now be different!")
                     completion(true)
                 }
             }
@@ -2697,10 +2908,11 @@ class FirestoreService: ObservableObject {
             created_date: Date(),
             updated_date: Date(),
             is_winner: nil,
-            final_payout: nil
+            final_payout: nil,
+            locked_odds: nil // Will be set after calculating odds
         )
         
-        // First get the bet to get community_id
+        // First get the bet to get community_id and calculate odds BEFORE placing the bet
         db.collection("Bet").document(betId).getDocument(source: .default) { [weak self] document, error in
             if let error = error {
                 print("❌ joinBet: Error fetching bet document: \(error.localizedDescription)")
@@ -2718,12 +2930,22 @@ class FirestoreService: ObservableObject {
             
             print("✅ joinBet: Found bet with community ID: \(communityId)")
             
-            // Update participant with community_id
+            // Calculate odds BEFORE placing the bet (lock in current odds)
+            let currentBet = try? document.data(as: FirestoreBet.self)
+            let lockedOdds = currentBet.map { self?.calculateImpliedOdds(for: $0) } ?? [:]
+            print("🔒 joinBet: ===== LOCKING IN ODDS BEFORE BET PLACEMENT =====")
+            print("🔒 joinBet: Current bet pool_by_option: \(currentBet?.pool_by_option ?? [:])")
+            print("🔒 joinBet: Current bet total_pool: \(currentBet?.total_pool ?? 0)")
+            print("🔒 joinBet: Locked in odds: \(lockedOdds)")
+            print("🔒 joinBet: ================================================")
+            
+            // Update participant with community_id and locked odds
             var updatedParticipant = participantData
             updatedParticipant.community_id = communityId
+            updatedParticipant.locked_odds = lockedOdds
             
-            // Use a custom document ID to ensure consistency
-            let documentId = "\(betId)_\(userEmail)"
+            // Use a unique document ID for each bet placement (allows multiple bets by same user)
+            let documentId = "\(betId)_\(userEmail)_\(UUID().uuidString)"
             
             // Use a batch write to ensure both operations succeed or fail together
             let batch = self?.db.batch()
@@ -2746,9 +2968,21 @@ class FirestoreService: ObservableObject {
                         print("✅ joinBet: Successfully created BetParticipant and deducted \(stakeAmount) points")
                         
                         // Update bet pool with new stake
+                        print("🔄 joinBet: About to update bet pool - this will change the odds AFTER locking in")
                         self?.updateBetPool(betId: betId, chosenOption: chosenOption, stakeAmount: stakeAmount) { poolUpdateSuccess in
                             if poolUpdateSuccess {
-                                print("✅ Successfully updated bet pool")
+                                print("✅ joinBet: Successfully updated bet pool - odds have now changed")
+                                print("🔄 joinBet: ===== ODDS AFTER POOL UPDATE =====")
+                                // Fetch the bet again to see the new odds
+                                self?.db.collection("Bet").document(betId).getDocument { updatedDoc, error in
+                                    if let updatedDoc = updatedDoc, let updatedBet = try? updatedDoc.data(as: FirestoreBet.self) {
+                                        let newOdds = self?.calculateImpliedOdds(for: updatedBet) ?? [:]
+                                        print("🔄 joinBet: New bet pool_by_option: \(updatedBet.pool_by_option ?? [:])")
+                                        print("🔄 joinBet: New bet total_pool: \(updatedBet.total_pool ?? 0)")
+                                        print("🔄 joinBet: New calculated odds: \(newOdds)")
+                                        print("🔄 joinBet: ======================================")
+                                    }
+                                }
                                 // Track odds history after pool update (force update for immediate changes)
                                 self?.trackOddsHistory(for: betId, forceUpdate: true)
                             } else {
@@ -2819,7 +3053,14 @@ class FirestoreService: ObservableObject {
             
             print("✅ settleBet: Found \(documents.count) participants")
             
-            // Update bet status first
+            // Check if bet should be voided due to single-sided betting
+            if self?.checkIfBetShouldBeVoided(participants: documents) == true {
+                print("⚠️ settleBet: Bet has only one-sided wagering, voiding bet instead of settling")
+                self?.voidBet(betId: betId, participants: documents, completion: completion)
+                return
+            }
+            
+            // Update bet status to settled (normal settlement)
             let updateData: [String: Any] = [
                 "status": "settled",
                 "winner_option": winnerOption,
@@ -2923,15 +3164,24 @@ class FirestoreService: ObservableObject {
                             print("✅ processBetPayouts: Participant \(userEmail) updated successfully")
                         }
                         
-                        // Process payout for user
+                        // Process payout for user - Create outstanding balance instead of direct payment
                         if isWinner {
-                            // Winner gets their parimutuel payout
-                            let pointsToAdd = Int(payout)
-                            self?.updateUserBlitzPoints(userId: userEmail, pointsToAdd: pointsToAdd) { success, error in
+                            // Winner should receive payout from losers - create outstanding balance
+                            let pointsToReceive = Int(payout)
+                            print("🎯 processBetPayouts: \(userEmail) won \(pointsToReceive) points - will be paid by losers")
+                            
+                            // Create outstanding balance records for losers to pay winners
+                            self?.createOutstandingBalanceForWinner(
+                                winnerEmail: userEmail,
+                                winnerPayout: pointsToReceive,
+                                betId: betId,
+                                winnerOption: winnerOption,
+                                participants: participants
+                            ) { success in
                                 if success {
-                                    print("✅ processBetPayouts: \(userEmail) received \(pointsToAdd) points (parimutuel payout)")
+                                    print("✅ processBetPayouts: Created outstanding balances for winner \(userEmail)")
                                 } else {
-                                    print("❌ processBetPayouts: Error adding points to \(userEmail): \(error ?? "Unknown error")")
+                                    print("❌ processBetPayouts: Failed to create outstanding balances for winner \(userEmail)")
                                 }
                             }
                         } else {
@@ -2949,6 +3199,274 @@ class FirestoreService: ObservableObject {
             } catch {
                 print("❌ processBetPayouts: Error decoding bet data: \(error.localizedDescription)")
                 completion(false)
+            }
+        }
+    }
+    
+    private func createOutstandingBalanceForWinner(
+        winnerEmail: String,
+        winnerPayout: Int,
+        betId: String,
+        winnerOption: String,
+        participants: [QueryDocumentSnapshot],
+        completion: @escaping (Bool) -> Void
+    ) {
+        print("🎯 createOutstandingBalanceForWinner: Creating outstanding balances for winner \(winnerEmail)")
+        
+        // Get all losers (participants who didn't choose the winning option)
+        let losers = participants.filter { participantDoc in
+            guard let participantData = participantDoc.data() as [String: Any]?,
+                  let chosenOption = participantData["chosen_option"] as? String,
+                  let userEmail = participantData["user_email"] as? String else {
+                return false
+            }
+            return chosenOption != winnerOption && userEmail != winnerEmail
+        }
+        
+        guard !losers.isEmpty else {
+            print("ℹ️ createOutstandingBalanceForWinner: No losers found, no outstanding balances to create")
+            completion(true)
+            return
+        }
+        
+        // Get bet details for outstanding balance records
+        db.collection("Bet").document(betId).getDocument { [weak self] document, error in
+            if let error = error {
+                print("❌ createOutstandingBalanceForWinner: Error fetching bet details: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            guard let document = document, document.exists,
+                  let data = document.data() else {
+                print("❌ createOutstandingBalanceForWinner: Bet not found")
+                completion(false)
+                return
+            }
+            
+            let betTitle = data["title"] as? String ?? "Unknown Bet"
+            let communityId = data["community_id"] as? String ?? ""
+            let communityName = data["community_name"] as? String ?? "Unknown Community"
+            
+            // Calculate how much each loser owes the winner
+            // For now, distribute the winner's payout proportionally among losers
+            let totalLoserStakes = losers.reduce(0) { total, loserDoc in
+                guard let participantData = loserDoc.data() as [String: Any]?,
+                      let stakeAmount = participantData["stake_amount"] as? Int else {
+                    return total
+                }
+                return total + stakeAmount
+            }
+            
+            var processedCount = 0
+            let totalLosers = losers.count
+            
+            for loserDoc in losers {
+                guard let participantData = loserDoc.data() as [String: Any]?,
+                      let loserEmail = participantData["user_email"] as? String,
+                      let loserStake = participantData["stake_amount"] as? Int else {
+                    processedCount += 1
+                    if processedCount == totalLosers {
+                        completion(true)
+                    }
+                    continue
+                }
+                
+                // Calculate proportional amount this loser owes
+                let proportionalAmount = totalLoserStakes > 0 ? 
+                    Double(winnerPayout) * (Double(loserStake) / Double(totalLoserStakes)) : 
+                    Double(winnerPayout) / Double(totalLosers)
+                
+                // Create outstanding balance record
+                let balanceData: [String: Any] = [
+                    "payer_email": loserEmail,
+                    "payee_email": winnerEmail,
+                    "amount": proportionalAmount,
+                    "bet_id": betId,
+                    "bet_title": betTitle,
+                    "community_id": communityId,
+                    "community_name": communityName,
+                    "winner_option": winnerOption,
+                    "status": "pending",
+                    "created_date": Timestamp(date: Date()),
+                    "created_by": winnerEmail
+                ]
+                
+                self?.db.collection("OutstandingBalances").addDocument(data: balanceData) { error in
+                    if let error = error {
+                        print("❌ createOutstandingBalanceForWinner: Error creating balance record: \(error.localizedDescription)")
+                    } else {
+                        print("✅ createOutstandingBalanceForWinner: Created balance record - \(loserEmail) owes \(winnerEmail) \(proportionalAmount) points")
+                    }
+                    
+                    processedCount += 1
+                    if processedCount == totalLosers {
+                        completion(true)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Bet Voiding Logic
+    
+    private func checkIfBetShouldBeVoided(participants: [QueryDocumentSnapshot]) -> Bool {
+        print("🔍 checkIfBetShouldBeVoided: Checking if bet should be voided")
+        
+        // Get all unique options that have been wagered on
+        var optionsWithWagers: Set<String> = []
+        
+        for participantDoc in participants {
+            guard let participantData = participantDoc.data() as [String: Any]?,
+                  let chosenOption = participantData["chosen_option"] as? String else {
+                continue
+            }
+            optionsWithWagers.insert(chosenOption)
+        }
+        
+        print("🔍 checkIfBetShouldBeVoided: Found wagers on \(optionsWithWagers.count) different options: \(optionsWithWagers)")
+        
+        // If there are wagers on only one side, the bet should be voided
+        let shouldVoid = optionsWithWagers.count <= 1
+        
+        if shouldVoid {
+            print("⚠️ checkIfBetShouldBeVoided: Bet should be VOIDED - only one side has wagers")
+        } else {
+            print("✅ checkIfBetShouldBeVoided: Bet is valid - multiple sides have wagers")
+        }
+        
+        return shouldVoid
+    }
+    
+    private func voidBet(betId: String, participants: [QueryDocumentSnapshot], completion: @escaping (Bool) -> Void) {
+        print("🚫 voidBet: Voiding bet \(betId) and refunding all participants")
+        
+        // Update bet status to voided
+        let updateData: [String: Any] = [
+            "status": "voided",
+            "winner_option": NSNull(),
+            "updated_date": Date()
+        ]
+        
+        db.collection("Bet").document(betId).updateData(updateData) { [weak self] error in
+            if let error = error {
+                print("❌ voidBet: Error updating bet status: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            print("✅ voidBet: Bet status updated to voided")
+            
+            // Refund all participants
+            self?.refundAllParticipants(betId: betId, participants: participants) { success in
+                if success {
+                    print("✅ voidBet: All participants refunded successfully")
+                    
+                    // Create voided bet notifications
+                    self?.createBetVoidedNotifications(betId: betId, participants: participants)
+                    
+                    completion(true)
+                } else {
+                    print("❌ voidBet: Error refunding participants")
+                    completion(false)
+                }
+            }
+        }
+    }
+    
+    private func refundAllParticipants(betId: String, participants: [QueryDocumentSnapshot], completion: @escaping (Bool) -> Void) {
+        print("💰 refundAllParticipants: Refunding \(participants.count) participants")
+        
+        var processedCount = 0
+        let totalParticipants = participants.count
+        
+        guard totalParticipants > 0 else {
+            completion(true)
+            return
+        }
+        
+        for participantDoc in participants {
+            guard let participantData = participantDoc.data() as [String: Any]?,
+                  let userEmail = participantData["user_email"] as? String,
+                  let stakeAmount = participantData["stake_amount"] as? Int else {
+                print("❌ refundAllParticipants: Invalid participant data for \(participantDoc.documentID)")
+                processedCount += 1
+                if processedCount == totalParticipants {
+                    completion(false)
+                }
+                continue
+            }
+            
+            print("💰 refundAllParticipants: Refunding \(stakeAmount) points to \(userEmail)")
+            
+            // Update participant record
+            let participantRef = db.collection("BetParticipant").document(participantDoc.documentID)
+            let participantUpdate: [String: Any] = [
+                "is_winner": NSNull(),
+                "final_payout": stakeAmount, // Refund original stake
+                "updated_date": Date()
+            ]
+            
+            participantRef.updateData(participantUpdate) { [weak self] error in
+                if let error = error {
+                    print("❌ refundAllParticipants: Error updating participant \(userEmail): \(error.localizedDescription)")
+                } else {
+                    print("✅ refundAllParticipants: Participant \(userEmail) record updated")
+                }
+                
+                // Refund points to user
+                self?.updateUserBlitzPoints(userId: userEmail, pointsToAdd: stakeAmount) { success, error in
+                    if success {
+                        print("✅ refundAllParticipants: \(userEmail) received \(stakeAmount) points refund")
+                    } else {
+                        print("❌ refundAllParticipants: Error refunding points to \(userEmail): \(error ?? "Unknown error")")
+                    }
+                    
+                    processedCount += 1
+                    if processedCount == totalParticipants {
+                        print("✅ refundAllParticipants: All participants processed")
+                        completion(true)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func createBetVoidedNotifications(betId: String, participants: [QueryDocumentSnapshot]) {
+        print("📱 createBetVoidedNotifications: Creating voided bet notifications")
+        
+        // Get bet details for notification
+        db.collection("Bet").document(betId).getDocument(source: .default) { [weak self] document, error in
+            guard let document = document, document.exists,
+                  let data = document.data(),
+                  let betTitle = data["title"] as? String else {
+                print("❌ createBetVoidedNotifications: Could not get bet details")
+                return
+            }
+            
+            for participantDoc in participants {
+                guard let participantData = participantDoc.data() as [String: Any]?,
+                      let userEmail = participantData["user_email"] as? String,
+                      let stakeAmount = participantData["stake_amount"] as? Int else {
+                    continue
+                }
+                
+                self?.createNotification(
+                    for: userEmail,
+                    title: "Bet Voided",
+                    message: "Your bet on '\(betTitle)' was voided due to lack of opposing wagers. You've been refunded \(stakeAmount) points.",
+                    type: "bet_voided",
+                    icon: "arrow.clockwise.circle",
+                    communityId: participantData["community_id"] as? String,
+                    communityName: nil,
+                    communityIcon: nil
+                ) { success in
+                    if success {
+                        print("✅ Created voided bet notification for \(userEmail)")
+                    } else {
+                        print("❌ Failed to create voided bet notification for \(userEmail)")
+                    }
+                }
             }
         }
     }
@@ -3863,24 +4381,27 @@ class FirestoreService: ObservableObject {
         
         print("🔍 Fetching outstanding balances for user: \(currentUserEmail)")
         
-        // First, get all communities the user is a member of
-        let userCommunities = self.userCommunities
-        if userCommunities.isEmpty {
-            print("📋 No communities found for user")
-            completion([])
-            return
-        }
-        
         var allBalances: [OutstandingBalance] = []
         let group = DispatchGroup()
         
-        for community in userCommunities {
-            guard let communityId = community.id else { continue }
-            
-            group.enter()
-            calculateOutstandingBalancesForCommunity(communityId: communityId, userEmail: currentUserEmail) { balances in
-                allBalances.append(contentsOf: balances)
-                group.leave()
+        // Fetch from OutstandingBalances collection (new system)
+        group.enter()
+        fetchOutstandingBalancesFromCollection(userEmail: currentUserEmail) { balances in
+            allBalances.append(contentsOf: balances)
+            group.leave()
+        }
+        
+        // Also fetch from BetParticipant calculations (legacy system)
+        let userCommunities = self.userCommunities
+        if !userCommunities.isEmpty {
+            for community in userCommunities {
+                guard let communityId = community.id else { continue }
+                
+                group.enter()
+                calculateOutstandingBalancesForCommunity(communityId: communityId, userEmail: currentUserEmail) { balances in
+                    allBalances.append(contentsOf: balances)
+                    group.leave()
+                }
             }
         }
         
@@ -3906,6 +4427,136 @@ class FirestoreService: ObservableObject {
             
             print("✅ Fetched \(sortedBalances.count) outstanding balances")
             completion(sortedBalances)
+        }
+    }
+    
+    private func fetchOutstandingBalancesFromCollection(userEmail: String, completion: @escaping ([OutstandingBalance]) -> Void) {
+        print("🔍 Fetching outstanding balances from OutstandingBalances collection")
+        
+        // Fetch balances where user is either payer or payee
+        let payerQuery = db.collection("OutstandingBalances")
+            .whereField("payer_email", isEqualTo: userEmail)
+            .whereField("status", isEqualTo: "pending")
+        
+        let payeeQuery = db.collection("OutstandingBalances")
+            .whereField("payee_email", isEqualTo: userEmail)
+            .whereField("status", isEqualTo: "pending")
+        
+        let group = DispatchGroup()
+        var allBalanceRecords: [[String: Any]] = []
+        
+        // Fetch records where user is the payer (owes money)
+        group.enter()
+        payerQuery.getDocuments { snapshot, error in
+            if let error = error {
+                print("❌ Error fetching payer balances: \(error.localizedDescription)")
+            } else {
+                let records: [[String: Any]] = snapshot?.documents.map { document in
+                    var data = document.data()
+                    data["document_id"] = document.documentID
+                    data["user_role"] = "payer"
+                    return data
+                } ?? []
+                allBalanceRecords.append(contentsOf: records)
+            }
+            group.leave()
+        }
+        
+        // Fetch records where user is the payee (owed money)
+        group.enter()
+        payeeQuery.getDocuments { snapshot, error in
+            if let error = error {
+                print("❌ Error fetching payee balances: \(error.localizedDescription)")
+            } else {
+                let records: [[String: Any]] = snapshot?.documents.map { document in
+                    var data = document.data()
+                    data["document_id"] = document.documentID
+                    data["user_role"] = "payee"
+                    return data
+                } ?? []
+                allBalanceRecords.append(contentsOf: records)
+            }
+            group.leave()
+        }
+        
+        group.notify(queue: .main) {
+            // Group by counterparty and calculate net amounts
+            var counterpartyBalances: [String: [String: Any]] = [:]
+            
+            for record in allBalanceRecords {
+                guard let amount = record["amount"] as? Double,
+                      let userRole = record["user_role"] as? String else { continue }
+                
+                let counterpartyEmail = userRole == "payer" ? 
+                    (record["payee_email"] as? String ?? "") : 
+                    (record["payer_email"] as? String ?? "")
+                
+                if counterpartyBalances[counterpartyEmail] == nil {
+                    counterpartyBalances[counterpartyEmail] = [
+                        "counterparty": counterpartyEmail,
+                        "net_amount": 0.0,
+                        "transactions": []
+                    ]
+                }
+                
+                let netAmount = counterpartyBalances[counterpartyEmail]?["net_amount"] as? Double ?? 0.0
+                let adjustedAmount = userRole == "payer" ? -amount : amount
+                counterpartyBalances[counterpartyEmail]?["net_amount"] = netAmount + adjustedAmount
+                
+                // Add transaction details
+                var transactions = counterpartyBalances[counterpartyEmail]?["transactions"] as? [[String: Any]] ?? []
+                transactions.append([
+                    "amount": amount,
+                    "user_role": userRole,
+                    "bet_title": record["bet_title"] as? String ?? "",
+                    "bet_id": record["bet_id"] as? String ?? "",
+                    "community_name": record["community_name"] as? String ?? "Unknown Community",
+                    "created_date": record["created_date"] as? Timestamp ?? Timestamp()
+                ])
+                counterpartyBalances[counterpartyEmail]?["transactions"] = transactions
+            }
+            
+            // Convert to OutstandingBalance objects
+            var balances: [OutstandingBalance] = []
+            let balanceGroup = DispatchGroup()
+            
+            for (counterpartyEmail, balanceData) in counterpartyBalances {
+                guard let netAmount = balanceData["net_amount"] as? Double,
+                      netAmount != 0 else { continue }
+                
+                balanceGroup.enter()
+                self.getUserDetails(email: counterpartyEmail) { userName, username in
+                    let transactions = balanceData["transactions"] as? [[String: Any]] ?? []
+                    let balanceTransactions = transactions.map { transData in
+                        BalanceTransaction(
+                            id: UUID().uuidString,
+                            betId: transData["bet_id"] as? String ?? "",
+                            betTitle: transData["bet_title"] as? String ?? "",
+                            amount: transData["amount"] as? Double ?? 0.0,
+                            isOwed: transData["user_role"] as? String == "payer",
+                            date: (transData["created_date"] as? Timestamp)?.dateValue() ?? Date(),
+                            communityName: transData["community_name"] as? String ?? "Unknown Community"
+                        )
+                    }
+                    
+                    let balance = OutstandingBalance(
+                        id: "outstanding_\(counterpartyEmail)",
+                        profilePicture: nil,
+                        username: username,
+                        name: userName,
+                        netAmount: netAmount,
+                        transactions: balanceTransactions,
+                        counterpartyId: counterpartyEmail
+                    )
+                    balances.append(balance)
+                    balanceGroup.leave()
+                }
+            }
+            
+            balanceGroup.notify(queue: .main) {
+                print("✅ Fetched \(balances.count) outstanding balances from collection")
+                completion(balances)
+            }
         }
     }
     
@@ -4048,6 +4699,171 @@ class FirestoreService: ObservableObject {
         }
         
         return Array(groupedBalances.values)
+    }
+    
+    // MARK: - Balance Resolution
+    
+    func resolveOutstandingBalance(balanceId: String, completion: @escaping (Bool, String?) -> Void) {
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false, "No current user available")
+            return
+        }
+        
+        print("🔄 Resolving outstanding balance: \(balanceId)")
+        
+        // For the new OutstandingBalances collection, we need to find and update the specific records
+        if balanceId.hasPrefix("outstanding_") {
+            let counterpartyEmail = String(balanceId.dropFirst("outstanding_".count))
+            
+            // Update all pending balances between current user and counterparty
+            let payerQuery = db.collection("OutstandingBalances")
+                .whereField("payer_email", isEqualTo: currentUserEmail)
+                .whereField("payee_email", isEqualTo: counterpartyEmail)
+                .whereField("status", isEqualTo: "pending")
+            
+            let payeeQuery = db.collection("OutstandingBalances")
+                .whereField("payee_email", isEqualTo: currentUserEmail)
+                .whereField("payer_email", isEqualTo: counterpartyEmail)
+                .whereField("status", isEqualTo: "pending")
+            
+            let group = DispatchGroup()
+            var totalUpdated = 0
+            var totalToUpdate = 0
+            
+            // Update records where current user is payer
+            group.enter()
+            payerQuery.getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching payer balances: \(error.localizedDescription)")
+                } else {
+                    let documents = snapshot?.documents ?? []
+                    totalToUpdate += documents.count
+                    
+                    for document in documents {
+                        document.reference.updateData([
+                            "status": "resolved",
+                            "resolved_date": Timestamp(date: Date()),
+                            "resolved_by": currentUserEmail
+                        ]) { error in
+                            if let error = error {
+                                print("❌ Error updating payer balance: \(error.localizedDescription)")
+                            } else {
+                                totalUpdated += 1
+                            }
+                        }
+                    }
+                }
+                group.leave()
+            }
+            
+            // Update records where current user is payee
+            group.enter()
+            payeeQuery.getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching payee balances: \(error.localizedDescription)")
+                } else {
+                    let documents = snapshot?.documents ?? []
+                    totalToUpdate += documents.count
+                    
+                    for document in documents {
+                        document.reference.updateData([
+                            "status": "resolved",
+                            "resolved_date": Timestamp(date: Date()),
+                            "resolved_by": currentUserEmail
+                        ]) { error in
+                            if let error = error {
+                                print("❌ Error updating payee balance: \(error.localizedDescription)")
+                            } else {
+                                totalUpdated += 1
+                            }
+                        }
+                    }
+                }
+                group.leave()
+            }
+            
+            group.notify(queue: .main) {
+                if totalUpdated == totalToUpdate && totalToUpdate > 0 {
+                    print("✅ Successfully resolved \(totalUpdated) balance records")
+                    
+                    // Refresh outstanding balances
+                    self.fetchOutstandingBalances { _ in
+                        // Updated balances will be reflected in UI
+                    }
+                    
+                    completion(true, nil)
+                } else {
+                    print("❌ Failed to resolve all balance records: \(totalUpdated)/\(totalToUpdate)")
+                    completion(false, "Failed to resolve all balance records")
+                }
+            }
+        } else {
+            // Legacy system - create a balance resolution record
+            let resolutionData: [String: Any] = [
+                "balance_id": balanceId,
+                "resolved_by": currentUserEmail,
+                "resolved_at": Timestamp(date: Date()),
+                "status": "resolved"
+            ]
+            
+            // Add to BalanceResolutions collection
+            db.collection("BalanceResolutions").addDocument(data: resolutionData) { error in
+                if let error = error {
+                    print("❌ Error resolving balance: \(error.localizedDescription)")
+                    completion(false, error.localizedDescription)
+                } else {
+                    print("✅ Successfully resolved balance: \(balanceId)")
+                    
+                    // Refresh outstanding balances
+                    DispatchQueue.main.async {
+                        self.fetchOutstandingBalances { _ in
+                            // Updated balances will be reflected in UI
+                        }
+                    }
+                    
+                    completion(true, nil)
+                }
+            }
+        }
+    }
+    
+    func markBalanceAsPaid(counterpartyId: String, amount: Double, completion: @escaping (Bool, String?) -> Void) {
+        guard let currentUserEmail = currentUser?.email else {
+            completion(false, "No current user available")
+            return
+        }
+        
+        print("💰 Marking balance as paid: \(amount) to \(counterpartyId)")
+        
+        // Create a payment record
+        let paymentData: [String: Any] = [
+            "payer_email": currentUserEmail,
+            "payee_email": counterpartyId,
+            "amount": amount,
+            "payment_date": Timestamp(date: Date()),
+            "status": "completed",
+            "created_by": currentUserEmail,
+            "created_date": Timestamp(date: Date())
+        ]
+        
+        // Add to Payments collection
+        db.collection("Payments").addDocument(data: paymentData) { error in
+            if let error = error {
+                print("❌ Error recording payment: \(error.localizedDescription)")
+                completion(false, error.localizedDescription)
+            } else {
+                print("✅ Successfully recorded payment of \(amount) to \(counterpartyId)")
+                
+                // Refresh outstanding balances
+                DispatchQueue.main.async {
+                    self.fetchOutstandingBalances { _ in
+                        // Updated balances will be reflected in UI
+                    }
+                }
+                
+                completion(true, nil)
+            }
+        }
     }
     
     func getUserDetails(email: String, completion: @escaping (String, String) -> Void) {

@@ -1230,6 +1230,15 @@ struct HomeBetCard: View {
         return "Community"
     }
     
+    private var countdownInfo: (timeString: String, isUrgent: Bool, isExpired: Bool) {
+        print("🔍 HomeBetCard countdownInfo: Called for bet '\(bet.title)' with deadline: \(bet.deadline)")
+        
+        let info = firestoreService.getCountdownTime(for: bet.deadline)
+        print("⏰ HomeBetCard: Bet '\(bet.title)' - Deadline: \(bet.deadline) - Time: '\(info.timeString)', Urgent: \(info.isUrgent), Expired: \(info.isExpired)")
+        
+        return info
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Header with image and title - clickable to go to bet details
@@ -1261,6 +1270,16 @@ struct HomeBetCard: View {
                     
                     Spacer()
                     
+                    // Urgent indicator in top right
+                    if countdownInfo.isUrgent && !countdownInfo.isExpired {
+                        VStack {
+                            Image(systemName: "clock.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(.red)
+                            Spacer()
+                        }
+                    }
+                    
 
                 }
             }
@@ -1270,9 +1289,29 @@ struct HomeBetCard: View {
             VStack(spacing: 8) {
                 ForEach(bet.options, id: \.self) { option in
                     Button(action: {
+                        // 🐛 DEBUG: MainAppView Bet Option Selection - COMPREHENSIVE
+                        print("🎯 MAIN_APP_OPTION_CLICK: ===== MAIN APP DEBUG START =====")
+                        print("🎯 MAIN_APP_OPTION_CLICK: User clicked on option: '\(option)'")
+                        print("🎯 MAIN_APP_OPTION_CLICK: Bet ID: \(bet.id ?? "nil")")
+                        print("🎯 MAIN_APP_OPTION_CLICK: Bet title: '\(bet.title)'")
+                        print("🎯 MAIN_APP_OPTION_CLICK: All bet options: \(bet.options)")
+                        print("🎯 MAIN_APP_OPTION_CLICK: Current selectedBettingOption: '\(selectedBettingOption)'")
+                        print("🎯 MAIN_APP_OPTION_CLICK: selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
+                        print("🎯 MAIN_APP_OPTION_CLICK: showingBettingInterface current value: \(showingBettingInterface)")
+                        
                         AnalyticsService.shared.trackBetInteraction(action: .placeBet, betId: bet.id ?? "unknown", betTitle: bet.title, communityName: communityName)
+                        
+                        // Set the selected option
                         selectedBettingOption = option
+                        
+                        print("🎯 MAIN_APP_OPTION_CLICK: After assignment - selectedBettingOption: '\(selectedBettingOption)'")
+                        print("🎯 MAIN_APP_OPTION_CLICK: After assignment - selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
+                        
+                        // Trigger the betting interface
                         showingBettingInterface = true
+                        
+                        print("🎯 MAIN_APP_OPTION_CLICK: After showingBettingInterface = true: \(showingBettingInterface)")
+                        print("🎯 MAIN_APP_OPTION_CLICK: ===== MAIN APP DEBUG END =====")
                     }) {
                         HStack {
                             Text(option)
@@ -1317,9 +1356,23 @@ struct HomeBetCard: View {
                 }
             }) {
                 HStack {
-                    Text("Deadline: \(formatDate(bet.deadline))")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+                    if countdownInfo.isUrgent && !countdownInfo.isExpired {
+                        // Show "Ends:" with formatted date for urgent bets
+                        Text("Ends: \(formatDateWithTime(bet.deadline))")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .fontWeight(.medium)
+                    } else if countdownInfo.isExpired {
+                        Text("Deadline: EXPIRED")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.red)
+                    } else {
+                        // Normal deadline display
+                        Text("Deadline: \(formatDate(bet.deadline))")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
                     
                     Spacer()
                 }
@@ -1341,11 +1394,33 @@ struct HomeBetCard: View {
             )
         }
         .sheet(isPresented: $showingBettingInterface) {
+            let finalOption = selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption
+            
             BettingInterfaceView(
                 bet: bet,
-                selectedOption: selectedBettingOption,
+                selectedOption: finalOption,
                 firestoreService: firestoreService
             )
+            .onAppear {
+                // 🐛 DEBUG: MainAppView Sheet Presentation
+                print("🎯 MAIN_APP_SHEET_ONAPPEAR: BettingInterfaceView sheet appeared from MainAppView")
+                print("🎯 MAIN_APP_SHEET_ONAPPEAR: selectedBettingOption at sheet appear: '\(selectedBettingOption)'")
+                print("🎯 MAIN_APP_SHEET_ONAPPEAR: showingBettingInterface: \(showingBettingInterface)")
+                print("🎯 MAIN_APP_SHEET_ONAPPEAR: finalOption used: '\(finalOption)'")
+                
+                // 🐛 DEBUG: MainAppView BettingInterfaceView Resolution - COMPREHENSIVE
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: ===== MAIN APP RESOLUTION DEBUG START =====")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: selectedBettingOption: '\(selectedBettingOption)'")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: selectedBettingOption.count: \(selectedBettingOption.count)")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: bet.options: \(bet.options)")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: bet.options.first: '\(bet.options.first ?? "nil")'")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: Final resolved option: '\(finalOption)'")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: Bet ID: \(bet.id ?? "nil")")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: Bet title: '\(bet.title)'")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: showingBettingInterface: \(showingBettingInterface)")
+                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: ===== MAIN APP RESOLUTION DEBUG END =====")
+            }
         }
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(activityItems: [generateBetShareText()])
@@ -1395,6 +1470,12 @@ struct HomeBetCard: View {
         } else {
             return fullName
         }
+    }
+    
+    private func formatDateWithTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM d, h:mm a"
+        return formatter.string(from: date)
     }
     
     private func generateBetShareText() -> String {

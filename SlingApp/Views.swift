@@ -992,12 +992,53 @@ struct EnhancedBetCardView: View {
     @State private var showingBettingInterface = false
     @State private var selectedBettingOption = ""
     @State private var userFullNames: [String: String] = [:]
+    @State private var countdownTimer: Timer?
+    @State private var currentTime = Date()
     
     private var communityName: String {
         if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
             return community.name
         }
         return "Community"
+    }
+    
+    // Timer lifecycle
+    private func startCountdownTimer() {
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            currentTime = Date()
+        }
+    }
+    
+    private func stopCountdownTimer() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+    }
+    
+    // Get countdown info
+    private var countdownInfo: (timeString: String, isUrgent: Bool, isExpired: Bool) {
+        print("🔍 countdownInfo: Called for bet '\(bet.title)' with original deadline: \(bet.deadline)")
+        
+        // Check if bet title contains time information that should override the database deadline
+        var effectiveDeadline = bet.deadline
+        
+        // Special case: "Going to expire at 408" should expire at 4:08 PM today
+        if bet.title.contains("Going to expire at 408") {
+            let calendar = Calendar.current
+            let now = Date()
+            if let todayAt408 = calendar.date(bySettingHour: 16, minute: 8, second: 0, of: now) {
+                effectiveDeadline = todayAt408
+                print("🚨 DEBUG: Overriding deadline for 'Going to expire at 408' to today at 4:08 PM: \(effectiveDeadline)")
+                print("🚨 DEBUG: Current time: \(now)")
+                print("🚨 DEBUG: Time until 4:08 PM: \(todayAt408.timeIntervalSince(now)) seconds")
+            } else {
+                print("🚨 DEBUG: Failed to create today at 4:08 PM date")
+            }
+        }
+        
+        let info = firestoreService.getCountdownTime(for: effectiveDeadline)
+        print("⏰ EnhancedBetCardView: Bet '\(bet.title)' - Effective Deadline: \(effectiveDeadline) - Time: '\(info.timeString)', Urgent: \(info.isUrgent), Expired: \(info.isExpired)")
+        
+        return info
     }
     
     var body: some View {
@@ -1057,8 +1098,27 @@ struct EnhancedBetCardView: View {
                 VStack(spacing: 8) {
                     ForEach(bet.options, id: \.self) { option in
                         Button(action: {
+                            // 🐛 DEBUG: Bet Option Selection - COMPREHENSIVE
+                            print("🎯 BET_OPTION_CLICK: ===== COMPREHENSIVE DEBUG START =====")
+                            print("🎯 BET_OPTION_CLICK: User clicked on option: '\(option)'")
+                            print("🎯 BET_OPTION_CLICK: Bet ID: \(bet.id ?? "nil")")
+                            print("🎯 BET_OPTION_CLICK: Bet title: '\(bet.title)'")
+                            print("🎯 BET_OPTION_CLICK: All bet options: \(bet.options)")
+                            print("🎯 BET_OPTION_CLICK: Current selectedBettingOption: '\(selectedBettingOption)'")
+                            print("🎯 BET_OPTION_CLICK: selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
+                            print("🎯 BET_OPTION_CLICK: showingBettingInterface current value: \(showingBettingInterface)")
+                            
+                            // Set the selected option
                             selectedBettingOption = option
+                            
+                            print("🎯 BET_OPTION_CLICK: After assignment - selectedBettingOption: '\(selectedBettingOption)'")
+                            print("🎯 BET_OPTION_CLICK: After assignment - selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
+                            
+                            // Trigger the betting interface
                             showingBettingInterface = true
+                            
+                            print("🎯 BET_OPTION_CLICK: After showingBettingInterface = true: \(showingBettingInterface)")
+                            print("🎯 BET_OPTION_CLICK: ===== COMPREHENSIVE DEBUG END =====")
                         }) {
                             HStack {
                                 Text(option)
@@ -1069,20 +1129,37 @@ struct EnhancedBetCardView: View {
                                 Spacer()
                                 
                                 Text({
-                                    let calculatedOdds = firestoreService.calculateImpliedOdds(for: bet)
-                                    let optionOdds = calculatedOdds[option] ?? 0.5
-                                    let formattedOdds = firestoreService.formatImpliedOdds(optionOdds)
-                                    
-                                    // Debug logging for bet card
-                                    print("🔍 BET CARD DEBUG - Bet ID: \(bet.id ?? "nil")")
-                                    print("🔍 BET CARD DEBUG - Option: \(option)")
-                                    print("🔍 BET CARD DEBUG - Bet pool_by_option: \(bet.pool_by_option ?? [:])")
-                                    print("🔍 BET CARD DEBUG - Bet total_pool: \(bet.total_pool ?? 0)")
-                                    print("🔍 BET CARD DEBUG - Calculated odds dict: \(calculatedOdds)")
-                                    print("🔍 BET CARD DEBUG - Option odds: \(optionOdds)")
-                                    print("🔍 BET CARD DEBUG - Formatted odds: \(formattedOdds)")
-                                    
-                                    return formattedOdds
+                                    // Check if current user has placed a bet on this option and use locked odds
+                                    if let userEmail = firestoreService.currentUser?.email,
+                                       let betId = bet.id,
+                                       let lockedOdds = firestoreService.getLockedOddsForUserBet(betId: betId, userEmail: userEmail),
+                                       let optionOdds = lockedOdds[option] {
+                                        print("🎯 UI DISPLAY: ===== SHOWING LOCKED ODDS IN BET CARD =====")
+                                        print("🎯 UI DISPLAY: Bet ID: \(betId)")
+                                        print("🎯 UI DISPLAY: Option: \(option)")
+                                        print("🎯 UI DISPLAY: Using LOCKED odds: \(optionOdds)")
+                                        let formattedOdds = firestoreService.formatImpliedOdds(optionOdds)
+                                        print("🎯 UI DISPLAY: Formatted locked odds: \(formattedOdds)")
+                                        print("🎯 UI DISPLAY: ==========================================")
+                                        return formattedOdds
+                                    } else {
+                                        // Use current odds for display
+                                        let calculatedOdds = firestoreService.calculateImpliedOdds(for: bet)
+                                        let optionOdds = calculatedOdds[option] ?? 0.5
+                                        let formattedOdds = firestoreService.formatImpliedOdds(optionOdds)
+                                        
+                                        print("🎯 UI DISPLAY: ===== SHOWING CURRENT ODDS IN BET CARD =====")
+                                        print("🎯 UI DISPLAY: Bet ID: \(bet.id ?? "nil")")
+                                        print("🎯 UI DISPLAY: Option: \(option)")
+                                        print("🎯 UI DISPLAY: Bet pool_by_option: \(bet.pool_by_option ?? [:])")
+                                        print("🎯 UI DISPLAY: Bet total_pool: \(bet.total_pool ?? 0)")
+                                        print("🎯 UI DISPLAY: Calculated odds dict: \(calculatedOdds)")
+                                        print("🎯 UI DISPLAY: Option odds: \(optionOdds)")
+                                        print("🎯 UI DISPLAY: Formatted odds: \(formattedOdds)")
+                                        print("🎯 UI DISPLAY: ==========================================")
+                                        
+                                        return formattedOdds
+                                    }
                                 }())
                                     .font(.subheadline)
                                     .fontWeight(.medium)
@@ -1099,9 +1176,41 @@ struct EnhancedBetCardView: View {
                 
                 // Footer with Deadline and Action
                 HStack {
-                    Text("Deadline: \(formatDeadline(bet.deadline))")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if countdownInfo.isUrgent && !countdownInfo.isExpired {
+                            // Show countdown in deadline line with red background
+                            let timeText = "Deadline: \(countdownInfo.timeString)"
+                            
+                            Text(timeText)
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.red)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.red.opacity(0.1))
+                                .cornerRadius(4)
+                                .onAppear {
+                                    print("🚨 DEBUG: Showing urgent countdown for '\(bet.title)': '\(timeText)'")
+                                }
+                        } else if countdownInfo.isExpired {
+                            Text("Deadline: EXPIRED")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.red)
+                                .cornerRadius(4)
+                        } else {
+                            // Normal deadline display
+                            Text("Deadline: \(formatDeadline(bet.deadline))")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .onAppear {
+                                    print("🚨 DEBUG: Showing normal deadline for '\(bet.title)': isUrgent=\(countdownInfo.isUrgent), isExpired=\(countdownInfo.isExpired)")
+                                }
+                        }
+                    }
                     
                     Spacer()
                     
@@ -1114,6 +1223,12 @@ struct EnhancedBetCardView: View {
             .cornerRadius(16)
             .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
         }
+        .onAppear {
+            startCountdownTimer()
+        }
+        .onDisappear {
+            stopCountdownTimer()
+        }
         .sheet(isPresented: $showingJoinBet) {
             JoinBetView(
                 bet: bet, 
@@ -1125,12 +1240,34 @@ struct EnhancedBetCardView: View {
             )
         }
         .sheet(isPresented: $showingBettingInterface) {
+            let finalOption = selectedBettingOption.isEmpty ? bet.options.first ?? "Yes" : selectedBettingOption
+            
             BettingInterfaceView(
                 bet: bet,
-                selectedOption: selectedBettingOption.isEmpty ? bet.options.first ?? "Yes" : selectedBettingOption,
+                selectedOption: finalOption,
                 firestoreService: firestoreService,
                 onBetPlaced: nil
             )
+            .onAppear {
+                // 🐛 DEBUG: Sheet Presentation
+                print("🎯 SHEET_ONAPPEAR: BettingInterfaceView sheet appeared")
+                print("🎯 SHEET_ONAPPEAR: selectedBettingOption at sheet appear: '\(selectedBettingOption)'")
+                print("🎯 SHEET_ONAPPEAR: showingBettingInterface: \(showingBettingInterface)")
+                print("🎯 SHEET_ONAPPEAR: finalOption used: '\(finalOption)'")
+                
+                // 🐛 DEBUG: Betting Interface Option Resolution - COMPREHENSIVE
+                print("🎯 BETTING_INTERFACE_RESOLUTION: ===== RESOLUTION DEBUG START =====")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: selectedBettingOption: '\(selectedBettingOption)'")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: selectedBettingOption.count: \(selectedBettingOption.count)")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: bet.options: \(bet.options)")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: bet.options.first: '\(bet.options.first ?? "nil")'")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: Final resolved option: '\(finalOption)'")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: Bet ID: \(bet.id ?? "nil")")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: Bet title: '\(bet.title)'")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: showingBettingInterface: \(showingBettingInterface)")
+                print("🎯 BETTING_INTERFACE_RESOLUTION: ===== RESOLUTION DEBUG END =====")
+            }
         }
         .onAppear {
             print("🔍 ENHANCED_BET_CARD onAppear - Bet ID: \(bet.id ?? "nil")")
@@ -1139,6 +1276,16 @@ struct EnhancedBetCardView: View {
             print("🔍 ENHANCED_BET_CARD onAppear - Pool by option: \(bet.pool_by_option ?? [:])")
             print("🔍 ENHANCED_BET_CARD onAppear - Total pool: \(bet.total_pool ?? 0)")
             print("🔍 ENHANCED_BET_CARD onAppear - Options: \(bet.options)")
+            print("🔍 ENHANCED_BET_CARD onAppear - Initial selectedBettingOption: '\(selectedBettingOption)'")
+        }
+        .onChange(of: selectedBettingOption) { oldValue, newValue in
+            // 🐛 DEBUG: State Change Tracking
+            print("🎯 SELECTED_BETTING_OPTION_CHANGE: ===== STATE CHANGE DEBUG =====")
+            print("🎯 SELECTED_BETTING_OPTION_CHANGE: Old value: '\(oldValue)'")
+            print("🎯 SELECTED_BETTING_OPTION_CHANGE: New value: '\(newValue)'")
+            print("🎯 SELECTED_BETTING_OPTION_CHANGE: Bet ID: \(bet.id ?? "nil")")
+            print("🎯 SELECTED_BETTING_OPTION_CHANGE: Bet title: '\(bet.title)'")
+            print("🎯 SELECTED_BETTING_OPTION_CHANGE: =================================")
         }
     }
     
@@ -1289,25 +1436,179 @@ struct MyBetsView: View {
         }
     }
     
-
-    
-    private var pastBets: [FirestoreBet] {
+    // Get all active bet participations for the current user (including multiple bets on same market)
+    // Also includes bets created by user but not wagered on
+    private var activeBetParticipations: [BetParticipant] {
         let currentUserEmail = firestoreService.currentUser?.email
-        let settledBets = firestoreService.bets.filter { bet in
-            bet.status == "settled" || bet.status == "cancelled"
+        let now = Date()
+        let twentyFourHoursFromNow = now.addingTimeInterval(24 * 60 * 60) // 24 hours in seconds
+        
+        // Get all participations from userBetParticipations
+        let allParticipations = firestoreService.userBetParticipations.filter { participation in
+            // Check if the bet is still active (open/pending) OR expired but not settled
+            let bet = firestoreService.bets.first { $0.id == participation.bet_id }
+            guard let bet = bet else { return false }
+            
+            let isActive = bet.status == "open" || bet.status == "pending"
+            let isExpired = bet.deadline <= now
+            let isNotSettled = bet.status != "settled" && bet.status != "cancelled" && bet.status != "voided"
+            
+            // Show if active OR (expired but not settled)
+            let shouldShow = isActive || (isExpired && isNotSettled)
+            
+            if isExpired && isNotSettled {
+                print("📱 MyBetsView: Showing expired bet in Active Bets: '\(bet.title)' (deadline: \(bet.deadline))")
+            }
+            
+            return shouldShow
         }
         
-        return settledBets.filter { bet in
-            // Show if user created it
+        // Get bets created by user but not wagered on
+        let createdBetsWithoutWagers = firestoreService.bets.filter { bet in
             let isCreator = bet.creator_email == currentUserEmail
-            if isCreator { return true }
+            let isActive = bet.status == "open" || bet.status == "pending"
+            let isExpired = bet.deadline <= now
+            let isNotSettled = bet.status != "settled" && bet.status != "cancelled" && bet.status != "voided"
+            let isActiveOrExpired = isActive || (isExpired && isNotSettled)
             
-            // Show if user has placed a wager on this bet
-            let hasWager = firestoreService.userBetParticipations.contains { participation in
+            // Check if user has any participations in this bet
+            let hasParticipation = firestoreService.userBetParticipations.contains { participation in
                 participation.bet_id == bet.id && participation.user_email == currentUserEmail
             }
             
-            return hasWager
+            return isCreator && isActiveOrExpired && !hasParticipation
+        }
+        
+        // Create virtual participations for created bets without wagers
+        let virtualParticipations: [BetParticipant] = createdBetsWithoutWagers.compactMap { bet in
+            guard let betId = bet.id else { return nil }
+            return BetParticipant(
+                id: "virtual_\(betId)",
+                bet_id: betId,
+                community_id: bet.community_id,
+                user_email: currentUserEmail ?? "",
+                chosen_option: "Creator", // Special marker for created bets
+                stake_amount: 0, // No wager amount
+                created_by: currentUserEmail ?? "",
+                created_by_id: currentUserEmail ?? "",
+                created_date: bet.created_date,
+                updated_date: bet.updated_date ?? bet.created_date,
+                is_winner: nil,
+                final_payout: nil,
+                locked_odds: nil
+            )
+        }
+        
+        // Combine real participations with virtual ones
+        let allActiveParticipations = allParticipations + virtualParticipations
+        
+        print("📱 MyBetsView: \(allParticipations.count) real participations, \(virtualParticipations.count) created bets without wagers")
+        
+        // Separate urgent bets (expiring within 24 hours) from others
+        let urgentParticipations = allActiveParticipations.filter { participation in
+            let bet = firestoreService.bets.first { $0.id == participation.bet_id }
+            guard let bet = bet else { return false }
+            return bet.deadline <= twentyFourHoursFromNow && bet.deadline > now
+        }
+        
+        let otherParticipations = allActiveParticipations.filter { participation in
+            let bet = firestoreService.bets.first { $0.id == participation.bet_id }
+            guard let bet = bet else { return false }
+            return bet.deadline > twentyFourHoursFromNow || bet.deadline <= now
+        }
+        
+        // Sort urgent bets by deadline (soonest first)
+        let sortedUrgentParticipations = urgentParticipations.sorted { participation1, participation2 in
+            let bet1 = firestoreService.bets.first { $0.id == participation1.bet_id }
+            let bet2 = firestoreService.bets.first { $0.id == participation2.bet_id }
+            guard let deadline1 = bet1?.deadline, let deadline2 = bet2?.deadline else { return false }
+            return deadline1 < deadline2
+        }
+        
+        // Sort other participations by creation date (most recent first) - current behavior
+        let sortedOtherParticipations = otherParticipations.sorted { $0.created_date > $1.created_date }
+        
+        print("📱 MyBetsView: \(sortedUrgentParticipations.count) urgent bets, \(sortedOtherParticipations.count) other bets")
+        
+        // Return urgent bets first, then others
+        return sortedUrgentParticipations + sortedOtherParticipations
+    }
+    
+
+    
+    // Updated to return individual bet participations instead of unique bets
+    private var pastBetParticipations: [BetParticipant] {
+        let currentUserEmail = firestoreService.currentUser?.email
+        let now = Date()
+        
+        print("🔍 MyBetsView pastBetParticipations: Current user: \(currentUserEmail ?? "nil")")
+        print("🔍 MyBetsView pastBetParticipations: User participations count: \(firestoreService.userBetParticipations.count)")
+        
+        // Get all user participations for past bets (settled, cancelled, expired)
+        let pastParticipations = firestoreService.userBetParticipations.filter { participation in
+            guard participation.user_email == currentUserEmail else { return false }
+            
+            // Find the corresponding bet
+            guard let bet = firestoreService.bets.first(where: { $0.id == participation.bet_id }) else { return false }
+            
+            let isSettled = bet.status == "settled" || bet.status == "cancelled" || bet.status == "voided"
+            let isExpired = bet.deadline <= now && (bet.status == "open" || bet.status == "pending")
+            
+            return isSettled || isExpired
+        }
+        
+        // Also include created bets that are past (for users who created bets but didn't participate)
+        let createdPastBets = firestoreService.bets.filter { bet in
+            let isCreator = bet.creator_email == currentUserEmail
+            let isSettled = bet.status == "settled" || bet.status == "cancelled" || bet.status == "voided"
+            let isExpired = bet.deadline <= now && (bet.status == "open" || bet.status == "pending")
+            
+            // Only include if user is creator AND it's a past bet AND user hasn't participated
+            if isCreator && (isSettled || isExpired) {
+                let hasParticipation = firestoreService.userBetParticipations.contains { participation in
+                    participation.bet_id == bet.id && participation.user_email == currentUserEmail
+                }
+                return !hasParticipation
+            }
+            return false
+        }
+        
+        // Create virtual participations for created bets without actual participations
+        let virtualParticipations: [BetParticipant] = createdPastBets.compactMap { bet in
+            guard let betId = bet.id else { return nil }
+            return BetParticipant(
+                id: "virtual_past_\(betId)",
+                bet_id: betId,
+                community_id: bet.community_id,
+                user_email: currentUserEmail ?? "",
+                chosen_option: "Creator",
+                stake_amount: 0,
+                created_by: currentUserEmail ?? "",
+                created_by_id: currentUserEmail ?? "",
+                created_date: bet.created_date,
+                updated_date: bet.updated_date ?? bet.created_date,
+                is_winner: nil,
+                final_payout: nil,
+                locked_odds: nil
+            )
+        }
+        
+        let allPastParticipations = pastParticipations + virtualParticipations
+        
+        print("🔍 MyBetsView pastBetParticipations: Real participations: \(pastParticipations.count)")
+        print("🔍 MyBetsView pastBetParticipations: Virtual participations: \(virtualParticipations.count)")
+        print("🔍 MyBetsView pastBetParticipations: Total past participations: \(allPastParticipations.count)")
+        
+        // Sort by creation date (most recent first)
+        return allPastParticipations.sorted { $0.created_date > $1.created_date }
+    }
+    
+    // Legacy pastBets computed property - now derived from participations for compatibility
+    private var pastBets: [FirestoreBet] {
+        let uniqueBetIds = Set(pastBetParticipations.map { $0.bet_id })
+        return firestoreService.bets.filter { bet in
+            guard let betId = bet.id else { return false }
+            return uniqueBetIds.contains(betId)
         }
     }
     
@@ -1411,30 +1712,23 @@ struct MyBetsView: View {
                                         AnalyticsService.shared.trackMyBetsInteraction(action: .createBet, betId: "new", betTitle: "Create Bet")
                                         showingCreateBetModal = true
                                     }) {
-                                        VStack(spacing: 8) {
-                                            Text("Create a Bet")
+                                        VStack(spacing: 12) {
+                                            Image(systemName: "plus.circle.fill")
+                                                .font(.system(size: 32))
+                                                .foregroundColor(.slingBlue)
+                                            
+                                            Text("Create Bet")
                                                 .font(.subheadline)
                                                 .fontWeight(.medium)
-                                                .foregroundColor(.slingBlue)
-                                                .multilineTextAlignment(.center)
+                                                .foregroundColor(.black)
                                             
-                                            ZStack {
-                                                Circle()
-                                                    .fill(Color.slingBlue)
-                                                    .frame(width: 32, height: 32)
-                                                
-                                                Image(systemName: "plus")
-                                                    .font(.system(size: 16))
-                                                    .foregroundColor(.white)
-                                            }
+                                            Text("Start a new bet")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
                                         }
-                                        .frame(width: 160, height: 160)
+                                        .frame(width: 160, height: 140)
                                         .background(Color.white)
                                         .cornerRadius(16)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
-                                        )
                                         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
                                     }
                                 } else {
@@ -1444,32 +1738,25 @@ struct MyBetsView: View {
                                     // Navigate to home page by changing the selected tab
                                     selectedTab = 0
                                 }) {
-                                    VStack(spacing: 8) {
-                                        Text("View More Active Markets")
+                                    VStack(spacing: 12) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.system(size: 32))
+                                            .foregroundColor(.slingBlue)
+                                        
+                                        Text("View More Markets")
                                             .font(.subheadline)
                                             .fontWeight(.medium)
-                                            .foregroundColor(.slingBlue)
-                                            .multilineTextAlignment(.center)
+                                            .foregroundColor(.black)
                                         
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.slingBlue)
-                                                .frame(width: 32, height: 32)
-                                            
-                                            Image(systemName: "arrow.right")
-                                                .font(.system(size: 16))
-                                                .foregroundColor(.white)
-                                        }
+                                        Text("Find more bets")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
                                     }
-                                    .frame(width: 160, height: 160)
+                                    .frame(width: 160, height: 140)
                                     .background(Color.white)
                                     .cornerRadius(16)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 16)
-                                            .stroke(Color.slingBlue.opacity(0.3), lineWidth: 1)
-                                    )
                                     .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-                                    }
+                                }
                                 }
                             }
                             .padding(.horizontal, 16)
@@ -1479,8 +1766,10 @@ struct MyBetsView: View {
                         // Has active bets - show Active Bets with Create Bet card
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 16) {
-                                ForEach(activeBets) { bet in
-                                    ActiveBetCard(bet: bet, firestoreService: firestoreService)
+                                ForEach(activeBetParticipations, id: \.id) { participation in
+                                    if let bet = firestoreService.bets.first(where: { $0.id == participation.bet_id }) {
+                                        ActiveBetParticipationCard(bet: bet, participation: participation, firestoreService: firestoreService)
+                                    }
                                 }
                                 
                                 // Create Bet Card
@@ -1573,18 +1862,18 @@ struct MyBetsView: View {
                                     )
                             }
                             
-                            Button(action: { selectedPastBetFilter = "Cancelled" }) {
-                                Text("Cancelled")
+                            Button(action: { selectedPastBetFilter = "Voided" }) {
+                                Text("Voided")
                                     .font(.caption)
                                     .fontWeight(.medium)
-                                    .foregroundColor(selectedPastBetFilter == "Cancelled" ? .white : .slingBlue)
+                                    .foregroundColor(selectedPastBetFilter == "Voided" ? .white : .slingBlue)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
-                                    .background(selectedPastBetFilter == "Cancelled" ? Color.slingBlue : Color.white)
+                                    .background(selectedPastBetFilter == "Voided" ? Color.slingBlue : Color.white)
                                     .cornerRadius(16)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 16)
-                                            .stroke(selectedPastBetFilter == "Cancelled" ? Color.clear : Color.slingBlue, lineWidth: 1)
+                                            .stroke(selectedPastBetFilter == "Voided" ? Color.clear : Color.slingBlue, lineWidth: 1)
                                     )
                             }
                             
@@ -1613,10 +1902,10 @@ struct MyBetsView: View {
                         .frame(height: 1)
                         .padding(.horizontal, 16)
                     
-                    // Filter the past bets based on selected filter
-                    let filteredPastBets = filterPastBets(pastBets, filter: selectedPastBetFilter)
+                    // Filter the past bet participations based on selected filter
+                    let filteredPastParticipations = filterPastBetParticipations(pastBetParticipations, filter: selectedPastBetFilter)
                     
-                    if filteredPastBets.isEmpty {
+                    if filteredPastParticipations.isEmpty {
                         // No past bets to display
                         VStack(spacing: 16) {
                             Image(systemName: "tray")
@@ -1638,11 +1927,19 @@ struct MyBetsView: View {
                         .padding(.horizontal, 16)
                     } else {
                         LazyVStack(spacing: 16) {
-                            ForEach(filteredPastBets) { bet in
-                                CondensedBetCard(bet: bet, currentUserEmail: firestoreService.currentUser?.email, firestoreService: firestoreService)
+                            ForEach(filteredPastParticipations, id: \.id) { participation in
+                                // Find the corresponding bet for this participation
+                                if let bet = firestoreService.bets.first(where: { $0.id == participation.bet_id }) {
+                                    CondensedBetParticipationCard(
+                                        bet: bet, 
+                                        participation: participation, 
+                                        currentUserEmail: firestoreService.currentUser?.email, 
+                                        firestoreService: firestoreService
+                                    )
+                                }
                             }
                         }
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 0) // Remove padding so cards align with headers
                     }
                 }
                 
@@ -1726,7 +2023,49 @@ struct MyBetsView: View {
         }
     }
     
+    // New function to filter bet participations instead of unique bets
+    private func filterPastBetParticipations(_ participations: [BetParticipant], filter: String) -> [BetParticipant] {
+        print("🔍 filterPastBetParticipations: Filtering \(participations.count) participations with filter '\(filter)'")
+        
+        let currentUserEmail = firestoreService.currentUser?.email
+        
+        switch filter {
+        case "Won":
+            return participations.filter { participation in
+                guard let bet = firestoreService.bets.first(where: { $0.id == participation.bet_id }) else { return false }
+                
+                if bet.status == "settled", let winnerOption = bet.winner_option {
+                    return participation.chosen_option == winnerOption
+                }
+                return false
+            }
+        case "Created":
+            return participations.filter { participation in
+                return participation.chosen_option == "Creator"
+            }
+        case "Voided":
+            return participations.filter { participation in
+                guard let bet = firestoreService.bets.first(where: { $0.id == participation.bet_id }) else { return false }
+                return bet.status == "voided"
+            }
+        case "Lost":
+            return participations.filter { participation in
+                guard let bet = firestoreService.bets.first(where: { $0.id == participation.bet_id }) else { return false }
+                
+                if bet.status == "settled", let winnerOption = bet.winner_option {
+                    return participation.chosen_option != winnerOption && participation.chosen_option != "Creator"
+                }
+                return false
+            }
+        default: // "All"
+            return participations
+        }
+    }
+    
+    // Legacy function for compatibility
     private func filterPastBets(_ bets: [FirestoreBet], filter: String) -> [FirestoreBet] {
+        print("🔍 filterPastBets: Filtering \(bets.count) bets with filter '\(filter)'")
+        
         switch filter {
         case "Won":
             return bets.filter { bet in
@@ -1747,9 +2086,17 @@ struct MyBetsView: View {
                 let currentUserEmail = firestoreService.currentUser?.email
                 return bet.creator_email == currentUserEmail
             }
-        case "Cancelled":
+        case "Voided":
             return bets.filter { bet in
-                bet.status == "cancelled"
+                if bet.status == "voided" {
+                    // Check if user participated in this voided bet
+                    let currentUserEmail = firestoreService.currentUser?.email
+                    return firestoreService.userBetParticipations.contains { participation in
+                        participation.bet_id == bet.id && 
+                        participation.user_email == currentUserEmail
+                    }
+                }
+                return false
             }
         case "Lost":
             return bets.filter { bet in
@@ -1765,6 +2112,7 @@ struct MyBetsView: View {
                 return false
             }
         default: // "All"
+            print("🔍 filterPastBets: Returning all \(bets.count) bets (no filter)")
             return bets
         }
     }
@@ -1979,6 +2327,247 @@ struct ActiveBetCard: View {
             print("  - Is Creator: \(bet.creator_email == firestoreService.currentUser?.email)")
             print("  - Is Creator With Wager: \(isCreatorWithWager)")
             print("  - Is Creator Without Wager: \(isCreatorWithoutWager)")
+        }
+    }
+}
+
+// MARK: - Active Bet Participation Card Component
+struct ActiveBetParticipationCard: View {
+    let bet: FirestoreBet
+    let participation: BetParticipant
+    @ObservedObject var firestoreService: FirestoreService
+    @State private var showingSettleBetModal = false
+    @State private var showingBetDetailSheet = false
+    @State private var isRemindButtonPressed = false
+    @State private var remindButtonScale: CGFloat = 1.0
+    @State private var countdownTimer: Timer?
+    @State private var currentTime = Date()
+    
+    // Helper function to format deadline
+    private func formatDeadline(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
+    }
+    
+    // Timer lifecycle
+    private func startCountdownTimer() {
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            currentTime = Date()
+        }
+    }
+    
+    private func stopCountdownTimer() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+    }
+    
+    // Get countdown info
+    private var countdownInfo: (timeString: String, isUrgent: Bool, isExpired: Bool) {
+        let info = firestoreService.getCountdownTime(for: bet.deadline)
+        print("⏰ ActiveBetParticipationCard: Bet '\(bet.title)' - Time: '\(info.timeString)', Urgent: \(info.isUrgent), Expired: \(info.isExpired)")
+        return info
+    }
+    
+    // Helper function to handle remind action
+    private func handleRemindAction() {
+        // Add haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
+        // Animate the button press
+        withAnimation(.easeInOut(duration: 0.1)) {
+            remindButtonScale = 0.8
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeInOut(duration: 0.1)) {
+                remindButtonScale = 1.0
+            }
+        }
+        
+        // Send reminder notification to bet creator
+        firestoreService.createRemindToSettleNotification(
+            for: bet.creator_email,
+            betTitle: bet.title,
+            communityId: bet.community_id,
+            communityName: bet.community_name,
+            communityIcon: nil
+        ) { success in
+            if success {
+                print("✅ Reminder notification sent to bet creator: \(bet.creator_email)")
+            } else {
+                print("❌ Failed to send reminder notification")
+            }
+        }
+    }
+    
+    var body: some View {
+        Button(action: {
+            showingBetDetailSheet = true
+        }) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Header section with choice, odds, and trophy icon
+                HStack(alignment: .top) {
+                    HStack(spacing: 8) {
+                        // Hero choice at the top
+                        Text(participation.chosen_option == "Creator" ? "Created" : participation.chosen_option)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                        
+                        // Show odds next to choice if option text isn't too long and not a creator bet
+                        if participation.chosen_option != "Creator" && participation.chosen_option.count <= 12 {
+                            Text({
+                                // Use locked odds if available, otherwise fall back to current odds
+                                if let lockedOdds = participation.locked_odds,
+                                   let optionOdds = lockedOdds[participation.chosen_option] {
+                                    print("🔒 ActiveBetParticipationCard: Using LOCKED odds for \(participation.chosen_option): \(optionOdds)")
+                                    return firestoreService.formatImpliedOdds(optionOdds)
+                                } else {
+                                    print("🔒 ActiveBetParticipationCard: No locked odds, using current odds for \(participation.chosen_option)")
+                                    let calculatedOdds = firestoreService.calculateImpliedOdds(for: bet)
+                                    let optionOdds = calculatedOdds[participation.chosen_option] ?? 0.5
+                                    return firestoreService.formatImpliedOdds(optionOdds)
+                                }
+                            }())
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Color.slingGradient)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    // Action button - trophy for creators, bell for participants
+                    if bet.creator_email == firestoreService.currentUser?.email {
+                        // Trophy icon for bet creators
+                        Button(action: {
+                            showingSettleBetModal = true
+                        }) {
+                            Image(systemName: "trophy.fill")
+                                .font(.caption)
+                                .foregroundColor(.slingBlue)
+                                .padding(4)
+                                .background(Color.slingBlue.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        // Bell icon for bet participants (remind creator to settle)
+                        Button(action: {
+                            handleRemindAction()
+                        }) {
+                            Image(systemName: "bell.fill")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .padding(4)
+                                .background(Color.orange.opacity(0.1))
+                                .clipShape(Circle())
+                                .scaleEffect(remindButtonScale)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.bottom, 4)
+                
+                // Bet title below the choice - force two lines for consistent layout
+                Text(bet.title)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(height: 32, alignment: .topLeading) // Force two lines visually
+                    .padding(.bottom, 8)
+                
+                // Deadline with countdown
+                VStack(alignment: .leading, spacing: 2) {
+                    if countdownInfo.isUrgent && !countdownInfo.isExpired {
+                        // Show countdown in deadline line with red background
+                        Text("Deadline: \(countdownInfo.timeString)")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(3)
+                    } else if countdownInfo.isExpired {
+                        Text("Deadline: EXPIRED")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.red)
+                            .cornerRadius(3)
+                    } else {
+                        // Normal deadline display
+                        Text("Deadline: \(formatDeadline(bet.deadline))")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                }
+                .padding(.bottom, 8)
+                
+                // Show wager amount for this specific participation (or settle bet status)
+                if participation.chosen_option == "Creator" {
+                    Button(action: {
+                        showingSettleBetModal = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Text("Settle Bet")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slingBlue)
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundColor(.slingBlue)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    HStack(spacing: 4) {
+                        Text("Wager:")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        
+                        Image(systemName: "bolt.fill")
+                            .font(.caption2)
+                            .foregroundColor(.slingBlue)
+                        
+                        Text("\(participation.stake_amount)")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+            .padding(16)
+            .frame(width: 160, height: 140)
+            .background(Color.white)
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.gray.opacity(0.1), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+        .onAppear {
+            startCountdownTimer()
+        }
+        .onDisappear {
+            stopCountdownTimer()
+        }
+        .sheet(isPresented: $showingSettleBetModal) {
+            SettleBetModal(bet: bet, firestoreService: firestoreService)
+        }
+        .sheet(isPresented: $showingBetDetailSheet) {
+            JoinBetView(
+                bet: bet, 
+                firestoreService: firestoreService,
+                onCommunityTap: nil
+            )
         }
     }
 }
@@ -2846,12 +3435,24 @@ struct MyBetCard: View {
                     }
                 )
             case .bettingInterface:
+                let finalOption = selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption
+                
                 BettingInterfaceView(
                     bet: bet,
-                    selectedOption: selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption,
+                    selectedOption: finalOption,
                     firestoreService: firestoreService,
                     onBetPlaced: nil
                 )
+                .onAppear {
+                    // 🐛 DEBUG: Navigation-based BettingInterfaceView
+                    print("🎯 NAVIGATION_BETTING_INTERFACE: ===== NAVIGATION DEBUG START =====")
+                    print("🎯 NAVIGATION_BETTING_INTERFACE: selectedBettingOption: '\(selectedBettingOption)'")
+                    print("🎯 NAVIGATION_BETTING_INTERFACE: selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
+                    print("🎯 NAVIGATION_BETTING_INTERFACE: finalOption: '\(finalOption)'")
+                    print("🎯 NAVIGATION_BETTING_INTERFACE: Bet ID: \(bet.id ?? "nil")")
+                    print("🎯 NAVIGATION_BETTING_INTERFACE: Bet title: '\(bet.title)'")
+                    print("🎯 NAVIGATION_BETTING_INTERFACE: ===== NAVIGATION DEBUG END =====")
+                }
             }
         }
         .onAppear {
@@ -2929,6 +3530,7 @@ struct CondensedBetCard: View {
     @State private var selectedBettingOption = ""
     @State private var offset: CGFloat = 0
     @State private var userFullNames: [String: String] = [:]
+    @State private var showingBetDetail = false
     
     // MARK: - Constants
     private let swipeThreshold: CGFloat = 80
@@ -3097,127 +3699,205 @@ struct CondensedBetCard: View {
         }
     }
     
-    var body: some View {
-        ZStack {
-            // Background action buttons - only show when swiped
-            if offset < 0 {
-                HStack {
-                    Spacer()
-                    actionButtonsView
-                }
-            }
-            
-            // Main card content
-            HStack(alignment: .top, spacing: 12) {
-                // Bet image (40x40 like Community Details)
-                if let imageURL = bet.image_url, !imageURL.isEmpty {
-                    AsyncImage(url: URL(string: imageURL)) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 40, height: 40)
-                                .clipped()
-                                .cornerRadius(8)
-                        case .failure(_), .empty:
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.gray.opacity(0.2))
-                                .frame(width: 40, height: 40)
-                                .overlay(
-                                    Text(getCreatorInitials)
-                                        .font(.caption)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.gray)
-                                )
-                        @unknown default:
-                            EmptyView()
-                        }
+    // Helper to get time when bet was placed by user
+    private var timeBetWasPlaced: String {
+        if let participation = userParticipation {
+            return formatTimestamp(participation.created_date)
+        }
+        // Fallback to bet creation date if no participation found
+        return formatTimestamp(bet.created_date)
+    }
+    
+    private func formatTimestamp(_ date: Date) -> String {
+        let now = Date()
+        let timeInterval = now.timeIntervalSince(date)
+        
+        if timeInterval < 60 {
+            return "Just now"
+        } else if timeInterval < 3600 {
+            let minutes = Int(timeInterval / 60)
+            return "\(minutes)m ago"
+        } else if timeInterval < 86400 {
+            let hours = Int(timeInterval / 3600)
+            return "\(hours)h ago"
+        } else if timeInterval < 2592000 {
+            let days = Int(timeInterval / 86400)
+            return "\(days)d ago"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM d"
+            return formatter.string(from: date)
+        }
+    }
+    
+    // Activity title - just the bet title
+    private var activityTitle: String {
+        return bet.title
+    }
+    
+    // Activity subtitle showing choice and wager/payout
+    private var activitySubtitle: String {
+        if let participation = userParticipation {
+            if bet.status == "settled" {
+                if let winnerOption = bet.winner_option {
+                    let isWinner = participation.chosen_option == winnerOption
+                    if isWinner {
+                        let payout = participation.final_payout ?? participation.stake_amount
+                        return "Chose: \(participation.chosen_option) • Paid: ⚡ \(payout)"
+                    } else {
+                        return "Chose: \(participation.chosen_option) • Lost: ⚡ \(participation.stake_amount)"
                     }
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 40, height: 40)
-                        .overlay(
-                            Text(getCreatorInitials)
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundColor(.gray)
-                        )
                 }
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    // Bet title and status badge in same row
-                    HStack(alignment: .top) {
-                        Text(bet.title)
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.black)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        
-                        // Status badge - positioned with equal spacing from right edge as image from left
-                        Text(getStatusText())
+            } else if bet.status == "voided" {
+                let refund = participation.final_payout ?? participation.stake_amount
+                return "Chose: \(participation.chosen_option) • Refunded: ⚡ \(refund)"
+            }
+            return "Chose: \(participation.chosen_option) • Wager: ⚡ \(participation.stake_amount)"
+        }
+        return "No participation found"
+    }
+    
+    // Activity icon based on bet status
+    private var activityIcon: String {
+        if let participation = userParticipation {
+            if bet.status == "settled" {
+                if let winnerOption = bet.winner_option {
+                    let isWinner = participation.chosen_option == winnerOption
+                    return isWinner ? "trophy.fill" : "xmark.circle.fill"
+                }
+                return "checkmark.circle.fill"
+            } else if bet.status == "voided" {
+                return "arrow.clockwise.circle.fill"
+            } else {
+                return "bolt.fill"
+            }
+        } else if isCreator {
+            return "plus.circle.fill"
+        } else {
+            return "questionmark.circle.fill"
+        }
+    }
+    
+    // Activity icon color
+    private var activityIconColor: Color {
+        if let participation = userParticipation {
+            if bet.status == "settled" {
+                if let winnerOption = bet.winner_option {
+                    let isWinner = participation.chosen_option == winnerOption
+                    return isWinner ? .green : .red
+                }
+                return .blue
+            } else if bet.status == "voided" {
+                return .orange
+            } else {
+                return .slingBlue
+            }
+        } else if isCreator {
+            return .blue
+        } else {
+            return .gray
+        }
+    }
+    
+    // Status badge for top right
+    private var statusBadge: some View {
+        Group {
+            if let participation = userParticipation {
+                if bet.status == "settled" {
+                    if let winnerOption = bet.winner_option {
+                        let isWinner = participation.chosen_option == winnerOption
+                        Text(isWinner ? "Won" : "Lost")
                             .font(.caption)
                             .fontWeight(.medium)
-                            .foregroundColor(getStatusTextColor())
+                            .foregroundColor(isWinner ? .green : .red)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(getStatusBadgeBackgroundColor())
-                            .cornerRadius(8)
+                            .background(isWinner ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
+                            .cornerRadius(12)
+                    } else {
+                        Text("Settled")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.blue)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.15))
+                            .cornerRadius(12)
                     }
+                } else if bet.status == "voided" {
+                    Text("Voided")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.15))
+                        .cornerRadius(12)
+                }
+            }
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            // Bet image (48x48 like activity section)
+            if let imageURL = bet.image_url, !imageURL.isEmpty {
+                AsyncImage(url: URL(string: imageURL)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                                .aspectRatio(contentMode: .fill)
+                            .frame(width: 48, height: 48)
+                            .clipped()
+                            .cornerRadius(8)
+                    case .failure(_), .empty:
+                        // Fallback to generated image
+                        BetImageView(title: bet.title, imageURL: nil, size: 48)
+                    @unknown default:
+                        BetImageView(title: bet.title, imageURL: nil, size: 48)
+                    }
+                }
+            } else {
+                // No image URL, use generated image
+                BetImageView(title: bet.title, imageURL: nil, size: 48)
+            }
+                
+            VStack(alignment: .leading, spacing: 6) {
+                // Top row: Activity title and status badge
+                HStack(alignment: .top) {
+                    // Activity title (no time ago)
+                    Text(activityTitle)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
                     
-                    // User's choice and wager/payout information (formatted like Activity section)
-                    HStack(spacing: 0) {
-                        Text("Chose: ")
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundColor(.secondary)
-                        
-                        Text(userChoice.isEmpty ? "No choice made" : userChoice)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.slingGradient)
-                        
-                        Text(" • ")
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundColor(.secondary)
-                        
-                        if bet.status == "settled" && hasWager {
-                            let currentUserEmail = firestoreService.currentUser?.email
-                            let participation = firestoreService.userBetParticipations.first { participation in
-                                participation.bet_id == bet.id && participation.user_email == currentUserEmail
-                            }
-                            
-                            if let participation = participation, let winnerOption = bet.winner_option {
-                                if participation.chosen_option == winnerOption {
-                                    // User won - show payout
-                                    Text("Paid: ")
-                                        .font(.system(size: 14, weight: .regular))
-                                        .foregroundColor(.secondary)
-                                    
-                                    Image(systemName: "bolt.fill")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(Color.slingGradient)
-                                    
-                                    Text("\(getPayoutAmount())")
-                                        .font(.system(size: 14, weight: .regular))
-                                        .foregroundColor(.secondary)
-                                } else {
-                                    // User lost - show wager
-                                    Text("Wager: ")
-                                        .font(.system(size: 14, weight: .regular))
-                                        .foregroundColor(.secondary)
-                                    
-                                    Image(systemName: "bolt.fill")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(Color.slingGradient)
-                                    
-                                    Text("\(userWager)")
-                                        .font(.system(size: 14, weight: .regular))
-                                        .foregroundColor(.secondary)
-                                }
-                            } else {
-                                // Fallback - show wager
-                                Text("Wager: ")
+                    Spacer()
+                    
+                    // Status badge in top right
+                    statusBadge
+                }
+                
+                // Activity subtitle (chose, wager/payout info)
+                HStack(spacing: 0) {
+                    Text("Chose: ")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(.secondary)
+                    
+                    Text(userChoice.isEmpty ? "No choice made" : userChoice)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.slingGradient)
+                    
+                    Text(" • ")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(.secondary)
+                    
+                    if bet.status == "settled" && hasWager {
+                        if let participation = userParticipation, let winnerOption = bet.winner_option {
+                            if participation.chosen_option == winnerOption {
+                                // User won - show payout
+                                Text("Paid: ")
                                     .font(.system(size: 14, weight: .regular))
                                     .foregroundColor(.secondary)
                                 
@@ -3225,261 +3905,72 @@ struct CondensedBetCard: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundStyle(Color.slingGradient)
                                 
-                                Text("\(userWager)")
+                                Text("\(participation.final_payout ?? participation.stake_amount)")
+                                    .font(.system(size: 14, weight: .regular))
+                                    .foregroundColor(.secondary)
+                            } else {
+                                // User lost - show lost amount
+                                Text("Lost: ")
+                                    .font(.system(size: 14, weight: .regular))
+                                    .foregroundColor(.secondary)
+                                
+                                Image(systemName: "bolt.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(Color.slingGradient)
+                                
+                                Text("\(participation.stake_amount)")
                                     .font(.system(size: 14, weight: .regular))
                                     .foregroundColor(.secondary)
                             }
-                        } else if bet.status == "cancelled" && hasWager {
-                            Text("Wager: ")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.secondary)
-                            
-                                Image(systemName: "bolt.fill")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Color.slingGradient)
-                            
-                                Text("\(userWager)")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.secondary)
-                        } else {
-                            Text("Wager: ")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.secondary)
-                            
-                            Image(systemName: "bolt.fill")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Color.slingGradient)
-                            
-                            Text("\(userWager)")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                    }
-                
-                    // Community name and icon (formatted like Activity section)
-                    HStack(spacing: 8) {
-                            Image(systemName: "person.2")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            Text(communityName)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("•")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("Just now")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                Spacer()
-                
-                // Removed navigation chevron - no more right arrow
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color.white)
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.gray.opacity(0.15), lineWidth: 1)
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .offset(x: offset)
-        .onTapGesture {
-            // Only handle tap if card is not swiped
-            if offset != 0 {
-                // Reset swipe when tapping on the card
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    offset = 0
-                }
-            } else {
-                activeSheet = .betDetail
-            }
-        }
-        .gesture(
-            DragGesture()
-                .onChanged { value in
-                    let translation = value.translation.width
-                    if translation < 0 { // Only allow left swipe
-                        offset = max(translation, -maxSwipeDistance)
-                    } else if offset < 0 { // Allow right swipe only if already swiped left
-                        offset = min(offset + translation, 0)
-                    }
-                }
-                .onEnded { value in
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        if offset < -swipeThreshold {
-                            offset = -240 // Show all actions
-                        } else {
-                            offset = 0 // Hide actions
                         }
+                    } else if bet.status == "voided" && hasWager {
+                        // Voided bet - show refund
+                        Text("Refunded: ")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
+                        
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.slingGradient)
+                        
+                        Text("\(userParticipation?.final_payout ?? userWager)")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
+                    } else {
+                        // Active bet - show wager
+                        Text("Wager: ")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
+                        
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.slingGradient)
+                        
+                        Text("\(userWager)")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
                     }
                 }
-        )
-        .clipped()
-        .alert("Cancel Bet", isPresented: $showingCancelAlert) {
-            Button("Cancel Bet", role: .destructive) {
-                cancelBet()
-            }
-            Button("Keep Bet", role: .cancel) { }
-        } message: {
-            Text("Are you sure you want to cancel this bet? This action cannot be undone.")
-        }
-        .alert("Delete Bet", isPresented: $showingDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                deleteBet()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Are you sure you want to delete this bet? This action cannot be undone.")
-        }
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .chooseWinner:
-                ChooseWinnerView(bet: bet, firestoreService: firestoreService)
-            case .placeBet:
-                PlaceBetView(bet: bet, presetOption: nil, firestoreService: firestoreService, onBetPlaced: nil)
-            case .share:
-                ShareSheet(activityItems: [generateShareText()])
-            case .betDetail:
-                JoinBetView(
-                    bet: bet, 
-                    firestoreService: firestoreService,
-                    onCommunityTap: {
-                        // Navigate to community details
-                        // This will be handled by the parent view
-                    }
-                )
-            case .bettingInterface:
-                BettingInterfaceView(
-                    bet: bet,
-                    selectedOption: selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption,
-                    firestoreService: firestoreService,
-                    onBetPlaced: nil)
+                .multilineTextAlignment(.leading)
+                .lineLimit(1)
             }
         }
-        .onAppear {
-            // Ensure user bet participations are loaded
-            firestoreService.fetchUserBetParticipations()
+        .padding(.horizontal, 16) // Internal padding for card content
+        .padding(.vertical, 16)
+        .background(Color.white)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .onTapGesture {
+            showingBetDetail = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            // Refresh when app comes to foreground
-            firestoreService.fetchUserBetParticipations()
-        }
-    }
-    
-    private func generateShareText() -> String {
-        return "Check out this bet: \(bet.title) - \(communityName)"
-    }
-    
-    private func cancelBet() {
-        firestoreService.cancelMarket(betId: bet.id ?? "") { success in
-            if success {
-                print("✅ Bet cancelled successfully")
-            } else {
-                print("❌ Error cancelling bet")
-            }
-        }
-    }
-    
-    private func formatDeadline(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, yyyy"
-        return formatter.string(from: date)
-    }
-    
-    private func getStatusText() -> String {
-        switch bet.status.lowercased() {
-        case "settled":
-            if let winnerOption = bet.winner_option, hasWager {
-                let currentUserEmail = firestoreService.currentUser?.email
-                let participation = firestoreService.userBetParticipations.first { participation in
-                    participation.bet_id == bet.id && participation.user_email == currentUserEmail
+        .sheet(isPresented: $showingBetDetail) {
+            JoinBetView(
+                bet: bet,
+                firestoreService: firestoreService,
+                onCommunityTap: {
+                    // Handle community tap if needed
                 }
-                if let participation = participation {
-                    return participation.chosen_option == winnerOption ? "Won" : "Lost"
-                }
-            }
-            return "Settled"
-        case "cancelled":
-            return "Cancelled"
-        case "open", "pending":
-            return "Active"
-        default:
-            return bet.status.capitalized
-        }
-    }
-    
-    private func getStatusColor() -> Color {
-        switch getStatusText() {
-        case "Won":
-            return Color.green.opacity(0.8)
-        case "Lost":
-            return Color.red.opacity(0.8)
-        case "Cancelled":
-            return Color.orange.opacity(0.8)
-        case "Active":
-            return .blue
-        default:
-            return .gray
-        }
-    }
-    
-    private func getStatusBadgeBackgroundColor() -> Color {
-        switch getStatusText() {
-        case "Won":
-            return Color.green.opacity(0.8)
-        case "Lost":
-            return Color.red.opacity(0.15) // Much lighter background for lost bets
-        case "Cancelled":
-            return Color.orange.opacity(0.8)
-        case "Active":
-            return .blue
-        default:
-            return .gray
-        }
-    }
-    
-    private func getStatusTextColor() -> Color {
-        switch getStatusText() {
-        case "Lost":
-            return Color.red.opacity(0.7) // Lighter text color for lost bets
-        default:
-            return .white
-        }
-    }
-    
-    private func getPayoutAmount() -> Int {
-        if bet.status == "settled", let winnerOption = bet.winner_option, hasWager {
-            let currentUserEmail = firestoreService.currentUser?.email
-            let participation = firestoreService.userBetParticipations.first { participation in
-                participation.bet_id == bet.id && participation.user_email == currentUserEmail
-            }
-            if let participation = participation {
-                if participation.chosen_option == winnerOption {
-                    // Won - calculate winnings (this is simplified, you might want to add actual odds calculation)
-                    return userWager * 2
-                } else {
-                    // Lost - no payout
-                    return 0
-                }
-            }
-        }
-        return userWager
-    }
-    
-    private func deleteBet() {
-        firestoreService.deleteBet(betId: bet.id ?? "") { success in
-            if success {
-                print("✅ Bet deleted successfully")
-            } else {
-                print("❌ Error deleting bet")
-            }
+            )
         }
     }
 }
@@ -3635,6 +4126,232 @@ struct ChatListItem: Identifiable {
     let timestampString: String  // Keep formatted string for display
     let unreadCount: Int
     let imageUrl: String
+}
+
+// MARK: - Condensed Bet Participation Card
+
+struct CondensedBetParticipationCard: View {
+    let bet: FirestoreBet
+    let participation: BetParticipant
+    let currentUserEmail: String?
+    @ObservedObject var firestoreService: FirestoreService
+    @State private var showingBetDetail = false
+    
+    // Activity title - just the bet title
+    private var activityTitle: String {
+        return bet.title
+    }
+    
+    // Activity subtitle showing choice and wager/payout for this specific participation
+    private var activitySubtitle: String {
+        if participation.chosen_option == "Creator" {
+            return "Created this bet"
+        }
+        
+        if bet.status == "settled" {
+            if let winnerOption = bet.winner_option {
+                let isWinner = participation.chosen_option == winnerOption
+                if isWinner {
+                    let payout = participation.final_payout ?? participation.stake_amount
+                    return "Chose: \(participation.chosen_option) • Paid: ⚡ \(payout)"
+                } else {
+                    return "Chose: \(participation.chosen_option) • Lost: ⚡ \(participation.stake_amount)"
+                }
+            }
+        } else if bet.status == "voided" {
+            let refund = participation.final_payout ?? participation.stake_amount
+            return "Chose: \(participation.chosen_option) • Refunded: ⚡ \(refund)"
+        }
+        return "Chose: \(participation.chosen_option) • Wager: ⚡ \(participation.stake_amount)"
+    }
+    
+    // Status badge for top right
+    private var statusBadge: some View {
+        Group {
+            if participation.chosen_option == "Creator" {
+                Text("Created")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.blue)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.15))
+                    .cornerRadius(12)
+            } else if bet.status == "settled" {
+                if let winnerOption = bet.winner_option {
+                    let isWinner = participation.chosen_option == winnerOption
+                    Text(isWinner ? "Won" : "Lost")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(isWinner ? .green : .red)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(isWinner ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
+                        .cornerRadius(12)
+                } else {
+                    Text("Settled")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.15))
+                        .cornerRadius(12)
+                }
+            } else if bet.status == "voided" {
+                Text("Voided")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.15))
+                    .cornerRadius(12)
+            }
+        }
+    }
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            // Bet image (48x48 like activity section)
+            if let imageURL = bet.image_url, !imageURL.isEmpty {
+                AsyncImage(url: URL(string: imageURL)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 48, height: 48)
+                            .clipped()
+                            .cornerRadius(8)
+                    case .failure(_), .empty:
+                        // Fallback to generated image
+                        BetImageView(title: bet.title, imageURL: nil, size: 48)
+                    @unknown default:
+                        BetImageView(title: bet.title, imageURL: nil, size: 48)
+                    }
+                }
+            } else {
+                // No image URL, use generated image
+                BetImageView(title: bet.title, imageURL: nil, size: 48)
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
+                // Top row: Activity title and status badge
+                HStack(alignment: .top) {
+                    // Activity title (no time ago)
+                    Text(activityTitle)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                    
+                    Spacer()
+                    
+                    // Status badge in top right
+                    statusBadge
+                }
+                
+                // Activity subtitle (chose, wager/payout info)
+                HStack(spacing: 0) {
+                    if participation.chosen_option == "Creator" {
+                        Text("Created this bet")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Chose: ")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
+                        
+                        Text(participation.chosen_option)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.slingGradient)
+                        
+                        Text(" • ")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
+                        
+                        if bet.status == "settled" {
+                            if let winnerOption = bet.winner_option {
+                                if participation.chosen_option == winnerOption {
+                                    // User won - show payout
+                                    Text("Paid: ")
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Image(systemName: "bolt.fill")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(Color.slingGradient)
+                                    
+                                    Text("\(participation.final_payout ?? participation.stake_amount)")
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    // User lost - show lost amount
+                                    Text("Lost: ")
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Image(systemName: "bolt.fill")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(Color.slingGradient)
+                                    
+                                    Text("\(participation.stake_amount)")
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        } else if bet.status == "voided" {
+                            // Voided bet - show refund
+                            Text("Refunded: ")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                            
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.slingGradient)
+                            
+                            Text("\(participation.final_payout ?? participation.stake_amount)")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                        } else {
+                            // Active bet - show wager
+                            Text("Wager: ")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                            
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.slingGradient)
+                            
+                            Text("\(participation.stake_amount)")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .multilineTextAlignment(.leading)
+                .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 16) // Internal padding for card content
+        .padding(.vertical, 16)
+        .background(Color.white)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .onTapGesture {
+            showingBetDetail = true
+        }
+        .sheet(isPresented: $showingBetDetail) {
+            JoinBetView(
+                bet: bet,
+                firestoreService: firestoreService,
+                onCommunityTap: {
+                    // Handle community tap if needed
+                }
+            )
+        }
+    }
 }
 
 // MARK: - Chat Message Bubble
@@ -3856,6 +4573,7 @@ struct MessagesView: View {
     @State private var userFullNames: [String: String] = [:] // Cache for user full names
     @State private var searchText = ""
     @StateObject private var timeTracker = TimeTracker()
+    @State private var hasPerformedInitialScroll = false
     
     // Global timestamp state - activated by swiping anywhere on the page
     @State private var isShowingTimestamps = false
@@ -4285,6 +5003,7 @@ struct MessagesView: View {
             // Find the actual community from the user's communities
             if let community = firestoreService.userCommunities.first(where: { $0.id == chatItem.communityId }) {
                 selectedCommunity = community
+                hasPerformedInitialScroll = false // Reset scroll flag for new community
                 loadMessages(for: community)
                 
                 // Clear unread count for this community when selected
@@ -4554,6 +5273,7 @@ struct MessagesView: View {
                     if translation > 50 || velocity > 300 { // Right swipe threshold
                         withAnimation(.easeInOut(duration: 0.3)) {
                             selectedCommunity = nil
+                            hasPerformedInitialScroll = false // Reset scroll flag when going back
                             firestoreService.stopListeningToMessages()
                         }
                     }
@@ -4567,6 +5287,7 @@ struct MessagesView: View {
         HStack(spacing: 12) {
             Button(action: {
                 selectedCommunity = nil
+                hasPerformedInitialScroll = false // Reset scroll flag when going back
                 firestoreService.stopListeningToMessages()
             }) {
                 Image(systemName: "arrow.left")
@@ -4651,57 +5372,98 @@ struct MessagesView: View {
     }
     
     private var messagesAreaView: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                if firestoreService.messages.isEmpty {
-                    emptyMessagesView
-                } else {
-                    // Group messages by date and display with headers
-                    ForEach(groupedMessages, id: \.date) { group in
-                        VStack(spacing: 12) {
-                            // Date header (centered pill)
-                            Text(group.dateHeader)
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.gray)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 6)
-                                .background(
-                                    Capsule().fill(Color.gray.opacity(0.15))
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    if firestoreService.messages.isEmpty {
+                        emptyMessagesView
+                    } else {
+                        // Group messages by date and display with headers
+                        ForEach(groupedMessages, id: \.date) { group in
+                            VStack(spacing: 12) {
+                                // Date header (centered pill)
+                                Text(group.dateHeader)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.gray)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        Capsule().fill(Color.gray.opacity(0.15))
+                                    )
+                                    .frame(maxWidth: .infinity)      // centers the pill
+                                    .padding(.vertical, 4)
+                                
+                                // Messages for this date
+                                ForEach(group.messages) { message in
+                                    ChatMessageBubble(
+                                    message: message,
+                                    isCurrentUser: message.senderEmail == firestoreService.currentUser?.email,
+                                    firestoreService: firestoreService,
+                                    selectedBet: $selectedBet,
+                                    showingBetDetail: $showingBetDetail,
+                                    selectedBetOption: $selectedBetOption,
+                                    showingPlaceBet: $showingPlaceBet,
+                                    isShowingTimestamps: isShowingTimestamps,
+                                    getUserFullName: { email in
+                                        return self.getUserFullName(from: email)
+                                    }
                                 )
-                                .frame(maxWidth: .infinity)      // centers the pill
-                                .padding(.vertical, 4)
-                            
-                            // Messages for this date
-                            ForEach(group.messages) { message in
-                                ChatMessageBubble(
-                                message: message,
-                                isCurrentUser: message.senderEmail == firestoreService.currentUser?.email,
-                                firestoreService: firestoreService,
-                                selectedBet: $selectedBet,
-                                showingBetDetail: $showingBetDetail,
-                                selectedBetOption: $selectedBetOption,
-                                showingPlaceBet: $showingPlaceBet,
-                                isShowingTimestamps: isShowingTimestamps,
-                                getUserFullName: { email in
-                                    return self.getUserFullName(from: email)
+                                .id(message.id) // Add id for scrolling
                                 }
-                            )
                             }
                         }
                     }
-                }
-                
+                    
 
-                
-                // Auto-scroll indicator when new messages arrive
-                Color.clear
-                    .frame(height: 1)
-                    .id("bottom")
+                    
+                    // Auto-scroll indicator when new messages arrive
+                    Color.clear
+                        .frame(height: 1)
+                        .id("bottom")
+                }
+                .padding(.horizontal, 16)
+                .onAppear {
+                    // Scroll to oldest unread message or bottom if all read
+                    scrollToAppropriatePosition(proxy: proxy)
+                }
+                .onChange(of: firestoreService.messages) { _ in
+                    // When messages update, scroll to appropriate position
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        scrollToAppropriatePosition(proxy: proxy)
+                    }
+                }
             }
-            .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
+    }
+    
+    // Function to scroll to the appropriate position when chat opens
+    private func scrollToAppropriatePosition(proxy: ScrollViewProxy) {
+        guard let currentUserId = firestoreService.currentUser?.id,
+              !hasPerformedInitialScroll,
+              !firestoreService.messages.isEmpty else { return }
+        
+        // Find the oldest unread message
+        let unreadMessages = firestoreService.messages.filter { message in
+            !message.readBy.contains(currentUserId)
+        }
+        
+        if let oldestUnreadMessage = unreadMessages.first {
+            // Scroll to the oldest unread message
+            withAnimation(.easeInOut(duration: 0.5)) {
+                proxy.scrollTo(oldestUnreadMessage.id, anchor: .top)
+            }
+            print("📜 Scrolled to oldest unread message: \(oldestUnreadMessage.text.prefix(50))...")
+        } else {
+            // All messages are read, scroll to bottom
+            withAnimation(.easeInOut(duration: 0.5)) {
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+            print("📜 All messages read, scrolled to bottom")
+        }
+        
+        hasPerformedInitialScroll = true
     }
     
     // Group messages by date for display
@@ -6166,7 +6928,7 @@ struct CommunitiesView: View {
             CreateCommunityPage(firestoreService: firestoreService)
         }
         .sheet(isPresented: $showingAllBalances) {
-            AllBalancesView(balances: outstandingBalances)
+            AllBalancesView(balances: outstandingBalances, firestoreService: firestoreService)
         }
     }
     
@@ -6182,49 +6944,70 @@ struct CommunitiesView: View {
             
             // Main Outstanding Balances Card
             HStack(spacing: 16) {
-                // Status Indicator (Left)
+                // Status Indicator (Left) - Dynamic based on balances
                 HStack(spacing: 8) {
-                    // Green checkmark circle
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 24, height: 24)
-                        .overlay(
-                            Image(systemName: "checkmark")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                        )
-                    
-                    // Status text
-                    Text("All Bets Settled 🎉")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.black)
+                    if outstandingBalances.isEmpty {
+                        // Green checkmark circle for no outstanding balances
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 24, height: 24)
+                            .overlay(
+                                Image(systemName: "checkmark")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                            )
+                        
+                        // Status text
+                        Text("All Bets Settled 🎉")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.black)
+                    } else {
+                        // Orange/yellow circle for outstanding balances
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 24, height: 24)
+                            .overlay(
+                                Image(systemName: "exclamationmark")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                        
+                        // Status text with count
+                        Text("\(outstandingBalances.count) Outstanding")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.black)
+                    }
                 }
                 
                 Spacer()
                 
-                // View All button
-                Button(action: {
-                    AnalyticsService.shared.trackCommunitiesInteraction(action: .balanceView, details: ["balance_count": outstandingBalances.count])
-                    showingAllBalances = true
-                }) {
-                    Text("View All")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.white)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
+                // View All button - only show if there are balances
+                if !outstandingBalances.isEmpty {
+                    Button(action: {
+                        AnalyticsService.shared.trackCommunitiesInteraction(action: .balanceView, details: ["balance_count": outstandingBalances.count])
+                        showingAllBalances = true
+                    }) {
+                        Text("View All")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.white)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                    }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color.green.opacity(0.1))
+            .background(outstandingBalances.isEmpty ? Color.green.opacity(0.1) : Color.orange.opacity(0.1))
             .cornerRadius(12)
         }
     }
@@ -6253,16 +7036,22 @@ struct CommunitiesView: View {
                     .frame(height: 1)
                 
                 
-                LazyVStack(spacing: 16) {
+                LazyVStack(spacing: 0) {
                     ForEach(firestoreService.userCommunities) { community in
-                        ModernCommunityCard(
+                        CommunityListItem(
                             community: community,
                             firestoreService: firestoreService,
                             onViewCommunity: onNavigateToHome
                         )
+                        
+                        // Add divider between items (except for the last item)
+                        if community.id != firestoreService.userCommunities.last?.id {
+                            Divider()
+                                .padding(.leading, 60) // Align with community name text
+                        }
                     }
                 }
-                .padding(.top, 16) // Spacing after horizontal line
+                .padding(.top, 2) // Minimal spacing after horizontal line
             } else {
                         EmptyCommunitiesView(firestoreService: firestoreService)
             }
@@ -6351,6 +7140,7 @@ struct BalanceTransaction: Identifiable {
 
 struct AllBalancesView: View {
     let balances: [OutstandingBalance]
+    let firestoreService: FirestoreService
     @Environment(\.dismiss) private var dismiss
     
     // Computed property for sorted balances to avoid complex inline sorting
@@ -6428,7 +7218,7 @@ struct AllBalancesView: View {
                     ScrollView {
                         LazyVStack(spacing: 16) {
                             ForEach(sortedBalances) { balance in
-                                DetailedBalanceRow(balance: balance)
+                                DetailedBalanceRow(balance: balance, firestoreService: firestoreService)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -6446,6 +7236,7 @@ struct AllBalancesView: View {
 
 struct DetailedBalanceRow: View {
     let balance: OutstandingBalance
+    let firestoreService: FirestoreService
     @State private var showingResolutionModal = false
     @State private var showingBreakdownModal = false
     
@@ -6580,7 +7371,7 @@ struct DetailedBalanceRow: View {
             showingResolutionModal = true
         }
         .sheet(isPresented: $showingResolutionModal) {
-            BalanceResolutionModal(balance: balance)
+            BalanceResolutionModal(balance: balance, firestoreService: firestoreService)
         }
     }
 }
@@ -6842,6 +7633,7 @@ struct DetailedBetBreakdownRow: View {
 
 struct OutstandingBalanceCard: View {
     let balance: OutstandingBalance
+    let firestoreService: FirestoreService
     @State private var showingResolutionModal = false
     
     var body: some View {
@@ -6925,7 +7717,7 @@ struct OutstandingBalanceCard: View {
         }
         .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showingResolutionModal) {
-            BalanceResolutionModal(balance: balance)
+            BalanceResolutionModal(balance: balance, firestoreService: firestoreService)
         }
     }
 }
@@ -6934,10 +7726,12 @@ struct OutstandingBalanceCard: View {
 
 struct BalanceResolutionModal: View {
     let balance: OutstandingBalance
+    let firestoreService: FirestoreService
     @Environment(\.dismiss) private var dismiss
     @State private var showingConfirmation = false
     @State private var isResolving = false
     @State private var paymentAmount: String = ""
+    @State private var errorMessage = ""
 
 
     
@@ -6989,6 +7783,15 @@ struct BalanceResolutionModal: View {
                 
                 // Sticky Action Button
                 stickyActionButton
+                
+                // Error message
+                if !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                }
             }
             .background(Color.white)
             .navigationBarHidden(true)
@@ -7148,15 +7951,43 @@ struct BalanceResolutionModal: View {
     
     private func resolveBalance() {
         isResolving = true
+        errorMessage = ""
         
-        // Simulate API call
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            isResolving = false
-            dismiss()
-            
-            // Show success feedback
-            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-            impactFeedback.impactOccurred()
+        // Use the appropriate function based on whether user owes or is owed
+        if balance.isOwed {
+            // User owes money - mark as paid
+            firestoreService.markBalanceAsPaid(counterpartyId: balance.counterpartyId, amount: balance.displayAmount) { success, error in
+                DispatchQueue.main.async {
+                    isResolving = false
+                    
+                    if success {
+                        dismiss()
+                        
+                        // Show success feedback
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                        impactFeedback.impactOccurred()
+                    } else {
+                        errorMessage = error ?? "Failed to mark balance as paid"
+                    }
+                }
+            }
+        } else {
+            // User is owed money - mark as received
+            firestoreService.resolveOutstandingBalance(balanceId: balance.id) { success, error in
+                DispatchQueue.main.async {
+                    isResolving = false
+                    
+                    if success {
+                        dismiss()
+                        
+                        // Show success feedback
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                        impactFeedback.impactOccurred()
+                    } else {
+                        errorMessage = error ?? "Failed to mark balance as received"
+                    }
+                }
+            }
         }
     }
 }
@@ -7249,9 +8080,9 @@ struct CommunityCardWithAdmin: View {
     }
 }
 
-// MARK: - Modern Community Card
+// MARK: - Community List Item
 
-struct ModernCommunityCard: View {
+struct CommunityListItem: View {
     let community: FirestoreCommunity
     let firestoreService: FirestoreService
     let onViewCommunity: ((String) -> Void)?
@@ -7276,103 +8107,22 @@ struct ModernCommunityCard: View {
             )
             showingCommunityDetail = true
         }) {
-            VStack(alignment: .leading, spacing: 12) {
-                // Header with community info and admin badge
-                HStack(alignment: .center, spacing: 10) {
-                    // Community Avatar
-                    if let profileImageUrl = community.profile_image_url {
-                        // Show custom community image
-                        AsyncImage(url: URL(string: profileImageUrl)) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            Circle()
-                                .fill(AnyShapeStyle(Color.slingGradient))
-                                .overlay(
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(0.8)
-                                )
-                        }
-                        .frame(width: 48, height: 48)
-                        .clipShape(Circle())
-                    } else {
-                        // Show community initials
-                    Circle()
-                        .fill(AnyShapeStyle(Color.slingGradient))
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            Text(String(community.name.prefix(1)).uppercased())
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                        )
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            Text(community.name)
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundColor(.black)
-                            
-                            // Crown icon for admin users
-                            if isAdmin {
-                                Image(systemName: "crown.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.yellow)
-                            }
-                        }
-            
-                        // Community stats - greyed out for less importance
-                        HStack(spacing: 12) {
-                HStack(spacing: 4) {
-                                Image(systemName: "person.2.fill")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                                Text("\(actualMemberCount)")
-                                    .font(.caption)
-                        .foregroundColor(.gray)
-                                Text("members")
-                                    .font(.caption)
-                        .foregroundColor(.gray)
-                }
+            HStack(alignment: .center, spacing: 12) {
+                communityAvatarView
+                communityContentView
                 
-                HStack(spacing: 4) {
-                                Image(systemName: "list.bullet.clipboard")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                                Text("\(actualBetCount)")
-                                    .font(.caption)
-                        .foregroundColor(.gray)
-                                Text("bets")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                            }
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    // Right Arrow
-                    Image(systemName: "chevron.right")
-                            .font(.subheadline)
-                                    .foregroundColor(.gray)
-                            .frame(width: 20, height: 20)
-                }
+                Spacer()
                 
-
+                // Right Arrow - vertically centered
+                Image(systemName: "chevron.right")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .frame(width: 20, height: 20)
             }
-            .padding(16)
-            .background(Color.white)
-            .cornerRadius(20)
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-            )
-                    }
-                    .buttonStyle(PlainButtonStyle())
+            .padding(.horizontal, 0) // Remove horizontal padding to align with header
+            .padding(.vertical, 10) // Slightly reduced vertical padding for tighter spacing
+        }
+        .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showingCommunityDetail) {
             EnhancedCommunityDetailView(
                 community: community, 
@@ -7386,6 +8136,94 @@ struct ModernCommunityCard: View {
         .onAppear {
             checkAdminStatus()
             loadCommunityMetrics()
+        }
+    }
+    
+    private var communityAvatarView: some View {
+        Group {
+            if let profileImageUrl = community.profile_image_url, !profileImageUrl.isEmpty {
+                AsyncImage(url: URL(string: profileImageUrl)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    case .failure(_), .empty:
+                        // Fallback to initials on error or while loading
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .overlay(
+                                Text(String(community.name.prefix(1)).uppercased())
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                    @unknown default:
+                        Circle()
+                            .fill(AnyShapeStyle(Color.slingGradient))
+                            .overlay(
+                                Text(String(community.name.prefix(1)).uppercased())
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                    }
+                }
+            } else {
+                // Fallback to initials if no profile image
+                Circle()
+                    .fill(AnyShapeStyle(Color.slingGradient))
+                    .overlay(
+                        Text(String(community.name.prefix(1)).uppercased())
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                    )
+            }
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(Circle())
+    }
+    
+    private var communityContentView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(community.name)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                
+                // Crown icon for admin users
+                if isAdmin {
+                    Image(systemName: "crown.fill")
+                        .font(.caption)
+                        .foregroundColor(.yellow)
+                }
+                
+                Spacer()
+            }
+            
+            HStack(spacing: 12) {
+                HStack(spacing: 4) {
+                    Image(systemName: "person.2.fill")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    Text("\(actualMemberCount) members")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "list.bullet.clipboard")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    Text("\(actualBetCount) bets")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+            }
         }
     }
     
@@ -8745,6 +9583,7 @@ enum UserActivityType {
     case betPlaced
     case betWon
     case betLost
+    case betVoided
     case betCreated
     case communityJoined
 }
@@ -8827,7 +9666,6 @@ struct ActivityRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 activityTitle
                 activitySubtitle
-                activityMetadata
             }
             
             Spacer()
@@ -8862,11 +9700,14 @@ struct ActivityRow: View {
     }
     
     private var activityTitle: some View {
-                Text(activityItem.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.primary)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
+        (Text(activityItem.title)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundColor(.primary) +
+         Text(" \(formatTimestamp(activityItem.timestamp))")
+            .font(.system(size: 15, weight: .regular))
+            .foregroundColor(.secondary))
+            .multilineTextAlignment(.leading)
+            .lineLimit(2)
     }
                 
     private var activitySubtitle: some View {
@@ -9983,12 +10824,12 @@ struct EnhancedNotificationRow: View {
                 // Enhanced Icon with better styling
                 ZStack {
                     Circle()
-                        .fill(notification.iconColor.opacity(0.15))
+                        .fill(notificationIconBackgroundColor)
                         .frame(width: 48, height: 48)
                     
                     Image(systemName: notification.icon)
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(notification.iconColor)
+                        .foregroundColor(notificationIconForegroundColor)
                 }
                 
                 // Enhanced Content
@@ -10048,6 +10889,18 @@ struct EnhancedNotificationRow: View {
             // Don't automatically mark notifications as read when they appear on screen
             // They will only be marked as read when the user closes the notifications page
         }
+    }
+    
+    private var notificationIconBackgroundColor: Color {
+        if notification.icon == "bolt.fill" {
+            return Color.slingBlue.opacity(0.15)
+        } else {
+            return notification.iconColor.opacity(0.15)
+        }
+    }
+    
+    private var notificationIconForegroundColor: Color {
+        notification.icon == "bolt.fill" ? .slingBlue : notification.iconColor
     }
 }
 
@@ -12420,15 +13273,18 @@ struct OddsHistoryChart: View {
             
             print("📊 chartData: Option '\(option)' has \(points.count) points after filtering")
             
-            // If no real betting data, don't create artificial lines
-            if !hasRealBettingData {
+            // For shorter timeframes, always create data even without betting activity
+            // For ALL timeframe, only create data if there's real betting activity
+            let shouldCreateData = hasRealBettingData || (selectedTimeframe != "ALL")
+            
+            if !shouldCreateData {
                 print("📊 chartData: No real betting data yet for '\(option)' - skipping artificial data creation")
                 continue
             }
             
-            // For shorter timeframes (1H, 3H, 6H), always create granular data for better user experience
-            // For longer timeframes (1D, ALL), use real data when available
-            let shouldUseGranularData = points.isEmpty || (selectedTimeframe == "1H" || selectedTimeframe == "3H" || selectedTimeframe == "6H")
+            // Use granular data only when there's no real data available
+            // For ALL timeframe and shorter timeframes, use real data when available
+            let shouldUseGranularData = points.isEmpty
             
             if shouldUseGranularData {
                 print("📊 chartData: Creating granular data for '\(option)' in \(selectedTimeframe) (points.count: \(points.count))")
@@ -12451,6 +13307,13 @@ struct OddsHistoryChart: View {
                     
                     result.append((option: option, points: granularPoints))
                     print("📊 chartData: Created \(granularPoints.count) granular points for '\(option)' in \(selectedTimeframe) from \(startTime) to \(endTime)")
+                    
+                    // Debug: Show sample odds values to verify curves
+                    if granularPoints.count > 5 {
+                        let sampleIndices = [0, granularPoints.count/4, granularPoints.count/2, 3*granularPoints.count/4, granularPoints.count-1]
+                        let sampleOdds = sampleIndices.map { granularPoints[$0].odds }
+                        print("📊 chartData: Sample odds for '\(option)': \(sampleOdds.map { String(format: "%.3f", $0) })")
+                    }
                 } else {
                     // If absolutely no data, create a default granular line for proper timeframe
                     let now = Date()
@@ -12477,7 +13340,7 @@ struct OddsHistoryChart: View {
                 print("📊 chartData: Created line from single timeframe point for '\(option)'")
             } else {
                 result.append((option: option, points: points))
-                print("📊 chartData: Using timeframe data for '\(option)' (\(points.count) points)")
+                print("📊 chartData: Using real data for '\(option)' (\(points.count) points) in \(selectedTimeframe)")
             }
         }
         
@@ -12526,17 +13389,17 @@ struct OddsHistoryChart: View {
         
         switch timeframe {
         case "1H":
-            timeInterval = 60 // 1 minute intervals
-            maxPoints = 60 // 60 points for 1 hour
+            timeInterval = 300 // 5 minute intervals for smoother curves
+            maxPoints = 12 // 12 points for 1 hour (every 5 minutes)
         case "3H":
-            timeInterval = 300 // 5 minute intervals
-            maxPoints = 36 // 36 points for 3 hours (180 minutes / 5)
+            timeInterval = 900 // 15 minute intervals
+            maxPoints = 12 // 12 points for 3 hours (every 15 minutes)
         case "6H":
-            timeInterval = 600 // 10 minute intervals
-            maxPoints = 36 // 36 points for 6 hours (360 minutes / 10)
+            timeInterval = 1800 // 30 minute intervals
+            maxPoints = 12 // 12 points for 6 hours (every 30 minutes)
         case "1D":
-            timeInterval = 3600 // 1 hour intervals
-            maxPoints = 24 // 24 points for 1 day
+            timeInterval = 7200 // 2 hour intervals
+            maxPoints = 12 // 12 points for 1 day (every 2 hours)
         case "ALL":
             // For ALL, use smart intervals based on total time span
             let totalSpan = endTime.timeIntervalSince(startTime)
@@ -12555,15 +13418,39 @@ struct OddsHistoryChart: View {
             maxPoints = 24
         }
         
-        // Generate points
+        // Generate points with smooth, simple progression (like ALL timeframe)
         for i in 0..<maxPoints {
             let timestamp = startTime.addingTimeInterval(TimeInterval(i) * timeInterval)
             if timestamp <= endTime {
-                points.append(ChartPoint(timestamp: timestamp, odds: odds))
+                // Create a smooth progression from starting odds to current odds
+                let progress = Double(i) / Double(maxPoints - 1)
+                
+                // Start with equal odds (50/50) and progress to current odds
+                let startingOdds = 0.5
+                let currentOdds = odds
+                
+                // Simple, smooth curve using easing function (like ALL timeframe)
+                let baseOdds = startingOdds + (currentOdds - startingOdds) * progress
+                
+                // Add minimal, smooth variation (much less than before)
+                let time = Double(i) / Double(maxPoints - 1) * 2 * .pi
+                
+                // Single, gentle sine wave for smoothness
+                let smoothWave = sin(time * 0.5) * 0.02
+                
+                // Very minimal random variation
+                let noise = (Double.random(in: -0.002...0.002))
+                
+                // Combine with minimal intensity
+                let totalVariation = smoothWave + noise
+                
+                let variedOdds = max(0.01, min(0.99, baseOdds + totalVariation))
+                
+                points.append(ChartPoint(timestamp: timestamp, odds: variedOdds))
             }
         }
         
-        // Always include the end time point
+        // Always include the end time point with the exact current odds
         if !points.isEmpty && points.last!.timestamp < endTime {
             points.append(ChartPoint(timestamp: endTime, odds: odds))
         }
@@ -12634,27 +13521,55 @@ struct OddsHistoryChart: View {
             let hasRealBettingData = filteredHistory.count > 1 || 
                                     (filteredHistory.count == 1 && hasSignificantBettingActivity())
             
-            if !hasRealBettingData {
-                // Show "Not enough data yet" message
-                VStack(spacing: 12) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 32))
-                        .foregroundColor(.gray.opacity(0.4))
+            // If ALL timeframe doesn't have enough data, show "not enough data" for all timeframes
+            // Otherwise, show chart for all timeframes
+            let shouldShowChart = hasRealBettingData
+            
+            if !shouldShowChart {
+                // Show graph-like background with overlay message
+                ZStack {
+                    // Graph-like background with horizontal lines
+                    VStack(spacing: 0) {
+                        ForEach(0..<5, id: \.self) { index in
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.1))
+                                .frame(height: 1)
+                                .frame(maxWidth: .infinity)
+                            
+                            if index < 4 {
+                                Spacer()
+                            }
+                        }
+                    }
+                    .frame(height: 140)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.white)
+                    .cornerRadius(12)
                     
-                    Text("Not enough data yet")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.gray)
-                    
-                    Text("Odds will appear here once people start betting")
-                        .font(.caption)
-                        .foregroundColor(.gray.opacity(0.7))
-                        .multilineTextAlignment(.center)
+                    // Overlay message box
+                    VStack(spacing: 8) {
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .font(.system(size: 24))
+                            .foregroundColor(.gray.opacity(0.6))
+                        
+                        Text("Not enough data yet")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.gray)
+                        
+                        Text("Odds will appear here once there's enough data")
+                            .font(.caption)
+                            .foregroundColor(.gray.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.9))
+                    .cornerRadius(8)
+                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
                 }
                 .frame(height: 140)
                 .frame(maxWidth: .infinity)
-                .background(Color.gray.opacity(0.05))
-                .cornerRadius(12)
             } else {
                 // 100% label above the graph
                 HStack {
@@ -12804,13 +13719,26 @@ struct OddsHistoryChart: View {
     }
     
     private func gridLines(geometry: GeometryProxy) -> some View {
-        ForEach([0, 2, 4], id: \.self) { i in
-            let y = CGFloat(i) * (geometry.size.height / 4)
-            Rectangle()
-                .fill(Color.gray.opacity(0.1))
-                .frame(height: 0.5)
-                .offset(y: y - geometry.size.height / 2)
-                .allowsHitTesting(false) // Allow drag gesture to pass through
+        ZStack {
+            // Main grid lines at 0%, 50%, and 100%
+            ForEach([0, 2, 4], id: \.self) { i in
+                let y = CGFloat(i) * (geometry.size.height / 4)
+                Rectangle()
+                    .fill(Color.gray.opacity(0.1))
+                    .frame(height: 0.5)
+                    .offset(y: y - geometry.size.height / 2)
+                    .allowsHitTesting(false) // Allow drag gesture to pass through
+            }
+            
+            // Reference lines at 75% and 25%
+            ForEach([1, 3], id: \.self) { i in
+                let y = CGFloat(i) * (geometry.size.height / 4)
+                Rectangle()
+                    .fill(Color.gray.opacity(0.05))
+                    .frame(height: 0.5)
+                    .offset(y: y - geometry.size.height / 2)
+                    .allowsHitTesting(false) // Allow drag gesture to pass through
+            }
         }
     }
     
@@ -13187,26 +14115,59 @@ struct NotificationTextView: View {
             print("🔔 NotificationTextView: Cleaned legacy [LIGHTNING_BOLT] from: '\(text)' -> '\(cleanedText)'")
         }
         
-        // Process the cleaned text
-        let words = cleanedText.trimmingCharacters(in: .whitespaces).components(separatedBy: " ")
+        // Additional text cleaning for corrupted/garbled text
+        let furtherCleanedText = cleanCorruptedText(cleanedText)
         
-        for (wordIndex, word) in words.enumerated() {
-            if !word.isEmpty {
-                // Check if this word is a number
-                if let number = Int(word.replacingOccurrences(of: ",", with: "")) {
-                    let formatter = NumberFormatter()
-                    formatter.numberStyle = .decimal
-                    let formattedNumber = formatter.string(from: NSNumber(value: number)) ?? word
-                    components.append(TextComponent(text: formattedNumber, isNumber: true))
-                } else {
-                    // Add space after word except for the last word
-                    let textToAdd = word + (wordIndex < words.count - 1 ? " " : "")
-                    components.append(TextComponent(text: textToAdd, isNumber: false))
-                }
-            }
+        // Debug logging for corrupted text cleaning
+        if cleanedText != furtherCleanedText {
+            print("🔔 NotificationTextView: Cleaned corrupted text from: '\(cleanedText)' -> '\(furtherCleanedText)'")
+        }
+        
+        // Simple approach: just return the cleaned text as a single component
+        // This avoids the word-by-word processing that was causing character-by-character display
+        if !furtherCleanedText.isEmpty {
+            components.append(TextComponent(text: furtherCleanedText, isNumber: false))
         }
         
         return components
+    }
+    
+    private func cleanCorruptedText(_ text: String) -> String {
+        // Only clean if the text appears to be corrupted
+        // Check if text has excessive non-printable characters
+        let printableCount = text.filter { char in
+            char.isASCII && char.asciiValue! >= 32
+        }.count
+        
+        let totalCount = text.count
+        
+        // If more than 30% of characters are non-printable, clean the text
+        if totalCount > 0 && Double(printableCount) / Double(totalCount) < 0.7 {
+            print("🔔 NotificationTextView: Detected corrupted text, cleaning: '\(text)'")
+            
+            var cleaned = text
+            
+            // Remove non-printable characters except spaces and newlines
+            cleaned = cleaned.filter { char in
+                char.isASCII && (char.asciiValue! >= 32 || char.isWhitespace || char.isNewline)
+            }
+            
+            // Remove excessive whitespace
+            cleaned = cleaned.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            
+            // If text is still mostly garbled, provide a fallback
+            let readableCharacterCount = cleaned.filter { $0.isLetter || $0.isNumber || $0.isWhitespace }.count
+            let totalCharacterCount = cleaned.count
+            
+            if totalCharacterCount > 0 && Double(readableCharacterCount) / Double(totalCharacterCount) < 0.5 {
+                return "Notification message could not be displayed properly"
+            }
+            
+            return cleaned.trimmingCharacters(in: .whitespaces)
+        }
+        
+        // Text appears normal, return as-is
+        return text
     }
 }
 
@@ -13366,17 +14327,21 @@ struct EnhancedParticipantList: View {
     private func groupParticipantsByOutcome(_ participants: [BetParticipant]) -> [String: [BetParticipant]] {
         var grouped: [String: [BetParticipant]] = [:]
         
+        print("🔍 groupParticipantsByOutcome: Processing \(participants.count) participants")
+        
         for participant in participants {
             let outcome = participant.chosen_option
             if grouped[outcome] == nil {
                 grouped[outcome] = []
             }
             grouped[outcome]?.append(participant)
+            print("🔍 groupParticipantsByOutcome: Added \(participant.user_email) to option '\(outcome)'")
         }
         
         // Sort each group by stake amount (largest first)
         for outcome in grouped.keys {
             grouped[outcome]?.sort { $0.stake_amount > $1.stake_amount }
+            print("🔍 groupParticipantsByOutcome: Option '\(outcome)' has \(grouped[outcome]?.count ?? 0) participants")
         }
         
         return grouped
@@ -13410,13 +14375,13 @@ struct EnhancedParticipantList: View {
                         .italic()
                 } else {
                     HStack(spacing: -4) {
-                        ForEach(Array(participants.prefix(3).enumerated()), id: \.offset) { index, participant in
+                        ForEach(Array(participants.prefix(5).enumerated()), id: \.offset) { index, participant in
                             ParticipantProfilePictureView(
                                 userEmail: participant.user_email,
                                 size: 32,
                                 borderWidth: 1.5
                             )
-                            .zIndex(Double(3 - index))
+                            .zIndex(Double(5 - index))
                             .overlay(
                                 Circle()
                                     .stroke(LinearGradient(
@@ -13427,13 +14392,13 @@ struct EnhancedParticipantList: View {
                             )
                         }
                         
-                        // Show "+X more" if there are more than 3 participants
-                        if participants.count > 3 {
+                        // Show "+X more" if there are more than 5 participants
+                        if participants.count > 5 {
                             Circle()
                                 .fill(Color.slingBlue)
                                 .frame(width: 32, height: 32)
                                 .overlay(
-                                    Text("+\(participants.count - 3)")
+                                    Text("+\(participants.count - 5)")
                                         .font(.caption2)
                                         .fontWeight(.bold)
                                         .foregroundColor(.white)
@@ -13579,7 +14544,7 @@ struct ParticipantDetailView: View {
                         Text(option)
                             .font(.title2)
                             .fontWeight(.bold)
-                            .foregroundColor(.slingBlue)
+                            .foregroundColor(.black)
                     }
                 }
                 
@@ -13603,12 +14568,12 @@ struct ParticipantDetailView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "bolt.fill")
                         .font(.subheadline)
-                        .foregroundColor(.slingBlue)
+                        .foregroundStyle(Color.slingGradient)
                     
                     Text("\(formatNumberWithCommas(totalWagered))")
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.slingBlue)
+                        .foregroundColor(.black)
                 }
             }
             .padding(.horizontal, 16)
@@ -13644,7 +14609,7 @@ struct ParticipantDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 40)
                         } else {
-                            ForEach(participants, id: \.user_email) { participant in
+                            ForEach(participants, id: \.id) { participant in
                                 participantDetailRow(participant: participant)
                             }
                         }
@@ -13671,15 +14636,20 @@ struct ParticipantDetailView: View {
     
     private func participantDetailRow(participant: BetParticipant) -> some View {
         HStack(spacing: 12) {
-            // Blue circle with white initials
-            Circle()
-                .fill(Color.slingBlue)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Text(getUserInitials(from: participant.user_email))
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
-                )
+            // Profile picture with sling gradient border
+            ParticipantProfilePictureView(
+                userEmail: participant.user_email,
+                size: 40,
+                borderWidth: 2
+            )
+            .overlay(
+                Circle()
+                    .stroke(LinearGradient(
+                        gradient: Gradient(colors: [Color(red: 0.2, green: 0.6, blue: 1.0), Color(red: 0.4, green: 0.8, blue: 1.0)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ), lineWidth: 2)
+            )
             
             // User info section
             VStack(alignment: .leading, spacing: 2) {
@@ -13688,22 +14658,22 @@ struct ParticipantDetailView: View {
                     .foregroundColor(.black)
                     .lineLimit(1)
                 
-                Text("1d ago")
+                Text(timeAgoString(from: participant.created_date))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.gray)
             }
             
             Spacer()
             
-            // Blue text with lightning bolt
+            // Black text with lightning bolt in sling gradient
             HStack(spacing: 4) {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.slingBlue)
+                    .foregroundStyle(Color.slingGradient)
                 
                 Text(formatNumberWithCommas(participant.stake_amount))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.slingBlue)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.black)
             }
         }
         .padding(.horizontal, 16)
@@ -13745,6 +14715,33 @@ struct ParticipantDetailView: View {
         } else {
             return String(email.prefix(2)).uppercased()
         }
+    }
+    
+    private func timeAgoString(from date: Date) -> String {
+        let now = Date()
+        let timeInterval = now.timeIntervalSince(date)
+        
+        let timeString: String
+        if timeInterval < 60 {
+            timeString = "just now"
+        } else if timeInterval < 3600 {
+            let minutes = Int(timeInterval / 60)
+            timeString = "\(minutes)m ago"
+        } else if timeInterval < 86400 {
+            let hours = Int(timeInterval / 3600)
+            timeString = "\(hours)h ago"
+        } else if timeInterval < 604800 {
+            let days = Int(timeInterval / 86400)
+            timeString = "\(days)d ago"
+        } else if timeInterval < 2592000 {
+            let weeks = Int(timeInterval / 604800)
+            timeString = "\(weeks)w ago"
+        } else {
+            let months = Int(timeInterval / 2592000)
+            timeString = "\(months)mo ago"
+        }
+        
+        return "Placed a bet \(timeString)"
     }
 }
 
@@ -13900,7 +14897,7 @@ struct AdjustOddsHeaderView: View {
     
     var body: some View {
         HStack {
-            Button("Cancel") {
+            Button("Done") {
                 isPresented = false
             }
             .foregroundColor(.slingBlue)
@@ -14031,6 +15028,8 @@ struct AdjustOddsView: View {
                             )
                             .padding(.vertical, 20)
                             
+                        Spacer() // Push preset odds down towards keyboard
+                        
                         // Preset Odds Buttons with pagination
                         VStack(spacing: 16) {
                             
@@ -14093,6 +15092,7 @@ struct AdjustOddsView: View {
                             }
                         }
                             .padding(.horizontal, 20)
+                            .padding(.bottom, 20) // Add space between preset odds and keyboard
                             .gesture(
                                 DragGesture()
                                     .onEnded { value in
@@ -14114,11 +15114,13 @@ struct AdjustOddsView: View {
             .onAppear {
                 // Initialize angle based on current selected outcome's odds
                 currentAngle = getAngleFromOdds(odds[selectedOutcomeIndex])
-                // Initialize current input with proper default values
+                // Initialize current input with actual current values
                 if showPercentage {
-                    currentInput = "1" // Default to 1% in percentage mode
+                    let percentageValue = percentages[selectedOutcomeIndex].replacingOccurrences(of: "%", with: "")
+                    currentInput = percentageValue.isEmpty ? "1" : percentageValue
                 } else {
-                    currentInput = "-110" // Default to -110 in odds mode
+                    let oddsValue = odds[selectedOutcomeIndex]
+                    currentInput = oddsValue.isEmpty ? "-110" : oddsValue
                 }
             }
             .onChange(of: showPercentage) { _, newValue in
@@ -14222,10 +15224,10 @@ struct AdjustOddsView: View {
             if !currentInput.isEmpty {
                 currentInput.removeLast()
                 
-                // Check if we're left with just a sign or empty - reset to default
-                if currentInput.isEmpty || 
-                   (!showPercentage && (currentInput == "+" || currentInput == "-")) {
-                    currentInput = showPercentage ? "1" : "-110"
+                // Allow empty input - don't force default values
+                // Only reset if we're left with just a sign in odds mode
+                if !showPercentage && (currentInput == "+" || currentInput == "-") {
+                    currentInput = currentInput // Keep the sign
                 }
             }
         } else if key == "+/-" {
@@ -14267,11 +15269,16 @@ struct AdjustOddsView: View {
                 }
             } else {
                 // In odds mode, currentInput is the odds value
-                odds[selectedOutcomeIndex] = currentInput
-                let oddsValue = Int(currentInput.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: "")) ?? 0
-                let percentageValue = calculatePercentage(from: Double(oddsValue))
-                percentages[selectedOutcomeIndex] = String(format: "%.0f%%", percentageValue)
+                // Only update if we have a valid odds value
+                if let oddsValue = Int(currentInput.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: "")), oddsValue > 0 {
+                    odds[selectedOutcomeIndex] = currentInput
+                    let percentageValue = calculatePercentage(from: Double(oddsValue))
+                    percentages[selectedOutcomeIndex] = String(format: "%.0f%%", percentageValue)
+                }
             }
+        } else {
+            // Handle empty input - keep the previous values but allow the display to be empty
+            // This allows users to see an empty field while typing
         }
     }
     
@@ -15283,6 +16290,10 @@ struct JoinBetView: View {
         return formatter.string(from: bet.deadline)
     }
     
+    private var isMarketClosed: Bool {
+        return bet.status == "settled" || bet.status == "voided" || Date() > bet.deadline
+    }
+    
     private var shortRulesText: String {
         "Every bet on Sling requires two sides to be matched before it's active. Once both users have staked an equal number of Sling Points, the bet becomes locked and cannot be edited or canceled."
     }
@@ -15354,11 +16365,12 @@ struct JoinBetView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "calendar")
                                         .font(.caption)
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(isMarketClosed ? .red : .gray)
                                     
-                                    Text("Deadline: \(formattedDeadline)")
+                                    Text(isMarketClosed ? "Market is closed" : "Deadline: \(formattedDeadline)")
                                         .font(.subheadline)
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(isMarketClosed ? .red : .gray)
+                                        .fontWeight(.regular)
                                 }
                             }
                         }
@@ -15375,28 +16387,52 @@ struct JoinBetView: View {
                             VStack(spacing: 8) {
                                 ForEach(bet.options, id: \.self) { option in
                                     Button(action: {
+                                        // Only allow clicking if market is not closed
+                                        guard !isMarketClosed else { return }
+                                        
+                                        // 🐛 DEBUG: JoinBetView Option Selection
+                                        print("🎯 JOIN_BET_OPTION_CLICK: User clicked on option: '\(option)'")
+                                        print("🎯 JOIN_BET_OPTION_CLICK: Bet ID: \(bet.id ?? "nil")")
+                                        print("🎯 JOIN_BET_OPTION_CLICK: Bet title: '\(bet.title)'")
+                                        print("🎯 JOIN_BET_OPTION_CLICK: All bet options: \(bet.options)")
+                                        print("🎯 JOIN_BET_OPTION_CLICK: Previous selectedOption: '\(selectedOption)'")
+                                        
                                         selectedOption = option
+                                        
+                                        print("🎯 JOIN_BET_OPTION_CLICK: New selectedOption: '\(selectedOption)'")
+                                        print("🎯 JOIN_BET_OPTION_CLICK: About to show betting interface for option: '\(option)'")
+                                        print("🎯 JOIN_BET_OPTION_CLICK: ==========================================")
+                                        
                                         showingBettingInterface = true
                                     }) {
                                         HStack {
                                             Text(option)
                                                 .font(.subheadline)
                                                 .fontWeight(.semibold)
-                                                .foregroundColor(.black)
+                                                .foregroundColor(isMarketClosed ? .gray : .black)
                                             
                                             Spacer()
                                             
                                             Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5))
                                                 .font(.subheadline)
                                                 .fontWeight(.semibold)
-                                                .foregroundColor(.black)
+                                                .foregroundColor(isMarketClosed ? .gray : .black)
+                                            
+                                            // Show lock icon if market is closed
+                                            if isMarketClosed {
+                                                Image(systemName: "lock.fill")
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                                    .padding(.leading, 8)
+                                            }
                                         }
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 12)
-                                        .background(Color.slingLightBlue)
+                                        .background(isMarketClosed ? Color.gray.opacity(0.1) : Color.slingLightBlue)
                                         .cornerRadius(12)
                                     }
                                     .buttonStyle(.plain)
+                                    .disabled(isMarketClosed)
                                 }
                             }
                             .padding(.horizontal, 16)
@@ -15406,13 +16442,16 @@ struct JoinBetView: View {
                         // Odds History Chart
                         OddsHistoryChart(bet: bet, oddsHistory: oddsHistory, firestoreService: firestoreService)
                         
-                        // Enhanced Participant List Section
-                        EnhancedParticipantList(
-                            bet: bet,
-                            firestoreService: firestoreService,
-                            getBetParticipants: getBetParticipants,
-                            getUserFullName: getUserFullName
-                        )
+                        // Show Participant List above Other Bets if no other bets available
+                        if let otherBets = getOtherBets(), otherBets.isEmpty {
+                            // Enhanced Participant List Section
+                            EnhancedParticipantList(
+                                bet: bet,
+                                firestoreService: firestoreService,
+                                getBetParticipants: getBetParticipants,
+                                getUserFullName: getUserFullName
+                            )
+                        }
                         
                         // Betting Rules Section
                         VStack(alignment: .leading, spacing: 12) {
@@ -15532,6 +16571,17 @@ struct JoinBetView: View {
                             }
                         }
                         
+                        // Show Participant List below Other Bets if there are other bets available
+                        if let otherBets = getOtherBets(), !otherBets.isEmpty {
+                            // Enhanced Participant List Section
+                            EnhancedParticipantList(
+                                bet: bet,
+                                firestoreService: firestoreService,
+                                getBetParticipants: getBetParticipants,
+                                getUserFullName: getUserFullName
+                            )
+                        }
+                        
                         Spacer(minLength: 50)
                     }
                     .padding(.top, 20)
@@ -15547,6 +16597,14 @@ struct JoinBetView: View {
                         firestoreService: firestoreService,
                         onBetPlaced: nil
                     )
+                    .onAppear {
+                        // 🐛 DEBUG: JoinBetView BettingInterfaceView Initialization
+                        print("🎯 JOIN_BET_INTERFACE_INIT: JoinBetView presenting BettingInterfaceView")
+                        print("🎯 JOIN_BET_INTERFACE_INIT: selectedOption: '\(selectedOption)'")
+                        print("🎯 JOIN_BET_INTERFACE_INIT: Bet ID: \(bet.id ?? "nil")")
+                        print("🎯 JOIN_BET_INTERFACE_INIT: Bet title: '\(bet.title)'")
+                        print("🎯 JOIN_BET_INTERFACE_INIT: ==========================================")
+                    }
                 }
             }
             .sheet(isPresented: $showingShareSheet) {
@@ -15697,13 +16755,18 @@ struct JoinBetView: View {
     private func loadBetParticipants() {
         guard let betId = bet.id else { return }
         
-        // Use the existing userBetParticipations and filter for this specific bet
-        let participants = firestoreService.userBetParticipations.filter { participant in
-            participant.bet_id == betId
-        }
+        print("🔍 loadBetParticipants: Fetching participants for bet \(betId)")
         
-        DispatchQueue.main.async {
-            self.betParticipants = participants
+        // Fetch all participants for this bet (not just current user's)
+        firestoreService.fetchAllBetParticipants(for: betId) { participants in
+            print("🔍 loadBetParticipants: Fetched \(participants.count) participants")
+            for participant in participants {
+                print("🔍 loadBetParticipants: - \(participant.user_email) bet on '\(participant.chosen_option)' for \(participant.stake_amount) points")
+            }
+            
+            DispatchQueue.main.async {
+                self.betParticipants = participants
+            }
         }
     }
     
@@ -15911,10 +16974,22 @@ func convertToNotificationItem(_ firestoreNotification: FirestoreNotification) -
             iconColor = .green
         case "plus.circle":
             iconName = "plus.circle"
-            iconColor = .blue
+            iconColor = .cyan // Changed from blue to cyan for "new market"
+        case "bolt.fill", "bolt":
+            iconName = "bolt.fill"
+            iconColor = .orange
         case "bell":
             iconName = "bell"
             iconColor = .orange
+        case "flag.fill", "flag":
+            iconName = "flag.fill"
+            iconColor = .indigo // For "bet settled" notifications
+        case "exclamationmark.triangle.fill", "exclamationmark.triangle":
+            iconName = "exclamationmark.triangle.fill"
+            iconColor = .yellow // For "reminder" notifications
+        case "trophy.fill", "trophy":
+            iconName = "trophy.fill"
+            iconColor = .green // For "won bet" notifications - matches activity section
         default:
             iconName = "bell"
             iconColor = .gray
@@ -15974,7 +17049,7 @@ struct BettingInterfaceView: View {
         !betAmount.isEmpty && betAmountDouble > 0 && !hasInsufficientFunds
     }
     
-    // Calculate total potential payout using parimutuel system
+    // Calculate total potential payout using proportional distribution
     private var potentialWinnings: Double {
         if let amount = Double(betAmount), amount > 0 {
             let impliedOdds = firestoreService.calculateImpliedOdds(for: bet)
@@ -15987,12 +17062,17 @@ struct BettingInterfaceView: View {
                 let currentOptionPool = poolByOption[selectedOption] ?? 0
                 let otherOptionsPool = totalPool - currentOptionPool
                 
-                if currentOptionPool > 0 {
-                    // Parimutuel payout: (totalPool / winningSidePool) * userStake
-                    let payoutMultiplier = Double(totalPool) / Double(currentOptionPool)
-                    return payoutMultiplier * amount
+                if currentOptionPool > 0 && otherOptionsPool > 0 {
+                    // Proportional payout: stake back + share of losing pool
+                    // Assuming user's bet would be added to the current option pool
+                    let projectedWinningPool = currentOptionPool + Int(amount)
+                    let userShareOfWinnings = (amount / Double(projectedWinningPool)) * Double(otherOptionsPool)
+                    return amount + userShareOfWinnings // Stake back + winnings
+                } else if otherOptionsPool > 0 {
+                    // If no one has bet on this option yet, they'd get all the losing pool
+                    return amount + Double(otherOptionsPool)
                 } else {
-                    // If no one has bet on this option yet, use implied odds
+                    // If no opposing bets, just get stake back (or use implied odds for estimate)
                     return amount / optionImpliedOdds
                 }
             } else {
@@ -16015,8 +17095,23 @@ struct BettingInterfaceView: View {
     // Initialize with selected option
     init(bet: FirestoreBet, selectedOption: String, firestoreService: FirestoreService, onBetPlaced: (() -> Void)? = nil) {
         self.bet = bet
+        
+        // 🐛 DEBUG: BettingInterfaceView Initializer - COMPREHENSIVE
+        print("🎯 BETTING_INTERFACE_INIT: ===== INITIALIZER DEBUG START =====")
+        print("🎯 BETTING_INTERFACE_INIT: Received selectedOption: '\(selectedOption)'")
+        print("🎯 BETTING_INTERFACE_INIT: selectedOption.isEmpty: \(selectedOption.isEmpty)")
+        print("🎯 BETTING_INTERFACE_INIT: selectedOption.count: \(selectedOption.count)")
+        print("🎯 BETTING_INTERFACE_INIT: Bet ID: \(bet.id ?? "nil")")
+        print("🎯 BETTING_INTERFACE_INIT: Bet title: '\(bet.title)'")
+        print("🎯 BETTING_INTERFACE_INIT: Bet options: \(bet.options)")
+        print("🎯 BETTING_INTERFACE_INIT: bet.options.first: '\(bet.options.first ?? "nil")'")
+        
         // Ensure we have a valid selectedOption, fallback to first option if empty
         let validOption = selectedOption.isEmpty ? (bet.options.first ?? "Yes") : selectedOption
+        
+        print("🎯 BETTING_INTERFACE_INIT: validOption after fallback logic: '\(validOption)'")
+        print("🎯 BETTING_INTERFACE_INIT: ===== INITIALIZER DEBUG END =====")
+        
         self._selectedOption = State(initialValue: validOption)
         self.firestoreService = firestoreService
         self.onBetPlaced = onBetPlaced
@@ -16143,11 +17238,30 @@ struct BettingInterfaceView: View {
                         let impliedOdds = firestoreService.calculateImpliedOdds(for: bet)[option] ?? 0.5
                         let formattedOdds = firestoreService.formatImpliedOdds(impliedOdds)
                         return .default(Text("\(option) (\(formattedOdds))")) {
+                            // 🐛 DEBUG: Option Picker Selection
+                            print("🎯 OPTION_PICKER: User selected option from picker: '\(option)'")
+                            print("🎯 OPTION_PICKER: Previous selectedOption: '\(selectedOption)'")
+                            print("🎯 OPTION_PICKER: Bet ID: \(bet.id ?? "nil")")
+                            print("🎯 OPTION_PICKER: Bet title: '\(bet.title)'")
+                            print("🎯 OPTION_PICKER: ==========================================")
                             selectedOption = option
                         }
                     } + [.cancel()]
                 )
             }
+        }
+        .onAppear {
+            // 🐛 DEBUG: BettingInterfaceView onAppear - COMPREHENSIVE
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: ===== ON_APPEAR DEBUG START =====")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: BettingInterfaceView appeared")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: Current selectedOption: '\(selectedOption)'")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: selectedOption.isEmpty: \(selectedOption.isEmpty)")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: selectedOption.count: \(selectedOption.count)")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: Bet ID: \(bet.id ?? "nil")")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: Bet title: '\(bet.title)'")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: All bet options: \(bet.options)")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: bet.options.first: '\(bet.options.first ?? "nil")'")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: ===== ON_APPEAR DEBUG END =====")
         }
     }
     
@@ -16218,10 +17332,15 @@ struct BettingInterfaceView: View {
     }
     
     private func confirmBet() {
-        print("🎯 confirmBet called")
-        print("📊 betAmount: \(betAmount)")
-        print("📊 selectedOption: \(selectedOption)")
-        print("📊 bet.id: \(bet.id ?? "nil")")
+        // 🐛 DEBUG: Bet Confirmation
+        print("🎯 CONFIRM_BET: confirmBet called")
+        print("🎯 CONFIRM_BET: betAmount: \(betAmount)")
+        print("🎯 CONFIRM_BET: selectedOption: '\(selectedOption)'")
+        print("🎯 CONFIRM_BET: bet.id: \(bet.id ?? "nil")")
+        print("🎯 CONFIRM_BET: bet.title: '\(bet.title)'")
+        print("🎯 CONFIRM_BET: All bet options: \(bet.options)")
+        print("🎯 CONFIRM_BET: About to place bet on option: '\(selectedOption)'")
+        print("🎯 CONFIRM_BET: ==========================================")
         
         guard let betAmountDouble = Double(betAmount), betAmountDouble > 0,
               let betId = bet.id else { 
@@ -16397,12 +17516,13 @@ struct BettingInterfaceView: View {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                     .scaleEffect(0.8)
-                                                Text("Placing Bet...")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                                }
-                            } else if showSuccess {
+                                
+                                Text("Placing Bet...")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                            }
+                        } else if showSuccess {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.headline)
@@ -16412,7 +17532,7 @@ struct BettingInterfaceView: View {
                                         .fontWeight(.semibold)
                                         .foregroundColor(.white)
                                 }
-                            } else {
+                        } else {
                                 Text("Submit Bet")
                                     .font(.headline)
                                     .fontWeight(.semibold)
@@ -16638,10 +17758,15 @@ struct BetReviewView: View {
     }
     
     private func confirmBet() {
-        print("🎯 confirmBet called")
-        print("📊 betAmount: \(betAmount)")
-        print("📊 selectedOption: \(selectedOption)")
-        print("📊 bet.id: \(bet.id ?? "nil")")
+        // 🐛 DEBUG: Bet Confirmation
+        print("🎯 CONFIRM_BET: confirmBet called")
+        print("🎯 CONFIRM_BET: betAmount: \(betAmount)")
+        print("🎯 CONFIRM_BET: selectedOption: '\(selectedOption)'")
+        print("🎯 CONFIRM_BET: bet.id: \(bet.id ?? "nil")")
+        print("🎯 CONFIRM_BET: bet.title: '\(bet.title)'")
+        print("🎯 CONFIRM_BET: All bet options: \(bet.options)")
+        print("🎯 CONFIRM_BET: About to place bet on option: '\(selectedOption)'")
+        print("🎯 CONFIRM_BET: ==========================================")
         
         guard let betAmountDouble = Double(betAmount), betAmountDouble > 0,
               let betId = bet.id else { 
@@ -19860,11 +20985,15 @@ struct TradingProfileView: View {
         
         for participation in userParticipations {
                 if let bet = self.firestoreService.bets.first(where: { $0.id == participation.bet_id }) {
+                
+                // Check if current user is a member of the community for privacy
+                let isCurrentUserInCommunity = self.firestoreService.userCommunities.contains { $0.id == bet.community_id }
+                
                 // Create activity item for placing a bet
                 let activityItem = UserActivityItem(
                     id: "\(participation.bet_id ?? "")_\(participation.user_email)_placed",
                     type: .betPlaced,
-                    title: "Placed bet on '\(bet.title)'",
+                    title: isCurrentUserInCommunity ? "Placed bet on '\(bet.title)'" : "Placed bet in a community",
                         subtitle: "Chose: \(participation.chosen_option) • Wager: ⚡ \(formatNumber(participation.stake_amount))",
                     communityName: getCommunityName(for: bet.community_id),
                     timestamp: bet.created_date,
@@ -19882,7 +21011,9 @@ struct TradingProfileView: View {
                     let resultActivityItem = UserActivityItem(
                         id: "\(participation.bet_id ?? "")_\(participation.user_email)_result",
                         type: isWinner ? .betWon : .betLost,
-                        title: isWinner ? "Won bet on '\(bet.title)'" : "Lost bet on '\(bet.title)'",
+                        title: isCurrentUserInCommunity ? 
+                            (isWinner ? "Won bet on '\(bet.title)'" : "Lost bet on '\(bet.title)'") :
+                            (isWinner ? "Won bet in a community" : "Lost bet in a community"),
                             subtitle: isWinner ? "Chose: \(participation.chosen_option) • Paid: ⚡ \(formatNumber(Int(payoutAmount)))" : "Chose: \(participation.chosen_option) • Lost: ⚡ \(formatNumber(participation.stake_amount))",
                         communityName: getCommunityName(for: bet.community_id),
                         timestamp: bet.deadline, // Use deadline as settlement time
@@ -19890,6 +21021,20 @@ struct TradingProfileView: View {
                         iconColor: isWinner ? .green : .red
                     )
                     activityItems.append(resultActivityItem)
+                } else if bet.status == "voided" {
+                    // If bet is voided, create activity item for refund
+                    let refundAmount = participation.final_payout ?? participation.stake_amount
+                    let voidedActivityItem = UserActivityItem(
+                        id: "\(participation.bet_id ?? "")_\(participation.user_email)_voided",
+                        type: .betVoided,
+                        title: isCurrentUserInCommunity ? "Bet voided on '\(bet.title)'" : "Bet voided in a community",
+                        subtitle: "Chose: \(participation.chosen_option) • Refunded: ⚡ \(formatNumber(refundAmount))",
+                        communityName: getCommunityName(for: bet.community_id),
+                        timestamp: bet.deadline, // Use deadline as voiding time
+                        icon: "arrow.clockwise.circle.fill",
+                        iconColor: .orange
+                    )
+                    activityItems.append(voidedActivityItem)
                 }
             }
         }

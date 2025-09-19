@@ -368,6 +368,7 @@ struct BetParticipant: Identifiable, Codable {
     var updated_date: Date
     var is_winner: Bool?
     var final_payout: Int?
+    var locked_odds: [String: Double]? // Store the odds that were locked in when the bet was placed
 }
 
 // MARK: - Community Message Model
