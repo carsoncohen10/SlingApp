@@ -49,6 +49,12 @@ struct ContentView: View {
             } else if firestoreService.isAuthenticated {
                 MainAppView(firestoreService: firestoreService)
                     .onAppear {
+                        // Store FCM token in Firestore when user is authenticated
+                        if let fcmToken = UserDefaults.standard.string(forKey: "FCMToken") {
+                            firestoreService.updateUserFCMToken(fcmToken)
+                        }
+                    }
+                    .onAppear {
                         // Start automatic odds tracking for authenticated users
                         firestoreService.startAutomaticOddsTracking()
                         

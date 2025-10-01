@@ -1,8 +1,10 @@
+
 import Foundation
 import FirebaseFirestore
 import FirebaseFirestoreSwift
 import FirebaseAuth
 import FirebaseStorage
+import FirebaseMessaging
 import UIKit
 
 // MARK: - Balance Data Structures
@@ -85,19 +87,30 @@ class FirestoreService: ObservableObject {
     @Published var mutedCommunities: Set<String> = [] // Community IDs that are muted
     @Published var totalUnreadCount: Int = 0 // Total unread messages across all communities
     private var messageListener: ListenerRegistration?
+    private var expiryCheckTimer: Timer?
     
     var db = Firestore.firestore()
     private var authStateListener: AuthStateDidChangeListenerHandle?
     
     init() {
         setupAuthStateListener()
+        setupExpiryCheckTimer()
     }
     
     deinit {
+        expiryCheckTimer?.invalidate()
         stopListeningToMessages()
         if let listener = authStateListener {
             Auth.auth().removeStateDidChangeListener(listener)
         }
+    }
+    
+    private func setupExpiryCheckTimer() {
+        // Check for expiring bets every 30 minutes
+        expiryCheckTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in
+            self?.checkAndSendExpiryNotifications()
+        }
+        print("⏰ Expiry check timer set up - will check every 30 minutes")
     }
     
     private func setupAuthStateListener() {
@@ -1403,6 +1416,14 @@ class FirestoreService: ObservableObject {
                         self?.fetchLastMessagesForUserCommunities()
                     }
                     
+                    // Send push notifications to other community members
+                    self?.sendChatMessagePushNotifications(
+                        communityId: communityId,
+                        senderName: "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces),
+                        message: text,
+                        excludeUser: userEmail
+                    )
+                    
                     completion(true, nil)
                 }
             }
@@ -1662,7 +1683,7 @@ class FirestoreService: ObservableObject {
             notification["community_icon"] = communityIcon
         }
         
-        db.collection("Notification").addDocument(data: notification) { error in
+        db.collection("Notification").addDocument(data: notification) { [weak self] error in
             if let error = error {
                 print("❌ Error creating notification: \(error.localizedDescription)")
                 DispatchQueue.main.async {
@@ -1670,6 +1691,9 @@ class FirestoreService: ObservableObject {
                 }
             } else {
                 print("✅ Notification created successfully for \(userEmail): \(title)")
+                
+                // Don't call sendPushNotification here to avoid infinite loop
+                // Push notifications should be handled separately by the calling function
                 DispatchQueue.main.async {
                     completion(true)
                 }
@@ -1687,10 +1711,10 @@ class FirestoreService: ObservableObject {
         communityIcon: String? = nil,
         completion: @escaping (Bool) -> Void
     ) {
-        let title = isWinner ? "You Won! 🎉" : "Bet Settled"
+        let title = communityName ?? "Community"
         let formattedWinnings = formatNumberWithCommas(Int(winnings))
         let message = isWinner 
-            ? "Congratulations! You won \(formattedWinnings) on '\(betTitle)'"
+            ? "You won \(formattedWinnings) on '\(betTitle)'"
             : "Your bet on '\(betTitle)' has been settled"
         let icon = isWinner ? "trophy.fill" : "flag.fill"
         
@@ -1702,9 +1726,11 @@ class FirestoreService: ObservableObject {
             icon: icon,
             communityId: communityId,
             communityName: communityName,
-            communityIcon: communityIcon,
-            completion: completion
-        )
+            communityIcon: communityIcon
+        ) { success in
+            // Push notifications are handled by Cloud Functions
+            completion(success)
+        }
     }
     
     func createBetJoinedNotification(
@@ -1716,7 +1742,7 @@ class FirestoreService: ObservableObject {
         communityIcon: String? = nil,
         completion: @escaping (Bool) -> Void
     ) {
-        let title = "Bet Joined! 🎯"
+        let title = communityName ?? "Community"
         let formattedStake = formatNumberWithCommas(stakeAmount)
         let message = "You joined '\(betTitle)' with \(formattedStake)"
         let icon = "bolt.fill"
@@ -1742,7 +1768,7 @@ class FirestoreService: ObservableObject {
         communityIcon: String? = nil,
         completion: @escaping (Bool) -> Void
     ) {
-        let title = "Reminder to Settle Bet 🔔"
+        let title = communityName ?? "Community"
         let message = "Someone is reminding you to settle '\(betTitle)'"
         let icon = "exclamationmark.triangle.fill"
         
@@ -1754,9 +1780,11 @@ class FirestoreService: ObservableObject {
             icon: icon,
             communityId: communityId,
             communityName: communityName,
-            communityIcon: communityIcon,
-            completion: completion
-        )
+            communityIcon: communityIcon
+        ) { success in
+            // Push notifications are handled by Cloud Functions
+            completion(success)
+        }
     }
     
     func createCommunityJoinedNotification(
@@ -1766,8 +1794,8 @@ class FirestoreService: ObservableObject {
         communityIcon: String? = nil,
         completion: @escaping (Bool) -> Void
     ) {
-        let title = "Welcome! 👋"
-        let message = "You've joined the '\(communityName)' community"
+        let title = communityName
+        let message = "Welcome: You've joined this community"
         let icon = communityIcon ?? "person.2"
         
         createNotification(
@@ -1791,8 +1819,8 @@ class FirestoreService: ObservableObject {
         communityIcon: String? = nil,
         completion: @escaping (Bool) -> Void
     ) {
-        let title = "New Market! 🚀"
-        let message = "A new market '\(betTitle)' was created in '\(communityName)'"
+        let title = communityName
+        let message = "New bet: \(betTitle)"
         let icon = "plus.circle"
         
         createNotification(
@@ -1816,8 +1844,8 @@ class FirestoreService: ObservableObject {
         communityIcon: String? = nil,
         completion: @escaping (Bool) -> Void
     ) {
-        let title = "New Member! 👋"
-        let message = "\(joinedUserName) joined '\(communityName)'"
+        let title = communityName
+        let message = "New Member: \(joinedUserName) joined this community"
         let icon = communityIcon ?? "person.2"
         
         createNotification(
@@ -1875,13 +1903,30 @@ class FirestoreService: ObservableObject {
                         communityName: communityName,
                         communityId: communityId,
                         communityIcon: communityIcon
-                    ) { success in
-                        notificationsCreated += 1
+                    ) { [weak self] success in
                         if success {
                             print("✅ Created new member notification for \(memberEmail)")
+                            
+                            // Also send push notification
+                            self?.sendPushNotification(
+                                to: memberEmail,
+                                title: communityName,
+                                body: "New Member: \(joinedUserName) joined this community",
+                                type: "user_joined_community",
+                                communityId: communityId,
+                                completion: { pushSuccess in
+                                    if pushSuccess {
+                                        print("✅ Push notification sent for new member to \(memberEmail)")
+                                    } else {
+                                        print("❌ Failed to send push notification for new member to \(memberEmail)")
+                                    }
+                                }
+                            )
                         } else {
                             print("❌ Failed to create new member notification for \(memberEmail)")
                         }
+                        
+                        notificationsCreated += 1
                         
                         // Check if all notifications have been processed
                         if notificationsCreated == totalMembers {
@@ -2106,8 +2151,52 @@ class FirestoreService: ObservableObject {
                     try? document.data(as: BetParticipant.self)
                 } ?? []
                 
-
+                print("🔍 Found \(participations.count) participations for \(userEmail) in community \(communityId)")
                 
+                // If no participations found with community_id, try alternative approach
+                if participations.isEmpty {
+                    print("🔍 No participations found with community_id, trying alternative approach for \(userEmail)...")
+                    
+                    // Get all participations for this user and filter by community
+                    self.db.collection("BetParticipant")
+                        .whereField("user_email", isEqualTo: userEmail)
+                        .getDocuments(source: .default) { allSnapshot, allError in
+                            if let allError = allError {
+                                print("❌ Error fetching all bet participations for \(userEmail): \(allError.localizedDescription)")
+                                completion(0.0)
+                                return
+                            }
+                            
+                            let allParticipations = allSnapshot?.documents.compactMap { document in
+                                try? document.data(as: BetParticipant.self)
+                            } ?? []
+                            
+                            print("🔍 Found \(allParticipations.count) total participations for \(userEmail)")
+                            
+                            // Filter by community_id manually
+                            let communityParticipations = allParticipations.filter { participation in
+                                participation.community_id == communityId
+                            }
+                            
+                            print("🔍 Filtered to \(communityParticipations.count) participations for \(userEmail) in community \(communityId)")
+                            
+                            // Calculate net balance from bet participations within this community
+                            let netBalance = communityParticipations.reduce(0.0) { total, participation in
+                                var amount = -Double(participation.stake_amount) // Initial bet cost
+                                if let payout = participation.final_payout {
+                                    amount += Double(payout) // Add winnings if any
+                                    print("  - Bet \(participation.bet_id): Stake: -\(participation.stake_amount), Payout: +\(payout), Net: \(amount)")
+                                } else {
+                                    print("  - Bet \(participation.bet_id): Stake: -\(participation.stake_amount), Payout: 0, Net: -\(participation.stake_amount)")
+                                }
+                                return total + amount
+                            }
+                            
+                            print("💰 \(userEmail) net balance in community \(communityId): \(netBalance)")
+                            completion(netBalance)
+                        }
+                } else {
+                    // Original logic for when participations are found
                 // Calculate net balance from bet participations within this community
                 let netBalance = participations.reduce(0.0) { total, participation in
                     var amount = -Double(participation.stake_amount) // Initial bet cost
@@ -2120,8 +2209,9 @@ class FirestoreService: ObservableObject {
                     return total + amount
                 }
                 
-
+                    print("💰 \(userEmail) net balance in community \(communityId): \(netBalance)")
                 completion(netBalance)
+                }
             }
     }
     
@@ -3123,6 +3213,81 @@ class FirestoreService: ObservableObject {
         }
     }
     
+    // MARK: - Bet Expiry Notifications
+    
+    func checkAndSendExpiryNotifications() {
+        print("⏰ Checking for bets expiring in the next hour...")
+        
+        let oneHourFromNow = Date().addingTimeInterval(3600) // 1 hour from now
+        
+        db.collection("Bet")
+            .whereField("status", isEqualTo: "open")
+            .whereField("deadline", isLessThan: oneHourFromNow)
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching expiring bets: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    print("⏰ No bets expiring in the next hour")
+                    return
+                }
+                
+                print("⏰ Found \(documents.count) bets expiring in the next hour")
+                
+                for document in documents {
+                    guard let data = document.data() as [String: Any]?,
+                          let betTitle = data["title"] as? String,
+                          let communityId = data["community_id"] as? String,
+                          let communityName = data["community_name"] as? String else {
+                        continue
+                    }
+                    
+                    self?.sendExpiryNotificationsForBet(
+                        betId: document.documentID,
+                        betTitle: betTitle,
+                        communityId: communityId,
+                        communityName: communityName
+                    )
+                }
+            }
+    }
+    
+    private func sendExpiryNotificationsForBet(betId: String, betTitle: String, communityId: String, communityName: String) {
+        print("⏰ Sending expiry notifications for bet: \(betTitle)")
+        
+        // Get all participants for this bet
+        db.collection("BetParticipant")
+            .whereField("bet_id", isEqualTo: betId)
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching bet participants for expiry notification: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    print("⏰ No participants found for bet: \(betTitle)")
+                    return
+                }
+                
+                print("⏰ Found \(documents.count) participants to notify about expiry")
+                
+                for document in documents {
+                    guard let data = document.data() as [String: Any]?,
+                          let userEmail = data["user_email"] as? String else {
+                        continue
+                    }
+                    
+                    let expiryMessage = "'\(betTitle)' expires in 1 hour!"
+                    
+                    // Push notifications for bet expiry will be handled by a separate Cloud Function
+                    // For now, just log the expiry
+                    print("📱 Bet expiry notification created for \(userEmail)")
+            }
+        }
+    }
+    
     // MARK: - Bet Payout Processing
     
     private func processBetPayouts(betId: String, winnerOption: String, participants: [QueryDocumentSnapshot], completion: @escaping (Bool) -> Void) {
@@ -3483,18 +3648,25 @@ class FirestoreService: ObservableObject {
                     continue
                 }
                 
+                let communityId = participantData["community_id"] as? String
+                let communityName = participantData["community_name"] as? String
+                let voidMessage = "Your bet on '\(betTitle)' was voided due to lack of opposing wagers. You've been refunded \(stakeAmount) points."
+                
                 self?.createNotification(
                     for: userEmail,
                     title: "Bet Voided",
-                    message: "Your bet on '\(betTitle)' was voided due to lack of opposing wagers. You've been refunded \(stakeAmount) points.",
+                    message: voidMessage,
                     type: "bet_voided",
                     icon: "arrow.clockwise.circle",
-                    communityId: participantData["community_id"] as? String,
-                    communityName: nil,
+                    communityId: communityId,
+                    communityName: communityName,
                     communityIcon: nil
-                ) { success in
+                ) { [weak self] success in
                     if success {
                         print("✅ Created voided bet notification for \(userEmail)")
+                        
+                        // Push notifications are handled by Cloud Functions
+                        print("📱 Bet void notification created for \(userEmail)")
                     } else {
                         print("❌ Failed to create voided bet notification for \(userEmail)")
                     }
@@ -4096,9 +4268,98 @@ class FirestoreService: ObservableObject {
     }
     
     func calculateMemberBalances(communityId: String, completion: @escaping ([String: Double]) -> Void) {
-        // Implementation for calculating member balances
-
+        print("🔍 Calculating member balances for community \(communityId)")
+        
+        // Get all bet participations for this community
+        db.collection("BetParticipant")
+            .whereField("community_id", isEqualTo: communityId)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching bet participations for member balances: \(error.localizedDescription)")
         completion([:])
+                    return
+                }
+                
+                let participations = snapshot?.documents.compactMap { document in
+                    try? document.data(as: BetParticipant.self)
+                } ?? []
+                
+                print("🔍 Found \(participations.count) total participations in community \(communityId)")
+                
+                // If no participations found with community_id, try a different approach
+                if participations.isEmpty {
+                    print("🔍 No participations found with community_id, trying alternative approach...")
+                    
+                    // Get all participations and filter by community
+                    self.db.collection("BetParticipant")
+                        .getDocuments { allSnapshot, allError in
+                            if let allError = allError {
+                                print("❌ Error fetching all bet participations: \(allError.localizedDescription)")
+                                completion([:])
+                                return
+                            }
+                            
+                            let allParticipations = allSnapshot?.documents.compactMap { document in
+                                try? document.data(as: BetParticipant.self)
+                            } ?? []
+                            
+                            print("🔍 Found \(allParticipations.count) total participations in database")
+                            
+                            // Filter by community_id manually
+                            let communityParticipations = allParticipations.filter { participation in
+                                participation.community_id == communityId
+                            }
+                            
+                            print("🔍 Filtered to \(communityParticipations.count) participations for community \(communityId)")
+                            
+                            // Calculate balances
+                            var memberBalances: [String: Double] = [:]
+                            
+                            for participation in communityParticipations {
+                                let userEmail = participation.user_email
+                                
+                                // Calculate balance for this participation
+                                var participationBalance = -Double(participation.stake_amount) // Initial bet cost
+                                if let payout = participation.final_payout {
+                                    participationBalance += Double(payout) // Add winnings if any
+                                }
+                                
+                                // Add to user's total balance
+                                memberBalances[userEmail, default: 0.0] += participationBalance
+                            }
+                            
+                            print("🔍 Calculated balances for \(memberBalances.count) members:")
+                            for (email, balance) in memberBalances {
+                                print("🔍   \(email): \(balance)")
+                            }
+                            
+                            completion(memberBalances)
+                        }
+                } else {
+                    // Original logic for when participations are found
+                    var memberBalances: [String: Double] = [:]
+                    
+                    for participation in participations {
+                        let userEmail = participation.user_email
+                        
+                        // Calculate balance for this participation
+                        var participationBalance = -Double(participation.stake_amount) // Initial bet cost
+                        if let payout = participation.final_payout {
+                            participationBalance += Double(payout) // Add winnings if any
+                        }
+                        
+                        // Add to user's total balance
+                        memberBalances[userEmail, default: 0.0] += participationBalance
+                    }
+                    
+                    print("🔍 Calculated balances for \(memberBalances.count) members:")
+                    for (email, balance) in memberBalances {
+                        print("🔍   \(email): \(balance)")
+                    }
+                    
+                    completion(memberBalances)
+                }
+            }
     }
     
     func markAllNotificationsAsRead(completion: @escaping (Bool) -> Void) {
@@ -4317,14 +4578,33 @@ class FirestoreService: ObservableObject {
                 }
                 
                 let currentPoints = document.data()?["blitz_points"] as? Int ?? 0
-                let newPoints = currentPoints + pointsToAdd
+                let calculatedNewPoints = currentPoints + pointsToAdd
+                
+                // Reset to 10,000 if user has 200 points or less
+                let newPoints = calculatedNewPoints <= 200 ? 10000 : calculatedNewPoints
                 
                 userRef.updateData(["blitz_points": newPoints]) { error in
                     if let error = error {
                         print("❌ Error updating user points: \(error.localizedDescription)")
                         completion(false, error.localizedDescription)
                     } else {
-                        print("✅ Successfully updated user points from \(currentPoints) to \(newPoints)")
+                        if calculatedNewPoints <= 200 {
+                            print("✅ Points reset from \(currentPoints) to \(newPoints) (was \(calculatedNewPoints))")
+                            
+                            // Log points reset to Firestore
+                            self.logUserActivity(
+                                activityType: "points_reset",
+                                description: "Points automatically reset due to low balance",
+                                additionalData: [
+                                    "previous_points": currentPoints,
+                                    "calculated_points": calculatedNewPoints,
+                                    "reset_to": newPoints,
+                                    "reason": "Balance fell to 200 points or below"
+                                ]
+                            )
+                        } else {
+                            print("✅ Successfully updated user points from \(currentPoints) to \(newPoints)")
+                        }
                         completion(true, nil)
                     }
                 }
@@ -4347,14 +4627,34 @@ class FirestoreService: ObservableObject {
                 }
                 
                 let currentPoints = document.data()?["blitz_points"] as? Int ?? 0
-                let newPoints = currentPoints + pointsToAdd
+                let calculatedNewPoints = currentPoints + pointsToAdd
+                
+                // Reset to 10,000 if user has 200 points or less
+                let newPoints = calculatedNewPoints <= 200 ? 10000 : calculatedNewPoints
                 
                 userRef.updateData(["blitz_points": newPoints]) { error in
                     if let error = error {
                         print("❌ Error updating user points by UID: \(error.localizedDescription)")
                         completion(false, error.localizedDescription)
                     } else {
-                        print("✅ Successfully updated user points by UID from \(currentPoints) to \(newPoints)")
+                        if calculatedNewPoints <= 200 {
+                            print("✅ Points reset by UID from \(currentPoints) to \(newPoints) (was \(calculatedNewPoints))")
+                            
+                            // Log points reset to Firestore
+                            self.logUserActivity(
+                                activityType: "points_reset",
+                                description: "Points automatically reset due to low balance",
+                                additionalData: [
+                                    "previous_points": currentPoints,
+                                    "calculated_points": calculatedNewPoints,
+                                    "reset_to": newPoints,
+                                    "reason": "Balance fell to 200 points or below",
+                                    "method": "uid_update"
+                                ]
+                            )
+                        } else {
+                            print("✅ Successfully updated user points by UID from \(currentPoints) to \(newPoints)")
+                        }
                         completion(true, nil)
                     }
                 }
@@ -4440,7 +4740,7 @@ class FirestoreService: ObservableObject {
     func getMemberNetPoints(communityId: String, memberEmail: String, completion: @escaping (Double) -> Void) {
         // Get all bets for this community where the member participated
         print("🔍 Fetching bet participations for \(memberEmail) in community \(communityId)")
-        db.collection("BetParticipants")
+        db.collection("BetParticipant")
             .whereField("community_id", isEqualTo: communityId)
             .whereField("user_email", isEqualTo: memberEmail)
             .getDocuments { snapshot, error in
@@ -4453,25 +4753,67 @@ class FirestoreService: ObservableObject {
                 let documents = snapshot?.documents ?? []
                 print("📊 Found \(documents.count) bet participations for \(memberEmail)")
                 
-                var netPoints: Double = 0.0
-                
-                for document in documents {
-                    let data = document.data()
-                    let amount = data["amount"] as? Double ?? 0.0
-                    let isWon = data["is_won"] as? Bool ?? false
-                    let isSettled = data["is_settled"] as? Bool ?? false
+                // If no participations found with community_id, try alternative approach
+                if documents.isEmpty {
+                    print("🔍 No participations found with community_id, trying alternative approach for \(memberEmail)...")
                     
-                    if isSettled {
-                        if isWon {
-                            netPoints += amount * 2.0 // Won - get stake back plus winnings
-                        } else {
-                            netPoints -= amount // Lost - lose stake
+                    // Get all participations for this user and filter by community
+                    self.db.collection("BetParticipant")
+                        .whereField("user_email", isEqualTo: memberEmail)
+                        .getDocuments { allSnapshot, allError in
+                            if let allError = allError {
+                                print("❌ Error fetching all bet participations for \(memberEmail): \(allError.localizedDescription)")
+                                completion(0.0)
+                                return
+                            }
+                            
+                            let allDocuments = allSnapshot?.documents ?? []
+                            print("🔍 Found \(allDocuments.count) total participations for \(memberEmail)")
+                            
+                            // Filter by community_id manually
+                            let communityDocuments = allDocuments.filter { document in
+                                let data = document.data()
+                                return data["community_id"] as? String == communityId
+                            }
+                            
+                            print("🔍 Filtered to \(communityDocuments.count) participations for \(memberEmail) in community \(communityId)")
+                            
+                            var netPoints: Double = 0.0
+                            
+                            for document in communityDocuments {
+                                let data = document.data()
+                                let stakeAmount = data["stake_amount"] as? Int ?? 0
+                                let finalPayout = data["final_payout"] as? Int ?? 0
+                                
+                                // Calculate net points: -stake + payout
+                                let participationBalance = -Double(stakeAmount) + Double(finalPayout)
+                                netPoints += participationBalance
+                                
+                                print("  - Bet \(document.documentID): Stake: -\(stakeAmount), Payout: +\(finalPayout), Net: \(participationBalance)")
+                            }
+                            
+                            print("💵 \(memberEmail) net points: \(netPoints)")
+                            completion(netPoints)
                         }
+                } else {
+                    // Original logic for when participations are found
+                    var netPoints: Double = 0.0
+                    
+                    for document in documents {
+                        let data = document.data()
+                        let stakeAmount = data["stake_amount"] as? Int ?? 0
+                        let finalPayout = data["final_payout"] as? Int ?? 0
+                        
+                        // Calculate net points: -stake + payout
+                        let participationBalance = -Double(stakeAmount) + Double(finalPayout)
+                        netPoints += participationBalance
+                        
+                        print("  - Bet \(document.documentID): Stake: -\(stakeAmount), Payout: +\(finalPayout), Net: \(participationBalance)")
                     }
+                    
+                    print("💵 \(memberEmail) net points: \(netPoints)")
+                    completion(netPoints)
                 }
-                
-                print("💵 \(memberEmail) net points: \(netPoints)")
-                completion(netPoints)
             }
     }
     
@@ -5452,44 +5794,485 @@ class FirestoreService: ObservableObject {
         updateUserSettings(settings: settings, completion: completion)
     }
     
-    func updateEmailNotificationSettings(weeklySummaries: Bool, betResults: Bool, communityUpdates: Bool, promotionalEmails: Bool, completion: @escaping (Bool) -> Void) {
-        let settings: [String: Any] = [
-            "email_notifications_enabled": true,
-            "weekly_summaries_enabled": weeklySummaries,
-            "bet_results_enabled": betResults,
-            "community_updates_enabled": communityUpdates,
-            "promotional_emails_enabled": promotionalEmails
+    // MARK: - Push Notification Token Management
+    
+    func updateUserFCMToken(_ token: String) {
+        print("📱 ===== UPDATE USER FCM TOKEN =====")
+        print("📱 Token to update: \(token.prefix(20))...")
+        
+        guard let userEmail = currentUser?.email else {
+            print("❌ Cannot update FCM token: User not authenticated")
+            print("📱 Current user: \(currentUser?.email ?? "nil")")
+            return
+        }
+        
+        print("📱 Updating FCM token for user: \(userEmail)")
+        
+        let updateData: [String: Any] = [
+            "fcm_token": token,
+            "updated_date": Date()
         ]
-        updateUserSettings(settings: settings, completion: completion)
+        
+        print("📱 Update data: \(updateData)")
+        print("📱 Updating Firestore document...")
+        
+        db.collection("Users").document(userEmail).updateData(updateData) { error in
+            print("📱 ===== FIRESTORE UPDATE RESPONSE =====")
+            if let error = error {
+                print("❌ Error updating FCM token: \(error.localizedDescription)")
+                print("❌ Error details: \(error)")
+            } else {
+                print("✅ FCM token updated successfully for user: \(userEmail)")
+                
+                // Verify the update
+                self.db.collection("Users").document(userEmail).getDocument { document, error in
+                    if let document = document, document.exists {
+                        let data = document.data()
+                        let storedToken = data?["fcm_token"] as? String
+                        if storedToken == token {
+                            print("✅ FCM token verification successful")
+                        } else {
+                            print("❌ FCM token verification failed")
+                            print("📱 Expected: \(token.prefix(20))...")
+                            print("📱 Stored: \(storedToken?.prefix(20) ?? "nil")...")
+                        }
+                    } else {
+                        print("❌ Could not verify FCM token update")
+                    }
+                }
+            }
+            print("📱 ===== FIRESTORE UPDATE RESPONSE END =====")
+        }
+        print("📱 ===== UPDATE USER FCM TOKEN END =====")
     }
     
-    func updateProfileVisibilitySettings(settings: ProfileVisibilitySettings, completion: @escaping (Bool) -> Void) {
-        let settingsData: [String: Any] = [
-            "profile_visibility_settings": [
-                "showPointBalance": settings.showPointBalance,
-                "showTotalWinnings": settings.showTotalWinnings,
-                "showTotalBets": settings.showTotalBets,
-                "showSlingPoints": settings.showSlingPoints,
-                "showBlitzPoints": settings.showBlitzPoints,
-                "showCommunities": settings.showCommunities
+    func removeUserFCMToken() {
+        guard let userEmail = currentUser?.email else {
+            print("❌ Cannot remove FCM token: User not authenticated")
+            return
+        }
+        
+        let updateData: [String: Any] = [
+            "fcm_token": FieldValue.delete(),
+            "updated_date": Date()
+        ]
+        
+        db.collection("Users").document(userEmail).updateData(updateData) { error in
+            if let error = error {
+                print("❌ Error removing FCM token: \(error.localizedDescription)")
+            } else {
+                print("✅ FCM token removed successfully for user: \(userEmail)")
+            }
+        }
+    }
+    
+    // MARK: - Push Notification Sending
+    
+    /*
+     * PRODUCTION RECOMMENDATION:
+     * 
+     * For production apps, push notifications should be sent from a secure backend service
+     * (Firebase Cloud Functions, AWS Lambda, or your own server) rather than directly
+     * from the client app. This approach:
+     * 
+     * 1. Keeps service account credentials secure on the server
+     * 2. Allows for better error handling and retry logic
+     * 3. Enables batch notifications and rate limiting
+     * 4. Provides better analytics and monitoring
+     * 
+     * The current implementation creates NotificationRequests in Firestore that can be
+     * processed by Cloud Functions. For immediate testing, you can implement the
+     * OAuth2 token generation locally, but never commit service account JSON to the app.
+     */
+    
+    func sendPushNotification(
+        to userEmail: String,
+        title: String,
+        body: String,
+        type: String,
+        communityId: String? = nil,
+        betId: String? = nil,
+        completion: @escaping (Bool) -> Void
+    ) {
+        print("📱 ===== SEND PUSH NOTIFICATION DEBUG START =====")
+        print("📱 Target user: \(userEmail)")
+        print("📱 Title: \(title)")
+        print("📱 Body: \(body)")
+        print("📱 Type: \(type)")
+        print("📱 Community ID: \(communityId ?? "nil")")
+        print("📱 Bet ID: \(betId ?? "nil")")
+        
+        // Send push notification directly without creating Firestore notification
+        // This prevents infinite loops - Firestore notifications should be created separately
+        sendPushNotificationViaBackend(
+            to: userEmail,
+            title: title,
+            body: body,
+            type: type,
+            communityId: communityId,
+            betId: betId,
+            completion: { backendSuccess in
+                print("📱 ===== BACKEND NOTIFICATION RESULT =====")
+                if backendSuccess {
+                    print("✅ Push notification sent successfully via backend")
+                } else {
+                    print("❌ Push notification failed via backend")
+                }
+                print("📱 ===== SEND PUSH NOTIFICATION DEBUG END =====")
+                completion(backendSuccess)
+            }
+        )
+    }
+    
+    
+    
+    private func getFirebaseProjectId() -> String? {
+        guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+              let plist = NSDictionary(contentsOfFile: path),
+              let projectId = plist["PROJECT_ID"] as? String else {
+            print("❌ Project ID not found in GoogleService-Info.plist")
+            return nil
+        }
+        return projectId
+    }
+    
+    // MARK: - Backend Push Notification Service
+    
+    private func sendPushNotificationViaBackend(
+        to userEmail: String,
+        title: String,
+        body: String,
+        type: String,
+        communityId: String? = nil,
+        betId: String? = nil,
+        completion: @escaping (Bool) -> Void
+    ) {
+        print("📱 ===== SENDING PUSH NOTIFICATION VIA BACKEND =====")
+        print("📱 User: \(userEmail)")
+        print("📱 Title: \(title)")
+        print("📱 Body: \(body)")
+        print("📱 Type: \(type)")
+        
+        // Get user's FCM token
+        db.collection("Users").document(userEmail).getDocument { [weak self] document, error in
+            if let error = error {
+                print("❌ Error fetching user FCM token: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            guard let document = document, document.exists,
+                  let data = document.data(),
+                  let fcmToken = data["fcm_token"] as? String else {
+                print("❌ No FCM token found for user: \(userEmail)")
+                completion(false)
+                return
+            }
+            
+            print("📱 Found FCM token: \(fcmToken.prefix(20))...")
+            
+            // Prepare notification payload for backend
+            var notificationPayload: [String: Any] = [
+                "token": fcmToken,
+                "title": title,
+                "body": body,
+                "type": type
             ]
-        ]
-        updateUserSettings(settings: settingsData, completion: completion)
+            
+            // Add optional data fields
+            if let communityId = communityId {
+                notificationPayload["community_id"] = communityId
+            }
+            if let betId = betId {
+                notificationPayload["bet_id"] = betId
+            }
+            
+            // Send to backend
+            self?.sendToBackend(payload: notificationPayload, completion: completion)
+        }
     }
     
-    func updateDarkModeSetting(enabled: Bool, completion: @escaping (Bool) -> Void) {
-        let settings: [String: Any] = [
-            "dark_mode_enabled": enabled
-        ]
-        updateUserSettings(settings: settings, completion: completion)
+    private func sendToBackend(payload: [String: Any], completion: @escaping (Bool) -> Void) {
+        print("📱 ===== SENDING TO BACKEND =====")
+        print("📱 Payload: \(payload)")
+        
+        // TODO: Replace with your actual backend URL
+        // This could be a Firebase Cloud Function, Express server, or any backend
+        guard let url = URL(string: "https://your-backend-url.com/sendPush") else {
+            print("❌ Invalid backend URL")
+            print("📱 To fix: Update the backend URL in sendToBackend function")
+            completion(false)
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer your-api-key", forHTTPHeaderField: "Authorization") // TODO: Add your API key
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        } catch {
+            print("❌ Error serializing payload: \(error.localizedDescription)")
+            completion(false)
+            return
+        }
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            print("📱 ===== BACKEND RESPONSE =====")
+            
+            if let error = error {
+                print("❌ Backend request error: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("📱 Backend response status: \(httpResponse.statusCode)")
+                
+                if httpResponse.statusCode == 200 {
+                    print("✅ Push notification sent successfully via backend")
+                    if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                        print("📱 Backend response: \(responseString)")
+                    }
+                    completion(true)
+                } else {
+                    print("❌ Backend notification failed with status: \(httpResponse.statusCode)")
+                    if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                        print("📱 Backend error response: \(responseString)")
+                    }
+                    completion(false)
+                }
+            } else {
+                print("❌ Invalid backend response")
+                completion(false)
+            }
+        }.resume()
     }
     
-    func updateLanguageSetting(language: String, completion: @escaping (Bool) -> Void) {
-        let settings: [String: Any] = [
-            "language": language
-        ]
-        updateUserSettings(settings: settings, completion: completion)
+    
+    // MARK: - Chat Message Push Notifications
+    
+    func sendChatMessagePushNotifications(
+        communityId: String,
+        senderName: String,
+        message: String,
+        excludeUser: String
+    ) {
+        print("📱 ===== CHAT PUSH NOTIFICATION DEBUG START =====")
+        print("📱 Community ID: \(communityId)")
+        print("📱 Sender Name: \(senderName)")
+        print("📱 Message: \(message)")
+        print("📱 Exclude User: \(excludeUser)")
+        print("📱 Total User Communities: \(userCommunities.count)")
+        
+        // Get community members
+        guard let community = userCommunities.first(where: { $0.id == communityId }) else {
+            print("❌ Community not found for push notifications: \(communityId)")
+            print("📱 Available community IDs: \(userCommunities.map { $0.id ?? "nil" })")
+            print("📱 ===== CHAT PUSH NOTIFICATION DEBUG END =====")
+            return
+        }
+        
+        print("📱 Found community: \(community.name)")
+        print("📱 Community members count: \(community.members?.count ?? 0)")
+        print("📱 Community members: \(community.members ?? [])")
+        
+        // Get all community members except the sender
+        let membersToNotify = community.members?.filter { $0 != excludeUser } ?? []
+        
+        print("📱 Members to notify count: \(membersToNotify.count)")
+        print("📱 Members to notify: \(membersToNotify)")
+        
+        guard !membersToNotify.isEmpty else {
+            print("❌ No members to notify for community: \(communityId)")
+            print("📱 ===== CHAT PUSH NOTIFICATION DEBUG END =====")
+            return
+        }
+        
+        print("📱 Fetching user documents for push notification setup...")
+        
+        db.collection("Users")
+            .whereField("email", in: membersToNotify)
+            .getDocuments { [weak self] snapshot, error in
+                print("📱 ===== FCM USER FETCH RESPONSE =====")
+                
+                if let error = error {
+                    print("❌ Error fetching community members for push notifications: \(error.localizedDescription)")
+                    print("📱 Error details: \(error)")
+                    print("📱 ===== CHAT PUSH NOTIFICATION DEBUG END =====")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    print("❌ No community members found for push notifications")
+                    print("📱 Snapshot documents: \(snapshot?.documents.count ?? 0)")
+                    print("📱 ===== CHAT PUSH NOTIFICATION DEBUG END =====")
+                    return
+                }
+                
+                print("📱 Found \(documents.count) user documents")
+                
+                let communityName = community.name
+                let title = communityName
+                let body = "\(senderName): \(message)"
+                
+                print("📱 Notification Title: \(title)")
+                print("📱 Notification Body: \(body)")
+                print("📱 Notification Type: chat_message")
+                
+                var notificationsSent = 0
+                var notificationsSkipped = 0
+                
+                // Send push notification to each member
+                for (index, document) in documents.enumerated() {
+                    print("📱 --- Processing User \(index + 1)/\(documents.count) ---")
+                    print("📱 Document ID: \(document.documentID)")
+                    
+                    let userData = document.data()
+                    print("📱 User data keys: \(Array(userData.keys))")
+                    
+                    if let userEmail = document.data()["email"] as? String {
+                        print("📱 User email: \(userEmail)")
+                        
+                        let pushEnabled = document.data()["push_notifications_enabled"] as? Bool ?? true
+                        print("📱 Push notifications enabled: \(pushEnabled)")
+                        
+                        if let fcmToken = document.data()["fcm_token"] as? String {
+                            print("📱 FCM token present: \(fcmToken.prefix(20))...")
+                        } else {
+                            print("⚠️ No FCM token found for user: \(userEmail)")
+                        }
+                        
+                        if pushEnabled {
+                            print("📱 Sending push notification to \(userEmail)...")
+                            
+                            // Create Firestore notification first
+                            self?.createNotification(
+                                for: userEmail,
+                                title: title,
+                                message: body,
+                                type: "chat_message",
+                                icon: "message.fill",
+                                communityId: communityId,
+                                communityName: communityName,
+                                completion: { [weak self] notificationSuccess in
+                                    if notificationSuccess {
+                                        print("✅ Firestore notification created for \(userEmail)")
+                                        
+                                        // Push notifications are handled by Cloud Functions
+                                        // No need to send push notifications here to avoid duplicates
+                                        notificationsSent += 1
+                                        print("✅ Chat notification handled by Cloud Function for \(userEmail) (Total processed: \(notificationsSent))")
+                                        
+                                        // Check if this is the last notification
+                                        if index == documents.count - 1 {
+                                            print("📱 ===== PUSH NOTIFICATION SUMMARY =====")
+                                            print("📱 Total users processed: \(documents.count)")
+                                            print("📱 Firestore notifications created: \(notificationsSent)")
+                                            print("📱 Push notifications handled by Cloud Function")
+                                            print("📱 ===== CHAT PUSH NOTIFICATION DEBUG END =====")
+                                        }
+                                    } else {
+                                        print("❌ Failed to create Firestore notification for \(userEmail)")
+                                        
+                                        // Check if this is the last notification
+                                        if index == documents.count - 1 {
+                                            print("📱 ===== PUSH NOTIFICATION SUMMARY =====")
+                                            print("📱 Total users processed: \(documents.count)")
+                                            print("📱 Notifications sent: \(notificationsSent)")
+                                            print("📱 Notifications skipped: \(notificationsSkipped)")
+                                            print("📱 ===== CHAT PUSH NOTIFICATION DEBUG END =====")
+                                        }
+                                    }
+                                }
+                            )
+                        } else {
+                            notificationsSkipped += 1
+                            print("⚠️ Skipping push notification for \(userEmail) - disabled in settings")
+                        }
+                    } else {
+                        notificationsSkipped += 1
+                        print("❌ No email found in user document: \(document.documentID)")
+                    }
+                }
+                
+                if documents.isEmpty {
+                    print("📱 ===== CHAT PUSH NOTIFICATION DEBUG END =====")
+                }
+            }
     }
+    
+    // MARK: - Error Logging System
+    
+    func logError(
+        message: String,
+        type: String = "runtime_error",
+        level: String = "error",
+        functionName: String = #function,
+        fileName: String = #file,
+        lineNumber: Int = #line,
+        stackTrace: String? = nil,
+        additionalContext: [String: String]? = nil
+    ) {
+        // Log to console for debugging
+        print("🚨 ERROR LOG: [\(level.uppercased())] [\(type)] \(message)")
+        if let context = additionalContext {
+            print("   Context: \(context)")
+        }
+        if let stackTrace = stackTrace {
+            print("   Stack Trace: \(stackTrace)")
+        }
+    }
+    
+    func logConsoleMessage(
+        message: String,
+        level: String = "info",
+        functionName: String = #function,
+        fileName: String = #file,
+        lineNumber: Int = #line,
+        additionalContext: [String: String]? = nil
+    ) {
+        // Log to console
+        print("📝 CONSOLE LOG: [\(level.uppercased())] \(message)")
+        if let context = additionalContext {
+            print("   Context: \(context)")
+        }
+    }
+    
+    func logUserActivity(
+        activityType: String,
+        description: String,
+        additionalData: [String: Any]? = nil
+    ) {
+        guard let userEmail = currentUser?.email,
+              let userId = currentUser?.id else {
+            print("❌ Cannot log user activity - no current user")
+            return
+        }
+        
+        let activityData: [String: Any] = [
+            "user_email": userEmail,
+            "user_id": userId,
+            "user_display_name": currentUser?.display_name ?? "",
+            "user_full_name": currentUser?.full_name ?? "",
+            "activity_type": activityType,
+            "description": description,
+            "timestamp": Date(),
+            "additional_data": additionalData ?? [:]
+        ]
+        
+        // Save to Firestore
+        db.collection("UserActivityLogs").addDocument(data: activityData) { error in
+            if let error = error {
+                print("❌ Error logging user activity: \(error.localizedDescription)")
+            } else {
+                print("✅ User activity logged: \(activityType) - \(description)")
+            }
+        }
+    }
+    
+    // MARK: - User Settings Management
     
     func ensureUserSettingsExist(completion: @escaping (Bool) -> Void) {
         guard let userEmail = currentUser?.email else {
@@ -5534,7 +6317,101 @@ class FirestoreService: ObservableObject {
         }
     }
     
-    // MARK: - Community Image Upload
+    func updateEmailNotificationSettings(weeklySummaries: Bool, betResults: Bool, communityUpdates: Bool, promotionalEmails: Bool, completion: @escaping (Bool) -> Void) {
+        let settings: [String: Any] = [
+            "email_notifications_enabled": true,
+            "weekly_summaries_enabled": weeklySummaries,
+            "bet_results_enabled": betResults,
+            "community_updates_enabled": communityUpdates,
+            "promotional_emails_enabled": promotionalEmails
+        ]
+        updateUserSettings(settings: settings, completion: completion)
+    }
+    
+    func updateProfileVisibilitySettings(settings: ProfileVisibilitySettings, completion: @escaping (Bool) -> Void) {
+        let settingsData: [String: Any] = [
+            "profile_visibility_settings": [
+                "showPointBalance": settings.showPointBalance,
+                "showTotalWinnings": settings.showTotalWinnings,
+                "showTotalBets": settings.showTotalBets,
+                "showSlingPoints": settings.showSlingPoints,
+                "showBlitzPoints": settings.showBlitzPoints,
+                "showCommunities": settings.showCommunities
+            ]
+        ]
+        updateUserSettings(settings: settingsData, completion: completion)
+    }
+    
+    func updateLanguageSetting(language: String, completion: @escaping (Bool) -> Void) {
+        let settings: [String: Any] = [
+            "language": language
+        ]
+        updateUserSettings(settings: settings, completion: completion)
+    }
+    
+    // MARK: - Image Upload Functions
+    
+    func uploadUserProfileImage(_ image: UIImage, completion: @escaping (Bool, String?) -> Void) {
+        // Check if user is authenticated
+        guard let currentUserEmail = currentUser?.email,
+              let userId = currentUser?.id else {
+            completion(false, "User not authenticated")
+            return
+        }
+        
+        print("🔍 Starting user profile image upload for user: \(currentUserEmail)")
+        
+        // Compress image
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            completion(false, "Failed to process image")
+            return
+        }
+        
+        print("📷 Image compressed successfully, size: \(imageData.count) bytes")
+        
+        let storage = Storage.storage()
+        let storageRef = storage.reference()
+        
+        let fileName = "\(userId)_\(UUID().uuidString).jpg"
+        let imageRef = storageRef.child("user_profile_images/\(fileName)")
+        
+        print("📤 Uploading to path: user_profile_images/\(fileName)")
+        
+        // Create metadata
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        
+        // Upload image
+        imageRef.putData(imageData, metadata: metadata) { [weak self] metadata, error in
+                if let error = error {
+                print("❌ Error uploading user profile image: \(error)")
+                    completion(false, error.localizedDescription)
+                    return
+                }
+            
+            print("✅ Image uploaded successfully, getting download URL...")
+            
+            // Get download URL
+            imageRef.downloadURL { [weak self] url, error in
+                if let error = error {
+                    print("❌ Error getting user profile image download URL: \(error)")
+                    completion(false, error.localizedDescription)
+                    return
+                }
+                
+                guard let downloadURL = url else {
+                    completion(false, "Failed to get image URL")
+                    return
+                }
+                
+                let imageUrlString = downloadURL.absoluteString
+                print("✅ User profile image uploaded successfully: \(imageUrlString)")
+                
+                // Update user profile with new image URL
+                self?.updateUserProfileImage(imageUrl: imageUrlString, completion: completion)
+            }
+        }
+    }
     
     func uploadCommunityImage(_ image: UIImage, communityId: String, completion: @escaping (Bool, String?) -> Void) {
         // Check if user has permission to update community image
@@ -5546,8 +6423,7 @@ class FirestoreService: ObservableObject {
         // Check if user is admin or has permission to change community image
         isUserAdminInCommunity(communityId: communityId, userEmail: currentUserEmail) { isAdmin in
             // For now, allow any community member to change the profile image
-            // You can modify this to restrict to admins only by changing the condition
-            guard isAdmin || true else { // Allow all members for now
+            guard isAdmin || true else {
                 completion(false, "Only admins can change community profile image")
                 return
             }
@@ -5569,7 +6445,6 @@ class FirestoreService: ObservableObject {
             imageRef.putData(imageData, metadata: nil) { [weak self] metadata, error in
                 if let error = error {
                     print("❌ Error uploading community image: \(error)")
-                    SlingLogError("Failed to upload community image to Firebase Storage", error: error)
                     completion(false, "Failed to upload image: \(error.localizedDescription)")
                     return
                 }
@@ -5578,7 +6453,6 @@ class FirestoreService: ObservableObject {
                 imageRef.downloadURL { [weak self] url, error in
                     if let error = error {
                         print("❌ Error getting download URL: \(error)")
-                        SlingLogError("Failed to get download URL for community image", error: error)
                         completion(false, "Failed to get image URL: \(error.localizedDescription)")
                         return
                     }
@@ -5595,144 +6469,7 @@ class FirestoreService: ObservableObject {
         }
     }
     
-    private func updateCommunityProfileImage(communityId: String, imageUrl: String, completion: @escaping (Bool, String?) -> Void) {
-        db.collection("community").document(communityId).updateData([
-            "profile_image_url": imageUrl,
-            "updated_date": Date()
-        ]) { [weak self] error in
-            if let error = error {
-                print("❌ Error updating community profile image: \(error)")
-                SlingLogError("Failed to update community profile image in Firestore", error: error)
-                completion(false, "Failed to update community: \(error.localizedDescription)")
-                return
-            }
-            
-            print("✅ Successfully updated community profile image")
-            SlingLogInfo("User Action: Updated community profile image - Community ID: \(communityId)")
-            
-            // Update local community data
-            DispatchQueue.main.async {
-                if let index = self?.userCommunities.firstIndex(where: { $0.id == communityId }) {
-                    self?.userCommunities[index].profile_image_url = imageUrl
-                }
-                if let index = self?.communities.firstIndex(where: { $0.id == communityId }) {
-                    self?.communities[index].profile_image_url = imageUrl
-                }
-            }
-            
-            completion(true, nil)
-        }
-    }
-    
-    // MARK: - User Profile Image Upload
-    
-    func uploadUserProfileImage(_ image: UIImage, completion: @escaping (Bool, String?) -> Void) {
-        // Check if user is authenticated
-        guard let currentUserEmail = currentUser?.email,
-              let userId = currentUser?.id else {
-            completion(false, "User not authenticated")
-            return
-        }
-        
-        print("🔍 Starting user profile image upload for user: \(currentUserEmail)")
-        
-        // Debug: Check Firebase Auth state
-        if let authUser = Auth.auth().currentUser {
-            print("🔒 Firebase Auth - User: \(authUser.email ?? "no email"), UID: \(authUser.uid)")
-            print("🔒 Firebase Auth - Is anonymous: \(authUser.isAnonymous)")
-            print("🔒 Firebase Auth - Email verified: \(authUser.isEmailVerified)")
-        } else {
-            print("❌ No Firebase Auth user found - uploads will fail!")
-        }
-        
-        // Compress image
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            completion(false, "Failed to process image")
-            return
-        }
-        
-        print("📷 Image compressed successfully, size: \(imageData.count) bytes")
-        
-        let storage = Storage.storage()
-        let storageRef = storage.reference()
-        
-        let fileName = "\(userId)_\(UUID().uuidString).jpg"
-        let imageRef = storageRef.child("user_profile_images/\(fileName)")
-        
-        print("📤 Uploading to path: user_profile_images/\(fileName)")
-        print("🔍 Storage bucket: \(storageRef.bucket)")
-        print("🔍 Full path: \(imageRef.fullPath)")
-        
-        // Create metadata
-        let metadata = StorageMetadata()
-        metadata.contentType = "image/jpeg"
-        
-        // Upload image with retry logic
-        func attemptUpload(retryCount: Int = 0) {
-            let uploadTask = imageRef.putData(imageData, metadata: metadata) { [weak self] metadata, error in
-                if let error = error {
-                    print("❌ Error uploading user profile image (attempt \(retryCount + 1)): \(error)")
-                    print("🔍 Error domain: \(error._domain), code: \(error._code)")
-                    
-                    // If it's a 404 error and we haven't retried yet, try once more
-                    if error._code == -13010 && retryCount < 1 {
-                        print("🔄 Retrying upload due to 404 error...")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            attemptUpload(retryCount: retryCount + 1)
-                        }
-                        return
-                    }
-                    
-                    SlingLogError("User profile image upload failed", error: error)
-                    completion(false, error.localizedDescription)
-                    return
-                }
-            
-            print("✅ Image uploaded successfully, getting download URL...")
-            
-            // Get download URL
-            imageRef.downloadURL { [weak self] url, error in
-                if let error = error {
-                    print("❌ Error getting user profile image download URL: \(error)")
-                    print("🔍 Download URL error domain: \(error._domain), code: \(error._code)")
-                    SlingLogError("Getting user profile image URL failed", error: error)
-                    completion(false, error.localizedDescription)
-                    return
-                }
-                
-                guard let downloadURL = url else {
-                    completion(false, "Failed to get image URL")
-                    return
-                }
-                
-                let imageUrlString = downloadURL.absoluteString
-                print("✅ User profile image uploaded successfully: \(imageUrlString)")
-                
-                // Update user profile with new image URL
-                self?.updateUserProfileImage(imageUrl: imageUrlString, completion: completion)
-            }
-        }
-        
-        // Monitor upload progress
-        uploadTask.observe(.progress) { snapshot in
-            let percentComplete = 100.0 * Double(snapshot.progress!.completedUnitCount) / Double(snapshot.progress!.totalUnitCount)
-            print("📊 Upload progress: \(percentComplete)%")
-        }
-        
-        uploadTask.observe(.success) { snapshot in
-            print("🎉 Upload completed successfully")
-        }
-        
-        uploadTask.observe(.failure) { snapshot in
-            if let error = snapshot.error {
-                print("💥 Upload task failed: \(error)")
-            }
-        }
-        }
-        
-        // Start the upload
-        attemptUpload()
-    }
+    // MARK: - Private Helper Functions
     
     private func updateUserProfileImage(imageUrl: String, completion: @escaping (Bool, String?) -> Void) {
         guard let currentUserEmail = currentUser?.email,
@@ -5759,13 +6496,11 @@ class FirestoreService: ObservableObject {
                 ]) { [weak self] fallbackError in
                     if let fallbackError = fallbackError {
                         print("❌ Error updating user profile image in Firestore (both attempts failed): \(fallbackError)")
-                        SlingLogError("User profile image update failed", error: fallbackError)
                         completion(false, fallbackError.localizedDescription)
                         return
                     }
                     
                     print("✅ User profile image updated in Firestore successfully (by user ID)")
-                    SlingLogInfo("User Action: Updated user profile image - User: \(currentUserEmail)")
                     
                     // Update local user data
                     DispatchQueue.main.async {
@@ -5779,7 +6514,6 @@ class FirestoreService: ObservableObject {
             
             // Success with email-based update
             print("✅ User profile image updated in Firestore successfully (by email)")
-            SlingLogInfo("User Action: Updated user profile image - User: \(currentUserEmail)")
             
             // Update local user data
             DispatchQueue.main.async {
@@ -5790,150 +6524,31 @@ class FirestoreService: ObservableObject {
         }
     }
     
-    // MARK: - Error Logging System
-    
-    // Session ID for this app session
-    private var sessionId: String = UUID().uuidString
-    
-    // Device information cache
-    private lazy var deviceInfo: (model: String, name: String, iosVersion: String, appVersion: String) = {
-        let device = UIDevice.current
-        let deviceModel = getDeviceModel()
-        let deviceName = device.name
-        let iosVersion = device.systemVersion
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
-        
-        return (deviceModel, deviceName, iosVersion, appVersion)
-    }()
-    
-    private func getDeviceModel() -> String {
-        var systemInfo = utsname()
-        uname(&systemInfo)
-        let machineMirror = Mirror(reflecting: systemInfo.machine)
-        let identifier = machineMirror.children.reduce("") { identifier, element in
-            guard let value = element.value as? Int8, value != 0 else { return identifier }
-            let scalar = UnicodeScalar(UInt8(value))
-            return identifier + String(scalar)
-        }
-        return identifier
-    }
-    
-    func logError(
-        message: String,
-        type: String = "runtime_error",
-        level: String = "error",
-        functionName: String = #function,
-        fileName: String = #file,
-        lineNumber: Int = #line,
-        stackTrace: String? = nil,
-        additionalContext: [String: String]? = nil
-    ) {
-        let errorLog = FirestoreErrorLog(
-            error_message: message,
-            error_type: type,
-            log_level: level,
-            timestamp: Date(),
-            user_email: currentUser?.email,
-            user_id: currentUser?.id,
-            user_display_name: currentUser?.display_name,
-            user_full_name: currentUser?.full_name,
-            app_version: deviceInfo.appVersion,
-            ios_version: deviceInfo.iosVersion,
-            device_model: deviceInfo.model,
-            device_name: deviceInfo.name,
-            stack_trace: stackTrace,
-            function_name: functionName,
-            file_name: URL(fileURLWithPath: fileName).lastPathComponent,
-            line_number: lineNumber,
-            additional_context: additionalContext,
-            session_id: sessionId,
-            created_date: Date()
-        )
-        
-        // Log to console for debugging
-        print("🚨 ERROR LOG: [\(level.uppercased())] [\(type)] \(message)")
-        if let context = additionalContext {
-            print("   Context: \(context)")
-        }
-        
-        // Store in Firestore
-        do {
-            _ = try db.collection("error_logs").addDocument(from: errorLog) { error in
+    private func updateCommunityProfileImage(communityId: String, imageUrl: String, completion: @escaping (Bool, String?) -> Void) {
+        db.collection("community").document(communityId).updateData([
+            "profile_image_url": imageUrl,
+            "updated_date": Date()
+        ]) { [weak self] error in
                 if let error = error {
-                    print("❌ Failed to log error to Firestore: \(error)")
-                } else {
-                    print("✅ Error logged to Firestore successfully")
+                print("❌ Error updating community profile image: \(error)")
+                completion(false, "Failed to update community: \(error.localizedDescription)")
+                return
+            }
+            
+            print("✅ Successfully updated community profile image")
+            
+            // Update local community data
+            DispatchQueue.main.async {
+                if let index = self?.userCommunities.firstIndex(where: { $0.id == communityId }) {
+                    self?.userCommunities[index].profile_image_url = imageUrl
+                }
+                if let index = self?.communities.firstIndex(where: { $0.id == communityId }) {
+                    self?.communities[index].profile_image_url = imageUrl
                 }
             }
-        } catch {
-            print("❌ Failed to encode error log: \(error)")
+            
+            completion(true, nil)
         }
-    }
-    
-    func logConsoleMessage(
-        message: String,
-        level: String = "info",
-        functionName: String = #function,
-        fileName: String = #file,
-        lineNumber: Int = #line,
-        additionalContext: [String: String]? = nil
-    ) {
-        // Only log warnings and errors to reduce database usage
-        guard level == "warning" || level == "error" || level == "critical" else { return }
-        
-        logError(
-            message: message,
-            type: "console_log",
-            level: level,
-            functionName: functionName,
-            fileName: fileName,
-            lineNumber: lineNumber,
-            additionalContext: additionalContext
-        )
-    }
-    
-    func logNetworkError(
-        message: String,
-        endpoint: String? = nil,
-        statusCode: Int? = nil,
-        functionName: String = #function,
-        fileName: String = #file,
-        lineNumber: Int = #line
-    ) {
-        var fullMessage = message
-        if let endpoint = endpoint {
-            fullMessage += " (Endpoint: \(endpoint))"
-        }
-        if let statusCode = statusCode {
-            fullMessage += " (Status: \(statusCode))"
-        }
-        
-        SlingLogError(fullMessage, file: fileName, function: functionName, line: lineNumber)
-    }
-    
-    func logFirebaseError(
-        message: String,
-        firebaseError: Error? = nil,
-        functionName: String = #function,
-        fileName: String = #file,
-        lineNumber: Int = #line
-    ) {
-        SlingLogError(message, error: firebaseError, file: fileName, function: functionName, line: lineNumber)
-    }
-    
-    func logUserAction(
-        action: String,
-        details: String? = nil,
-        functionName: String = #function,
-        fileName: String = #file,
-        lineNumber: Int = #line
-    ) {
-        var message = "User Action: \(action)"
-        if let details = details {
-            message += " - \(details)"
-        }
-        
-        SlingLogInfo(message, file: fileName, function: functionName, line: lineNumber)
     }
 
 }

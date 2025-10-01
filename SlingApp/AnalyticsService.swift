@@ -183,6 +183,75 @@ class AnalyticsService: ObservableObject {
         ])
     }
     
+    func trackDetailedError(error: String, context: String, severity: ErrorSeverity, additionalInfo: [String: Any] = [:]) {
+        var parameters: [String: Any] = [
+            "error_message": error,
+            "context": context,
+            "severity": severity.rawValue,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        // Add any additional error information
+        for (key, value) in additionalInfo {
+            parameters[key] = value
+        }
+        
+        Analytics.logEvent("app_error_detailed", parameters: parameters)
+    }
+    
+    func trackNetworkError(error: String, endpoint: String, method: String, statusCode: Int? = nil, responseTime: TimeInterval? = nil) {
+        var parameters: [String: Any] = [
+            "error_message": error,
+            "endpoint": endpoint,
+            "method": method,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if let statusCode = statusCode {
+            parameters["status_code"] = statusCode
+        }
+        
+        if let responseTime = responseTime {
+            parameters["response_time"] = responseTime
+        }
+        
+        Analytics.logEvent("network_error", parameters: parameters)
+    }
+    
+    func trackValidationError(field: String, value: String, rule: String, page: String) {
+        Analytics.logEvent("validation_error", parameters: [
+            "field": field,
+            "value": value,
+            "rule": rule,
+            "page": page,
+            "timestamp": Date().timeIntervalSince1970
+        ])
+    }
+    
+    func trackAuthenticationError(error: String, method: String, isRetry: Bool = false) {
+        Analytics.logEvent("auth_error", parameters: [
+            "error_message": error,
+            "auth_method": method,
+            "is_retry": isRetry,
+            "timestamp": Date().timeIntervalSince1970
+        ])
+    }
+    
+    func trackFirestoreError(operation: String, collection: String, document: String? = nil, error: String) {
+        var parameters: [String: Any] = [
+            "operation": operation,
+            "collection": collection,
+            "error_message": error,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if let document = document {
+            parameters["document"] = document
+        }
+        
+        Analytics.logEvent("firestore_error", parameters: parameters)
+    }
+    
     // MARK: - Main App Events
     
     func trackTabSwitch(fromTab: String, toTab: String) {
@@ -708,6 +777,83 @@ class AnalyticsService: ObservableObject {
             "image_source": imageSource,
             "timestamp": Date().timeIntervalSince1970
         ])
+    }
+    
+    // MARK: - Performance Metrics
+    
+    func trackPerformanceMetric(metric: String, value: Double, unit: String, context: String? = nil) {
+        var parameters: [String: Any] = [
+            "metric": metric,
+            "value": value,
+            "unit": unit,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if let context = context {
+            parameters["context"] = context
+        }
+        
+        Analytics.logEvent("performance_metric", parameters: parameters)
+    }
+    
+    func trackEngagementMetric(action: String, duration: TimeInterval, context: String? = nil, additionalData: [String: Any] = [:]) {
+        var parameters: [String: Any] = [
+            "action": action,
+            "duration_seconds": duration,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if let context = context {
+            parameters["context"] = context
+        }
+        
+        // Add any additional engagement data
+        for (key, value) in additionalData {
+            parameters[key] = value
+        }
+        
+        Analytics.logEvent("engagement_metric", parameters: parameters)
+    }
+    
+    func trackAppPerformance(startTime: Date, endTime: Date, operation: String, success: Bool, additionalInfo: [String: Any] = [:]) {
+        let duration = endTime.timeIntervalSince(startTime)
+        
+        var parameters: [String: Any] = [
+            "operation": operation,
+            "duration_seconds": duration,
+            "success": success,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        // Add any additional performance info
+        for (key, value) in additionalInfo {
+            parameters[key] = value
+        }
+        
+        Analytics.logEvent("app_performance", parameters: parameters)
+    }
+    
+    func trackUserRetention(daysSinceFirstUse: Int, sessionsCount: Int, lastActiveDate: Date) {
+        Analytics.logEvent("user_retention", parameters: [
+            "days_since_first_use": daysSinceFirstUse,
+            "sessions_count": sessionsCount,
+            "last_active_date": lastActiveDate.timeIntervalSince1970,
+            "timestamp": Date().timeIntervalSince1970
+        ])
+    }
+    
+    func trackFeatureAdoption(feature: String, isFirstTime: Bool, context: String? = nil) {
+        var parameters: [String: Any] = [
+            "feature": feature,
+            "is_first_time": isFirstTime,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if let context = context {
+            parameters["context"] = context
+        }
+        
+        Analytics.logEvent("feature_adoption", parameters: parameters)
     }
     
     // MARK: - Custom Events

@@ -10,9 +10,11 @@ import UIKit
 import Firebase
 import FirebaseAuth
 import FirebaseAnalytics
+import FirebaseMessaging
+import UserNotifications
 import GoogleSignIn
 
-class AppDelegate: NSObject, UIApplicationDelegate {
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         
@@ -50,6 +52,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Initialize Analytics Service
         AnalyticsService.shared.trackSessionStart()
+        
+        // Setup Push Notifications
+        setupPushNotifications(application)
         
         return true
     }
@@ -122,6 +127,162 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         } else {
             print("❌ Invalid universal link format: \(url)")
         }
+    }
+    
+    // MARK: - Push Notifications Setup
+    
+    private func setupPushNotifications(_ application: UIApplication) {
+        print("🔔 ===== PUSH NOTIFICATIONS SETUP =====")
+        print("🔔 Setting up push notifications...")
+        
+        // Set messaging delegate
+        Messaging.messaging().delegate = self
+        print("🔔 Firebase Messaging delegate set")
+        
+        // Set notification center delegate
+        UNUserNotificationCenter.current().delegate = self
+        print("🔔 UNUserNotificationCenter delegate set")
+        
+        // Check current notification settings
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            print("🔔 Current notification settings:")
+            print("🔔 Authorization status: \(settings.authorizationStatus.rawValue)")
+            print("🔔 Alert setting: \(settings.alertSetting.rawValue)")
+            print("🔔 Badge setting: \(settings.badgeSetting.rawValue)")
+            print("🔔 Sound setting: \(settings.soundSetting.rawValue)")
+            print("🔔 Notification center setting: \(settings.notificationCenterSetting.rawValue)")
+            print("🔔 Lock screen setting: \(settings.lockScreenSetting.rawValue)")
+        }
+        
+        // Request notification permissions
+        let authOptions: UNAuthorizationOptions = [.alert, .badge, .sound]
+        print("🔔 Requesting notification permissions with options: \(authOptions)")
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: authOptions,
+            completionHandler: { granted, error in
+                print("🔔 ===== NOTIFICATION PERMISSION RESPONSE =====")
+                if let error = error {
+                    print("❌ Notification permission error: \(error.localizedDescription)")
+                    print("❌ Error details: \(error)")
+                } else if granted {
+                    print("✅ Notification permissions granted by user")
+                    DispatchQueue.main.async {
+                        print("🔔 Registering for remote notifications...")
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
+                } else {
+                    print("❌ Notification permissions denied by user")
+                }
+                print("🔔 ===== NOTIFICATION PERMISSION RESPONSE END =====")
+            }
+        )
+        
+        // Register for remote notifications
+        print("🔔 Registering application for remote notifications...")
+        application.registerForRemoteNotifications()
+        print("🔔 ===== PUSH NOTIFICATIONS SETUP END =====")
+        
+        print("✅ Push notifications setup complete")
+    }
+    
+    // MARK: - APNs Token Handling
+    
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        print("🔔 ===== APNS TOKEN RECEIVED =====")
+        print("🔔 APNs device token received: \(deviceToken.map { String(format: "%02.2hhx", $0) }.joined())")
+        print("🔔 APNs token length: \(deviceToken.count) bytes")
+        
+        Messaging.messaging().apnsToken = deviceToken
+        print("🔔 APNs token set on Firebase Messaging")
+        print("🔔 ===== APNS TOKEN RECEIVED END =====")
+    }
+    
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("🔔 ===== APNS REGISTRATION FAILED =====")
+        print("❌ Failed to register for remote notifications: \(error.localizedDescription)")
+        print("❌ Error details: \(error)")
+        print("🔔 ===== APNS REGISTRATION FAILED END =====")
+    }
+    
+    // MARK: - MessagingDelegate
+    
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        print("🔔 ===== FCM TOKEN REGISTRATION =====")
+        print("🔔 Firebase registration token received: \(fcmToken ?? "nil")")
+        
+        if let token = fcmToken {
+            print("🔔 Token length: \(token.count) characters")
+            print("🔔 Token prefix: \(token.prefix(20))...")
+            print("🔔 Token suffix: ...\(token.suffix(20))")
+            
+            // Store the token for later use
+            UserDefaults.standard.set(token, forKey: "FCMToken")
+            print("🔔 FCM token stored in UserDefaults")
+            
+            // Verify storage
+            let storedToken = UserDefaults.standard.string(forKey: "FCMToken")
+            if storedToken == token {
+                print("✅ FCM token successfully stored in UserDefaults")
+            } else {
+                print("❌ FCM token storage verification failed")
+            }
+            
+            // Store FCM token in Firestore user document
+            // This will be called when the FirestoreService is available
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                print("🔔 Attempting to store FCM token in Firestore...")
+                // Try to get the FirestoreService instance and update the token
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let window = windowScene.windows.first,
+                   let rootView = window.rootViewController {
+                    print("🔔 FCM token ready to be stored in Firestore")
+                    print("🔔 Root view controller found: \(type(of: rootView))")
+                } else {
+                    print("❌ Could not find root view controller")
+                }
+            }
+            
+            print("✅ FCM token stored locally")
+        } else {
+            print("❌ FCM token is nil!")
+        }
+        print("🔔 ===== FCM TOKEN REGISTRATION END =====")
+    }
+    
+    // MARK: - UNUserNotificationCenterDelegate
+    
+    // Handle notification when app is in foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                              willPresent notification: UNNotification,
+                              withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        print("📱 Notification received in foreground: \(notification.request.content.title)")
+        
+        // Show notification even when app is in foreground
+        completionHandler([.alert, .badge, .sound])
+    }
+    
+    // Handle notification tap
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                              didReceive response: UNNotificationResponse,
+                              withCompletionHandler completionHandler: @escaping () -> Void) {
+        print("📱 Notification tapped: \(response.notification.request.content.title)")
+        
+        // Handle notification tap - you can navigate to specific screens here
+        let userInfo = response.notification.request.content.userInfo
+        print("📱 Notification userInfo: \(userInfo)")
+        
+        // Extract data from notification payload
+        if let betId = userInfo["bet_id"] as? String {
+            print("📱 Notification bet ID: \(betId)")
+            // Navigate to bet details
+            DeepLinkManager.shared.handleDeepLink(type: "bet", id: betId)
+        } else if let communityId = userInfo["community_id"] as? String {
+            print("📱 Notification community ID: \(communityId)")
+            // Navigate to community
+            DeepLinkManager.shared.handleDeepLink(type: "community", id: communityId)
+        }
+        
+        completionHandler()
     }
 }
 

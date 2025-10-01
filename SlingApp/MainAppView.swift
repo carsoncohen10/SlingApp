@@ -103,6 +103,12 @@ struct MainAppView: View {
                     Button(action: { 
                         AnalyticsService.shared.trackTabSwitch(fromTab: getTabName(previousTab), toTab: "home")
                         AnalyticsService.shared.trackUserFlowStep(step: .homeTab)
+                        AnalyticsService.shared.trackCustomEvent(eventName: "tab_switch_home", parameters: [
+                            "from_tab": getTabName(previousTab),
+                            "bets_count": firestoreService.bets.count,
+                            "communities_count": firestoreService.userCommunities.count,
+                            "filter_active": selectedCommunityFilter != nil
+                        ])
                         previousTab = selectedTab
                         selectedTab = 0
                         // Reset community filter when home tab is clicked
@@ -126,6 +132,12 @@ struct MainAppView: View {
                     Button(action: { 
                         AnalyticsService.shared.trackTabSwitch(fromTab: getTabName(previousTab), toTab: "chat")
                         AnalyticsService.shared.trackUserFlowStep(step: .chatTab)
+                        AnalyticsService.shared.trackCustomEvent(eventName: "tab_switch_chat", parameters: [
+                            "from_tab": getTabName(previousTab),
+                            "communities_count": firestoreService.userCommunities.count,
+                            "unread_messages": firestoreService.totalUnreadCount,
+                            "muted_communities": firestoreService.mutedCommunities.count
+                        ])
                         previousTab = selectedTab
                         selectedTab = 1
                         // Refresh chat data when switching to chat tab (no loading state needed)
@@ -171,6 +183,12 @@ struct MainAppView: View {
                     Button(action: {
                         AnalyticsService.shared.trackFeatureUsage(feature: "create_bet_button", context: "tab_bar")
                         AnalyticsService.shared.trackUserFlowStep(step: .createBet)
+                        AnalyticsService.shared.trackCustomEvent(eventName: "create_bet_button_tap", parameters: [
+                            "current_tab": getTabName(selectedTab),
+                            "user_communities_count": firestoreService.userCommunities.count,
+                            "user_points": firestoreService.currentUser?.blitz_points ?? 0,
+                            "total_bets_created": firestoreService.currentUser?.total_bets ?? 0
+                        ])
                         showingCreateBetModal = true
                     }) {
                         ZStack {
@@ -191,6 +209,12 @@ struct MainAppView: View {
                     Button(action: { 
                         AnalyticsService.shared.trackTabSwitch(fromTab: getTabName(previousTab), toTab: "my_bets")
                         AnalyticsService.shared.trackUserFlowStep(step: .myBetsTab)
+                        AnalyticsService.shared.trackCustomEvent(eventName: "tab_switch_my_bets", parameters: [
+                            "from_tab": getTabName(previousTab),
+                            "user_bet_participations": firestoreService.userBetParticipations.count,
+                            "total_bets": firestoreService.currentUser?.total_bets ?? 0,
+                            "total_winnings": firestoreService.currentUser?.total_winnings ?? 0
+                        ])
                         previousTab = selectedTab
                         selectedTab = 2 
                     }) {
@@ -212,6 +236,16 @@ struct MainAppView: View {
                     Button(action: { 
                         AnalyticsService.shared.trackTabSwitch(fromTab: getTabName(previousTab), toTab: "communities")
                         AnalyticsService.shared.trackUserFlowStep(step: .communitiesTab)
+                        AnalyticsService.shared.trackCustomEvent(eventName: "tab_switch_communities", parameters: [
+                            "from_tab": getTabName(previousTab),
+                            "user_communities_count": firestoreService.userCommunities.count,
+                            "total_communities_available": firestoreService.communities.count,
+                            "communities_with_unread": firestoreService.communityLastMessages.filter { 
+                                let communityId = $0.key
+                                return firestoreService.mutedCommunities.contains(communityId) == false && 
+                                       firestoreService.userCommunities.contains { $0.id == communityId }
+                            }.count
+                        ])
                         previousTab = selectedTab
                         selectedTab = 3
                         // Update community statistics when Communities tab is selected
@@ -287,6 +321,15 @@ struct MainAppView: View {
         .onAppear {
             // Track main app view appearance
             AnalyticsService.shared.trackUserFlowStep(step: .mainApp)
+            AnalyticsService.shared.trackCustomEvent(eventName: "main_app_view", parameters: [
+                "user_id": firestoreService.currentUser?.id ?? "unknown",
+                "user_email": firestoreService.currentUser?.email ?? "unknown",
+                "communities_count": firestoreService.userCommunities.count,
+                "bets_count": firestoreService.bets.count,
+                "unread_messages": firestoreService.totalUnreadCount,
+                "unread_notifications": firestoreService.notifications.filter { !$0.is_read }.count,
+                "user_points": firestoreService.currentUser?.blitz_points ?? 0
+            ])
             timeTracker.startTracking(for: "main_app")
             
             // Check screen size and hide tab text if needed
@@ -678,8 +721,13 @@ struct HomeView: View {
         if !firestoreService.userCommunities.isEmpty {
             // Create array of (community, bet count) pairs
             let communitiesWithCounts = firestoreService.userCommunities.map { community in
+                let currentTime = Date()
                 let betCount = firestoreService.bets.filter { bet in
-                    return bet.community_id == community.id
+                    // Only count open bets that haven't expired and don't mention current user
+                    let isOpen = bet.status.lowercased() == "open"
+                    let notExpired = bet.deadline > currentTime
+                    let notMentioned = !isUserMentionedInBet(bet.title, userEmail: firestoreService.currentUser?.email ?? "")
+                    return bet.community_id == community.id && isOpen && notExpired && notMentioned
                 }.count
                 
                 return (community: community, betCount: betCount)
@@ -713,6 +761,7 @@ struct HomeView: View {
             // Main Content
             ScrollView {
                 VStack(spacing: 8) { // Reduced from 16 to 8
+                    
                     // Filter Bar - only show if user has communities (now scrollable)
                     if !firestoreService.userCommunities.isEmpty {
                         FilterBarView(
@@ -799,15 +848,19 @@ struct HomeView: View {
                                     // Only show open bets that haven't expired
                                     let isOpen = bet.status.lowercased() == "open"
                                     let notExpired = bet.deadline > currentTime
-                                    return isOpen && notExpired
+                                    // Hide bets where current user is mentioned
+                                    let notMentioned = !isUserMentionedInBet(bet.title, userEmail: firestoreService.currentUser?.email ?? "")
+                                    return isOpen && notExpired && notMentioned
                                 }
                                 : firestoreService.bets.filter { bet in
                                     // Only show open bets that haven't expired from the selected community
                                     let isOpen = bet.status.lowercased() == "open"
                                     let notExpired = bet.deadline > currentTime
+                                    // Hide bets where current user is mentioned
+                                    let notMentioned = !isUserMentionedInBet(bet.title, userEmail: firestoreService.currentUser?.email ?? "")
                                     if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
                                         let nameMatches = community.name == selectedFilter
-                                        return nameMatches && isOpen && notExpired
+                                        return nameMatches && isOpen && notExpired && notMentioned
                                     }
                                     return false
                                 }
@@ -818,9 +871,11 @@ struct HomeView: View {
                                     // Only show open bets that haven't expired from other communities
                                     let isOpen = bet.status.lowercased() == "open"
                                     let notExpired = bet.deadline > currentTime
+                                    // Hide bets where current user is mentioned
+                                    let notMentioned = !isUserMentionedInBet(bet.title, userEmail: firestoreService.currentUser?.email ?? "")
                                     if let community = firestoreService.userCommunities.first(where: { $0.id == bet.community_id }) {
                                         let isDifferentCommunity = community.name != selectedFilter
-                                        return isOpen && notExpired && isDifferentCommunity
+                                        return isOpen && notExpired && isDifferentCommunity && notMentioned
                                     }
                                     return false
                                 }
@@ -1165,7 +1220,7 @@ struct HomeView: View {
                                 
                                 // Description
                                 VStack(spacing: 12) {
-                                    Text("Blitz Points")
+                                    Text("Sling Points")
                                         .font(.title2)
                                         .fontWeight(.bold)
                                         .foregroundColor(.black)
@@ -1209,6 +1264,51 @@ struct HomeView: View {
         firestoreService.fetchUserCommunities()
         // fetchBets() is now called automatically after communities are loaded
     }
+    
+    // Function to check if current user is mentioned in a bet title
+    private func isUserMentionedInBet(_ betTitle: String, userEmail: String) -> Bool {
+        // Get the user's full name for mention matching
+        guard let user = firestoreService.currentUser else { return false }
+
+        let userFullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+
+        print("🔍 MAIN FEED MENTION CHECK DEBUG:")
+        print("  - Bet title: '\(betTitle)'")
+        print("  - User full name: '\(userFullName)'")
+        print("  - User email: '\(userEmail)'")
+
+        // Check for @ mentions in the bet title
+        // Look for patterns like @FirstName LastName (case insensitive)
+        let mentionPattern = "@[A-Za-z]+(?:\\s+[A-Za-z]+)+"
+        let regex = try? NSRegularExpression(pattern: mentionPattern, options: .caseInsensitive)
+        let range = NSRange(location: 0, length: betTitle.utf16.count)
+
+        guard let regex = regex else {
+            print("  - Regex creation failed")
+            return false
+        }
+
+        let matches = regex.matches(in: betTitle, range: range)
+        print("  - Found \(matches.count) potential mentions")
+
+        for match in matches {
+            if let matchRange = Range(match.range, in: betTitle) {
+                let mentionText = String(betTitle[matchRange])
+                // Remove the @ symbol and compare with user's full name
+                let mentionedName = String(mentionText.dropFirst())
+
+                print("  - Checking mention: '\(mentionedName)' vs '\(userFullName)'")
+
+                if mentionedName.lowercased() == userFullName.lowercased() {
+                    print("  - ✅ MATCH FOUND! User is mentioned in bet title")
+                    return true
+                }
+            }
+        }
+
+        print("  - ❌ No mention match found")
+        return false
+    }
 }
 
 // MARK: - Home Bet Card
@@ -1220,6 +1320,9 @@ struct HomeBetCard: View {
     @State private var showingJoinBet = false
     @State private var showingBettingInterface = false
     @State private var selectedBettingOption = ""
+    @State private var currentBetSelectedOption = ""
+    @State private var clickedOption = ""
+    @State private var selectedOptionForSheet = ""
     @State private var creatorName: String = ""
     @State private var showingShareSheet = false
     
@@ -1245,6 +1348,19 @@ struct HomeBetCard: View {
             Button(action: {
                 if bet.status.lowercased() == "open" {
                     AnalyticsService.shared.trackBetInteraction(action: .view, betId: bet.id ?? "unknown", betTitle: bet.title, communityName: communityName)
+                    
+                    // Enhanced analytics for bet detail view
+                    AnalyticsService.shared.trackCustomEvent(eventName: "bet_detail_view_attempt", parameters: [
+                        "bet_id": bet.id ?? "unknown",
+                        "bet_title": bet.title,
+                        "community_name": communityName,
+                        "bet_status": bet.status,
+                        "is_urgent": countdownInfo.isUrgent,
+                        "is_expired": countdownInfo.isExpired,
+                        "creator_is_current_user": currentUserEmail == bet.creator_email,
+                        "source": "home_bet_card"
+                    ])
+                    
                     showingJoinBet = true
                 }
             }) {
@@ -1265,6 +1381,8 @@ struct HomeBetCard: View {
                             Text("\(communityName) • by \(currentUserEmail == bet.creator_email ? "You" : formatCreatorName(creatorName))")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
                     }
                     
@@ -1301,17 +1419,40 @@ struct HomeBetCard: View {
                         
                         AnalyticsService.shared.trackBetInteraction(action: .placeBet, betId: bet.id ?? "unknown", betTitle: bet.title, communityName: communityName)
                         
+                        // Enhanced analytics for betting option selection
+                        AnalyticsService.shared.trackCustomEvent(eventName: "bet_option_selected", parameters: [
+                            "bet_id": bet.id ?? "unknown",
+                            "bet_title": bet.title,
+                            "selected_option": option,
+                            "all_options": bet.options.joined(separator: ","),
+                            "option_index": bet.options.firstIndex(of: option) ?? -1,
+                            "total_options": bet.options.count,
+                            "community_name": communityName,
+                            "bet_status": bet.status,
+                            "is_urgent": countdownInfo.isUrgent,
+                            "is_expired": countdownInfo.isExpired
+                        ])
+                        
+                        // Track betting action with detailed context
+                        let calculatedOdds = firestoreService.calculateImpliedOdds(for: bet)
+                        let optionOdds = calculatedOdds[option] ?? 0.5
+                        AnalyticsService.shared.trackBettingAction(
+                            betId: bet.id ?? "unknown",
+                            option: option,
+                            amount: 0, // Will be set in betting interface
+                            odds: firestoreService.formatImpliedOdds(optionOdds)
+                        )
+                        
                         // Set the selected option
                         selectedBettingOption = option
+                        currentBetSelectedOption = option
+                        clickedOption = option
+                        selectedOptionForSheet = option
                         
-                        print("🎯 MAIN_APP_OPTION_CLICK: After assignment - selectedBettingOption: '\(selectedBettingOption)'")
-                        print("🎯 MAIN_APP_OPTION_CLICK: After assignment - selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
+                        print("🎯 MAIN_APP_OPTION_CLICK: Set selectedBettingOption='\(option)' and selectedOptionForSheet='\(option)'")
                         
-                        // Trigger the betting interface
+                        // Trigger the betting interface immediately
                         showingBettingInterface = true
-                        
-                        print("🎯 MAIN_APP_OPTION_CLICK: After showingBettingInterface = true: \(showingBettingInterface)")
-                        print("🎯 MAIN_APP_OPTION_CLICK: ===== MAIN APP DEBUG END =====")
                     }) {
                         HStack {
                             Text(option)
@@ -1352,6 +1493,19 @@ struct HomeBetCard: View {
             Button(action: {
                 if bet.status.lowercased() == "open" {
                     AnalyticsService.shared.trackBetInteraction(action: .view, betId: bet.id ?? "unknown", betTitle: bet.title, communityName: communityName)
+                    
+                    // Enhanced analytics for footer bet detail view
+                    AnalyticsService.shared.trackCustomEvent(eventName: "bet_detail_view_attempt", parameters: [
+                        "bet_id": bet.id ?? "unknown",
+                        "bet_title": bet.title,
+                        "community_name": communityName,
+                        "bet_status": bet.status,
+                        "is_urgent": countdownInfo.isUrgent,
+                        "is_expired": countdownInfo.isExpired,
+                        "creator_is_current_user": currentUserEmail == bet.creator_email,
+                        "source": "home_bet_card_footer"
+                    ])
+                    
                     showingJoinBet = true
                 }
             }) {
@@ -1394,39 +1548,47 @@ struct HomeBetCard: View {
             )
         }
         .sheet(isPresented: $showingBettingInterface) {
-            let finalOption = selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption
-            
             BettingInterfaceView(
                 bet: bet,
-                selectedOption: finalOption,
+                selectedOption: $selectedOptionForSheet,
                 firestoreService: firestoreService
             )
             .onAppear {
-                // 🐛 DEBUG: MainAppView Sheet Presentation
-                print("🎯 MAIN_APP_SHEET_ONAPPEAR: BettingInterfaceView sheet appeared from MainAppView")
-                print("🎯 MAIN_APP_SHEET_ONAPPEAR: selectedBettingOption at sheet appear: '\(selectedBettingOption)'")
-                print("🎯 MAIN_APP_SHEET_ONAPPEAR: showingBettingInterface: \(showingBettingInterface)")
-                print("🎯 MAIN_APP_SHEET_ONAPPEAR: finalOption used: '\(finalOption)'")
-                
-                // 🐛 DEBUG: MainAppView BettingInterfaceView Resolution - COMPREHENSIVE
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: ===== MAIN APP RESOLUTION DEBUG START =====")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: selectedBettingOption: '\(selectedBettingOption)'")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: selectedBettingOption.count: \(selectedBettingOption.count)")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: bet.options: \(bet.options)")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: bet.options.first: '\(bet.options.first ?? "nil")'")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: Final resolved option: '\(finalOption)'")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: Bet ID: \(bet.id ?? "nil")")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: Bet title: '\(bet.title)'")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: showingBettingInterface: \(showingBettingInterface)")
-                print("🎯 MAIN_APP_INTERFACE_RESOLUTION: ===== MAIN APP RESOLUTION DEBUG END =====")
+                print("🎯 HOME_BET_CARD_SHEET: selectedOptionForSheet='\(selectedOptionForSheet)'")
+                print("🧩 HOME_BET_CARD_SHEET: Using binding approach")
             }
         }
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(activityItems: [generateBetShareText()])
+                .onAppear {
+                    AnalyticsService.shared.trackShareAction(contentType: "bet", contentId: bet.id ?? "unknown", method: "native_share_sheet")
+                    AnalyticsService.shared.trackBetInteraction(action: .share, betId: bet.id ?? "unknown", betTitle: bet.title, communityName: communityName)
+                }
         }
         .onAppear {
             loadCreatorName()
+            
+            // Track bet card view with detailed context
+            AnalyticsService.shared.trackCustomEvent(eventName: "bet_card_view", parameters: [
+                "bet_id": bet.id ?? "unknown",
+                "bet_title": bet.title,
+                "community_name": communityName,
+                "bet_status": bet.status,
+                "options_count": bet.options.count,
+                "deadline": bet.deadline.timeIntervalSince1970,
+                "is_urgent": countdownInfo.isUrgent,
+                "is_expired": countdownInfo.isExpired,
+                "creator_is_current_user": currentUserEmail == bet.creator_email,
+                "bet_type": bet.bet_type ?? "unknown"
+            ])
+            
+            // Track content engagement
+            AnalyticsService.shared.trackContentEngagement(
+                contentType: "bet_card",
+                contentId: bet.id ?? "unknown",
+                action: "view",
+                duration: nil
+            )
         }
     }
     
@@ -1479,15 +1641,7 @@ struct HomeBetCard: View {
     }
     
     private func generateBetShareText() -> String {
-        guard let betId = bet.id else {
-            return "\(bet.title) | Sling"
-        }
-        
-        return """
-        \(bet.title) | Sling
-        
-        sling://bet/\(betId)
-        """
+        return "We're betting on \"\(bet.title)\"! Download the Sling App on the App Store to join the action!"
     }
 }
 
@@ -1500,4 +1654,5 @@ struct HomeBetCard: View {
 
 
                 
+
 

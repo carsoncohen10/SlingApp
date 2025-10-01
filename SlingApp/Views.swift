@@ -991,6 +991,7 @@ struct EnhancedBetCardView: View {
     @State private var hasRemindedCreator = false
     @State private var showingBettingInterface = false
     @State private var selectedBettingOption = ""
+    @State private var selectedOptionForSheet = ""
     @State private var userFullNames: [String: String] = [:]
     @State private var countdownTimer: Timer?
     @State private var currentTime = Date()
@@ -1063,28 +1064,28 @@ struct EnhancedBetCardView: View {
                                 .font(.caption)
                                 .foregroundColor(isCommunityNameClickable ? .slingBlue : .gray)
                             
-                            // Community name - conditionally clickable
+                            // Community name and creator - conditionally clickable
                             if isCommunityNameClickable {
                                 Button(action: {
                                     // Navigate to community details
                                     // This would need to be handled by the parent view
                                 }) {
-                                    Text(communityName)
+                                    Text("\(communityName) • by \(currentUserEmail == bet.creator_email ? "You" : getUserFullName(from: bet.creator_email))")
                                         .font(.subheadline)
                                         .fontWeight(.medium)
                                         .foregroundColor(.slingBlue)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
                                 }
                                 .buttonStyle(.plain)
                             } else {
-                                Text(communityName)
+                                Text("\(communityName) • by \(currentUserEmail == bet.creator_email ? "You" : getUserFullName(from: bet.creator_email))")
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                 .foregroundColor(.gray)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
                             }
-                            
-                            Text("• by \(currentUserEmail == bet.creator_email ? "You" : getUserFullName(from: bet.creator_email))")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
                         }
                     }
                     
@@ -1110,11 +1111,13 @@ struct EnhancedBetCardView: View {
                             
                             // Set the selected option
                             selectedBettingOption = option
+                            selectedOptionForSheet = option
                             
-                            print("🎯 BET_OPTION_CLICK: After assignment - selectedBettingOption: '\(selectedBettingOption)'")
-                            print("🎯 BET_OPTION_CLICK: After assignment - selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
+                            print("🎯 ENHANCED_BET_CARD_CLICK: After assignment - selectedBettingOption: '\(selectedBettingOption)'")
+                            print("🎯 ENHANCED_BET_CARD_CLICK: After assignment - selectedOptionForSheet: '\(selectedOptionForSheet)'")
+                            print("🎯 ENHANCED_BET_CARD_CLICK: After assignment - selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
                             
-                            // Trigger the betting interface
+                            // Trigger the betting interface immediately
                             showingBettingInterface = true
                             
                             print("🎯 BET_OPTION_CLICK: After showingBettingInterface = true: \(showingBettingInterface)")
@@ -1240,33 +1243,15 @@ struct EnhancedBetCardView: View {
             )
         }
         .sheet(isPresented: $showingBettingInterface) {
-            let finalOption = selectedBettingOption.isEmpty ? bet.options.first ?? "Yes" : selectedBettingOption
-            
             BettingInterfaceView(
                 bet: bet,
-                selectedOption: finalOption,
+                selectedOption: $selectedOptionForSheet,
                 firestoreService: firestoreService,
                 onBetPlaced: nil
             )
             .onAppear {
-                // 🐛 DEBUG: Sheet Presentation
-                print("🎯 SHEET_ONAPPEAR: BettingInterfaceView sheet appeared")
-                print("🎯 SHEET_ONAPPEAR: selectedBettingOption at sheet appear: '\(selectedBettingOption)'")
-                print("🎯 SHEET_ONAPPEAR: showingBettingInterface: \(showingBettingInterface)")
-                print("🎯 SHEET_ONAPPEAR: finalOption used: '\(finalOption)'")
-                
-                // 🐛 DEBUG: Betting Interface Option Resolution - COMPREHENSIVE
-                print("🎯 BETTING_INTERFACE_RESOLUTION: ===== RESOLUTION DEBUG START =====")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: selectedBettingOption: '\(selectedBettingOption)'")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: selectedBettingOption.count: \(selectedBettingOption.count)")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: bet.options: \(bet.options)")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: bet.options.first: '\(bet.options.first ?? "nil")'")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: Final resolved option: '\(finalOption)'")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: Bet ID: \(bet.id ?? "nil")")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: Bet title: '\(bet.title)'")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: showingBettingInterface: \(showingBettingInterface)")
-                print("🎯 BETTING_INTERFACE_RESOLUTION: ===== RESOLUTION DEBUG END =====")
+                print("🎯 ENHANCED_BET_CARD_SHEET: selectedOptionForSheet='\(selectedOptionForSheet)'")
+                print("🧩 ENHANCED_BET_CARD_SHEET: Using binding approach")
             }
         }
         .onAppear {
@@ -2613,6 +2598,8 @@ struct ActiveBetDetailView: View {
                             Text(communityName)
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                             Spacer()
                             Text(bet.status.capitalized)
                                 .font(.caption)
@@ -3435,16 +3422,15 @@ struct MyBetCard: View {
                     }
                 )
             case .bettingInterface:
-                let finalOption = selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption
-                
                 BettingInterfaceView(
                     bet: bet,
-                    selectedOption: finalOption,
+                    selectedOption: .constant(selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption),
                     firestoreService: firestoreService,
                     onBetPlaced: nil
                 )
                 .onAppear {
                     // 🐛 DEBUG: Navigation-based BettingInterfaceView
+                    let finalOption = selectedBettingOption.isEmpty ? (bet.options.first ?? "Yes") : selectedBettingOption
                     print("🎯 NAVIGATION_BETTING_INTERFACE: ===== NAVIGATION DEBUG START =====")
                     print("🎯 NAVIGATION_BETTING_INTERFACE: selectedBettingOption: '\(selectedBettingOption)'")
                     print("🎯 NAVIGATION_BETTING_INTERFACE: selectedBettingOption.isEmpty: \(selectedBettingOption.isEmpty)")
@@ -4023,9 +4009,8 @@ struct AvailableBetCard: View {
                         .font(.caption2)
                         .foregroundColor(.gray)
                         .fontWeight(.medium)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 
                 // Show odds for each option
@@ -4432,18 +4417,8 @@ struct ChatMessageBubble: View {
                                 message: message,
                                 firestoreService: firestoreService,
                                 onBetTap: {
-                                    // Fetch the actual bet from Firestore and show bet details
-                                    if let betId = message.betId {
-                                        firestoreService.fetchBet(by: betId) { fetchedBet in
-                                            DispatchQueue.main.async {
-                                                if let fetchedBet = fetchedBet {
-                                                    selectedBet = fetchedBet
-                                                    selectedBetOption = "" // Clear any selected option
-                                                    showingBetDetail = true
-                                                }
-                                            }
-                                        }
-                                    }
+                                    // Fallback callback - should not be used now that BetAnnouncementCard handles its own sheet
+                                    print("⚠️ BetAnnouncementCard onBetTap fallback called - this should not happen")
                                 }
                             )
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -4544,7 +4519,7 @@ struct ChatMessageBubble: View {
             if let selectedBet = selectedBet {
                 BettingInterfaceView(
                     bet: selectedBet,
-                    selectedOption: selectedBetOption.isEmpty ? (selectedBet.options.first ?? "Yes") : selectedBetOption,
+                    selectedOption: .constant(selectedBetOption.isEmpty ? (selectedBet.options.first ?? "Yes") : selectedBetOption),
                     firestoreService: firestoreService,
                     onBetPlaced: nil
                 )
@@ -4574,6 +4549,7 @@ struct MessagesView: View {
     @State private var searchText = ""
     @StateObject private var timeTracker = TimeTracker()
     @State private var hasPerformedInitialScroll = false
+    @State private var shouldScrollToBottom = false
     
     // Global timestamp state - activated by swiping anywhere on the page
     @State private var isShowingTimestamps = false
@@ -4637,6 +4613,9 @@ struct MessagesView: View {
         let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         messageText = "" // Clear input immediately for better UX
         
+        // Set flag to scroll to bottom after message is sent
+        shouldScrollToBottom = true
+        
         // Track message send attempt
         AnalyticsService.shared.trackMessageSend(
             communityId: community.id ?? "",
@@ -4644,6 +4623,16 @@ struct MessagesView: View {
             messageLength: trimmedMessage.count,
             success: true
         )
+        
+        // Enhanced analytics for message sending
+        AnalyticsService.shared.trackCustomEvent(eventName: "message_send_attempt", parameters: [
+            "community_id": community.id ?? "",
+            "community_name": community.name,
+            "message_length": trimmedMessage.count,
+            "message_preview": String(trimmedMessage.prefix(50)),
+            "has_mentions": trimmedMessage.contains("@"),
+            "user_communities_count": firestoreService.userCommunities.count
+        ])
         
         firestoreService.sendMessage(to: community.id ?? "", text: trimmedMessage) { success, error in
             DispatchQueue.main.async {
@@ -4656,6 +4645,15 @@ struct MessagesView: View {
                         messageLength: trimmedMessage.count,
                         success: false
                     )
+                    
+                    // Enhanced analytics for failed message send
+                    AnalyticsService.shared.trackCustomEvent(eventName: "message_send_failure", parameters: [
+                        "community_id": community.id ?? "",
+                        "community_name": community.name,
+                        "message_length": trimmedMessage.count,
+                        "error": error,
+                        "user_communities_count": firestoreService.userCommunities.count
+                    ])
                     // Optionally show an error message to user
                 }
             }
@@ -4672,10 +4670,33 @@ struct MessagesView: View {
               let lastMessage = firestoreService.communityLastMessages[communityId] else {
             // Check if there are messages in the community's chat_history as a fallback
             if let chatHistory = community.chat_history, !chatHistory.isEmpty {
-                // Find the most recent message from chat_history
-                let mostRecentMessage = chatHistory.values.max { $0.time_stamp < $1.time_stamp }
-                if let message = mostRecentMessage {
-                    let formattedMessage = formatMessagePreview(message)
+                // Find the most recent message from chat_history that should be shown
+                let filteredMessages = chatHistory.values.filter { messageData in
+                    shouldShowMessageInPreview(messageData)
+                }
+                
+                if let mostRecentMessage = filteredMessages.max(by: { $0.time_stamp < $1.time_stamp }) {
+                    let formattedMessage = formatMessagePreview(mostRecentMessage)
+                    let maxLength = 50
+                    if formattedMessage.count > maxLength {
+                        return String(formattedMessage.prefix(maxLength)) + "..."
+                    }
+                    return formattedMessage
+                }
+            }
+            return "No messages yet"
+        }
+        
+        // Check if the last message should be shown
+        if !shouldShowMessage(lastMessage) {
+            // If the last message should be hidden, try to find the most recent visible message
+            if let chatHistory = community.chat_history, !chatHistory.isEmpty {
+                let filteredMessages = chatHistory.values.filter { messageData in
+                    shouldShowMessageInPreview(messageData)
+                }
+                
+                if let mostRecentMessage = filteredMessages.max(by: { $0.time_stamp < $1.time_stamp }) {
+                    let formattedMessage = formatMessagePreview(mostRecentMessage)
                     let maxLength = 50
                     if formattedMessage.count > maxLength {
                         return String(formattedMessage.prefix(maxLength)) + "..."
@@ -4693,6 +4714,26 @@ struct MessagesView: View {
             return String(formattedMessage.prefix(maxLength)) + "..."
         }
         return formattedMessage
+    }
+    
+    // Function to determine if a message should be shown in preview (similar to shouldShowMessage but for FirestoreCommunityMessage)
+    private func shouldShowMessageInPreview(_ message: FirestoreCommunityMessage) -> Bool {
+        guard let currentUserEmail = firestoreService.currentUser?.email else {
+            return true // Show all messages if no current user
+        }
+        
+        // For bet announcements: only hide if the current user is mentioned
+        if message.type == "betAnnouncement" || message.type == "announcement" {
+            // Show bet announcements to everyone EXCEPT if the current user is mentioned
+            return !isUserMentionedInMessage(message.message, userEmail: currentUserEmail)
+        }
+        
+        // For regular messages: hide if the current user is mentioned
+        if isUserMentionedInMessage(message.message, userEmail: currentUserEmail) {
+            return false
+        }
+        
+        return true
     }
     
     private func formatMessagePreview(_ message: CommunityMessage) -> String {
@@ -5004,6 +5045,7 @@ struct MessagesView: View {
             if let community = firestoreService.userCommunities.first(where: { $0.id == chatItem.communityId }) {
                 selectedCommunity = community
                 hasPerformedInitialScroll = false // Reset scroll flag for new community
+                shouldScrollToBottom = false // Reset scroll to bottom flag
                 loadMessages(for: community)
                 
                 // Clear unread count for this community when selected
@@ -5136,6 +5178,16 @@ struct MessagesView: View {
                                 unreadCount: unreadCounts[community.id ?? ""] ?? 0
                             )
                             
+                            // Enhanced analytics for community selection
+                            AnalyticsService.shared.trackCustomEvent(eventName: "chat_community_selected", parameters: [
+                                "community_id": community.id ?? "",
+                                "community_name": community.name,
+                                "unread_count": unreadCounts[community.id ?? ""] ?? 0,
+                                "total_unread_messages": firestoreService.totalUnreadCount,
+                                "user_communities_count": firestoreService.userCommunities.count,
+                                "is_muted": firestoreService.mutedCommunities.contains(community.id ?? "")
+                            ])
+                            
                             loadMessages(for: community)
                             // Mark all messages as read when entering chat
                             if let communityId = community.id {
@@ -5158,6 +5210,16 @@ struct MessagesView: View {
             // Track chat page view
             AnalyticsService.shared.trackUserFlowStep(step: .chatTab)
             AnalyticsService.shared.trackFeatureUsage(feature: "chat_page", context: "main_app")
+            
+            // Enhanced analytics for chat page view
+            AnalyticsService.shared.trackCustomEvent(eventName: "chat_page_view", parameters: [
+                "user_communities_count": firestoreService.userCommunities.count,
+                "total_unread_messages": firestoreService.totalUnreadCount,
+                "muted_communities_count": firestoreService.mutedCommunities.count,
+                "selected_community": selectedCommunity?.name ?? "none",
+                "has_active_community": selectedCommunity != nil
+            ])
+            
             timeTracker.startTracking(for: "chat_page")
             
             // Refresh communities when view appears
@@ -5250,8 +5312,24 @@ struct MessagesView: View {
         .gesture(
             DragGesture()
                 .onChanged { value in
-                    let translation = value.translation.width
-                    if translation < 0 { // Left swipe - show timestamps
+                    let translation = value.translation
+                    let horizontalTranslation = translation.width
+                    let verticalTranslation = translation.height
+                    
+                    // Handle vertical scrolling to hide keyboard and navigation bar
+                    if abs(verticalTranslation) > abs(horizontalTranslation) && abs(verticalTranslation) > 10 {
+                        // User is scrolling vertically - hide keyboard and show navigation bar
+                        if isKeyboardActive {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isKeyboardActive = false
+                            }
+                            // Dismiss keyboard
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        }
+                    }
+                    
+                    // Handle horizontal swipe for timestamps
+                    if horizontalTranslation < 0 { // Left swipe - show timestamps
                         // Activate timestamps when swiping left anywhere on the page
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             isShowingTimestamps = true
@@ -5274,6 +5352,7 @@ struct MessagesView: View {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             selectedCommunity = nil
                             hasPerformedInitialScroll = false // Reset scroll flag when going back
+                            shouldScrollToBottom = false // Reset scroll to bottom flag
                             firestoreService.stopListeningToMessages()
                         }
                     }
@@ -5288,6 +5367,7 @@ struct MessagesView: View {
             Button(action: {
                 selectedCommunity = nil
                 hasPerformedInitialScroll = false // Reset scroll flag when going back
+                shouldScrollToBottom = false // Reset scroll to bottom flag
                 firestoreService.stopListeningToMessages()
             }) {
                 Image(systemName: "arrow.left")
@@ -5430,7 +5510,15 @@ struct MessagesView: View {
                 .onChange(of: firestoreService.messages) { _ in
                     // When messages update, scroll to appropriate position
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        if shouldScrollToBottom {
+                            // Scroll to bottom when user sent a message
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo("bottom", anchor: .bottom)
+                            }
+                            shouldScrollToBottom = false
+                        } else {
                         scrollToAppropriatePosition(proxy: proxy)
+                        }
                     }
                 }
             }
@@ -5470,7 +5558,12 @@ struct MessagesView: View {
     private var groupedMessages: [MessageGroup] {
         let calendar = Calendar.current
         
-        let grouped = Dictionary(grouping: firestoreService.messages) { message in
+        // Filter messages that should be hidden from current user
+        let filteredMessages = firestoreService.messages.filter { message in
+            shouldShowMessage(message)
+        }
+        
+        let grouped = Dictionary(grouping: filteredMessages) { message in
             calendar.startOfDay(for: message.timestamp)
         }
         
@@ -5489,6 +5582,71 @@ struct MessagesView: View {
             return MessageGroup(date: date, dateHeader: dateHeader, messages: messages.sorted { $0.timestamp < $1.timestamp })
         }
         .sorted { $0.date < $1.date }
+    }
+    
+    // Function to determine if a message should be shown to the current user
+    private func shouldShowMessage(_ message: CommunityMessage) -> Bool {
+        guard let currentUserEmail = firestoreService.currentUser?.email else {
+            return true // Show all messages if no current user
+        }
+        
+        // For bet announcements: only hide if the current user is mentioned
+        if message.messageType == .betAnnouncement {
+            // Show bet announcements to everyone EXCEPT if the current user is mentioned
+            return !isUserMentionedInMessage(message.text, userEmail: currentUserEmail)
+        }
+        
+        // For regular messages: hide if the current user is mentioned
+        if isUserMentionedInMessage(message.text, userEmail: currentUserEmail) {
+            return false
+        }
+        
+        return true
+    }
+    
+    // Function to check if a user is mentioned in a message
+    private func isUserMentionedInMessage(_ messageText: String, userEmail: String) -> Bool {
+        // Get the user's full name for mention matching
+        guard let user = firestoreService.currentUser else { return false }
+        
+        let userFullName = "\(user.first_name ?? "") \(user.last_name ?? "")".trimmingCharacters(in: .whitespaces)
+        
+        print("🔍 MENTION CHECK DEBUG:")
+        print("  - Message text: '\(messageText)'")
+        print("  - User full name: '\(userFullName)'")
+        print("  - User email: '\(userEmail)'")
+        
+        // Check for @ mentions in the message text
+        // Look for patterns like @FirstName LastName (case insensitive)
+        let mentionPattern = "@[A-Za-z]+(?:\\s+[A-Za-z]+)+"
+        let regex = try? NSRegularExpression(pattern: mentionPattern, options: .caseInsensitive)
+        let range = NSRange(location: 0, length: messageText.utf16.count)
+        
+        guard let regex = regex else { 
+            print("  - Regex creation failed")
+            return false 
+        }
+        
+        let matches = regex.matches(in: messageText, range: range)
+        print("  - Found \(matches.count) potential mentions")
+        
+        for match in matches {
+            if let matchRange = Range(match.range, in: messageText) {
+                let mentionText = String(messageText[matchRange])
+                // Remove the @ symbol and compare with user's full name
+                let mentionedName = String(mentionText.dropFirst())
+                
+                print("  - Checking mention: '\(mentionedName)' vs '\(userFullName)'")
+                
+                if mentionedName.lowercased() == userFullName.lowercased() {
+                    print("  - ✅ MATCH FOUND! User is mentioned")
+                    return true
+                }
+            }
+        }
+        
+        print("  - ❌ No mention match found")
+        return false
     }
     
     private var emptyMessagesView: some View {
@@ -6010,6 +6168,7 @@ struct BetAnnouncementCard: View {
     @State private var communityName: String = ""
     @State private var creatorDisplayName: String = ""
     @State private var userFullNames: [String: String] = [:]
+    @State private var showingBetDetail = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -6048,7 +6207,25 @@ struct BetAnnouncementCard: View {
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
         .onTapGesture {
-            onBetTap()
+            if let bet = bet {
+                // Bet is already loaded, show sheet immediately
+                showingBetDetail = true
+            } else if !isLoading {
+                // Bet is not loaded and not currently loading, trigger loading and then show sheet
+                loadBetDetailsAndShow()
+            }
+            // If isLoading is true, do nothing (user tapped while loading)
+        }
+        .sheet(isPresented: $showingBetDetail) {
+            if let bet = bet {
+                JoinBetView(
+                    bet: bet,
+                    firestoreService: firestoreService,
+                    onCommunityTap: {
+                        // Handle community tap if needed
+                    }
+                )
+            }
         }
         .onAppear {
             print("🔍 BetAnnouncementCard onAppear:")
@@ -6082,6 +6259,37 @@ struct BetAnnouncementCard: View {
                     
                     // Get creator's display name with proper formatting
                     self.creatorDisplayName = self.formatCreatorName(from: fetchedBet.creator_email)
+                }
+            }
+        }
+    }
+    
+    private func loadBetDetailsAndShow() {
+        guard let betId = message.betId else {
+            return
+        }
+        
+        isLoading = true
+        
+        firestoreService.fetchBet(by: betId) { fetchedBet in
+            DispatchQueue.main.async {
+                self.bet = fetchedBet
+                self.isLoading = false
+                
+                if let fetchedBet = fetchedBet {
+                    // Get community name - first try userCommunities, then fetch from Firestore if needed
+                    if let community = firestoreService.userCommunities.first(where: { $0.id == fetchedBet.community_id }) {
+                        self.communityName = community.name
+                    } else {
+                        // If not in userCommunities, fetch the community directly
+                        self.fetchCommunityName(communityId: fetchedBet.community_id)
+                    }
+                    
+                    // Get creator's display name with proper formatting
+                    self.creatorDisplayName = self.formatCreatorName(from: fetchedBet.creator_email)
+                    
+                    // Show the bet detail sheet after loading is complete
+                    self.showingBetDetail = true
                 }
             }
         }
@@ -6230,18 +6438,13 @@ struct BetAnnouncementCard: View {
     }
     
     private func betCardView(bet: FirestoreBet) -> some View {
-        Button(action: {
-            onBetTap()
-        }) {
-            VStack(alignment: .leading, spacing: 6) {
-                betHeaderView(bet: bet)
-                bettingOptionsView(bet: bet)
-                deadlineView(bet: bet)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+        VStack(alignment: .leading, spacing: 6) {
+            betHeaderView(bet: bet)
+            bettingOptionsView(bet: bet)
+            deadlineView(bet: bet)
         }
-        .buttonStyle(PlainButtonStyle())
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: 300, alignment: .leading)
     }
     
@@ -6846,6 +7049,11 @@ struct CommunitiesView: View {
                             Menu {
                                 Button(action: { 
                                     AnalyticsService.shared.trackCommunitiesInteraction(action: .create)
+                                    AnalyticsService.shared.trackCustomEvent(eventName: "create_community_button_tap", parameters: [
+                                        "source": "communities_page_menu",
+                                        "user_communities_count": firestoreService.userCommunities.count,
+                                        "user_points": firestoreService.currentUser?.blitz_points ?? 0
+                                    ])
                                     showingCreateCommunityModal = true 
                                 }) {
                                     Label("Create Community", systemImage: "plus.circle")
@@ -6853,6 +7061,11 @@ struct CommunitiesView: View {
                                 
                                 Button(action: { 
                                     AnalyticsService.shared.trackCommunitiesInteraction(action: .join)
+                                    AnalyticsService.shared.trackCustomEvent(eventName: "join_community_button_tap", parameters: [
+                                        "source": "communities_page_menu",
+                                        "user_communities_count": firestoreService.userCommunities.count,
+                                        "total_communities_available": firestoreService.communities.count
+                                    ])
                                     showingJoinCommunityModal = true 
                                 }) {
                                     Label("Join Community", systemImage: "person.badge.plus")
@@ -6906,6 +7119,16 @@ struct CommunitiesView: View {
             AnalyticsService.shared.trackUserFlowStep(step: .communitiesTab)
             AnalyticsService.shared.trackFeatureUsage(feature: "communities_page", context: "main_app")
             AnalyticsService.shared.trackCommunitiesInteraction(action: .view)
+            
+            // Enhanced analytics for communities page view
+            AnalyticsService.shared.trackCustomEvent(eventName: "communities_page_view", parameters: [
+                "user_communities_count": firestoreService.userCommunities.count,
+                "total_communities_available": firestoreService.communities.count,
+                "user_points": firestoreService.currentUser?.blitz_points ?? 0,
+                "outstanding_balances_count": outstandingBalances.count,
+                "resolved_balances_count": resolvedBalances.count
+            ])
+            
             timeTracker.startTracking(for: "communities_page")
             
             loadOutstandingBalances()
@@ -8570,6 +8793,13 @@ struct CommunityCard: View {
     
     var body: some View {
         Button(action: {
+            // Track community detail view attempt
+            AnalyticsService.shared.trackCommunityDetailInteraction(action: .view, communityId: community.id ?? "", communityName: community.name, details: [
+                "member_count": actualMemberCount,
+                "bet_count": actualBetCount,
+                "is_admin": isAdmin,
+                "source": "community_card"
+            ])
             showingCommunityDetail = true
         }) {
         VStack(alignment: .leading, spacing: 12) {
@@ -8605,6 +8835,12 @@ struct CommunityCard: View {
                 // Three Dots Menu
                 Menu {
                     Button(action: {
+                        // Track invite code copy
+                        AnalyticsService.shared.trackCustomEvent(eventName: "community_invite_code_copied", parameters: [
+                            "community_id": community.id ?? "",
+                            "community_name": community.name,
+                            "invite_code": community.invite_code
+                        ])
                         UIPasteboard.general.string = community.invite_code
                         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                         impactFeedback.impactOccurred()
@@ -8613,6 +8849,15 @@ struct CommunityCard: View {
                     }
                     
                     Button(action: {
+                        // Track community share attempt
+                        AnalyticsService.shared.trackShareAction(contentType: "community", contentId: community.id ?? "", method: "native_share_sheet")
+                        AnalyticsService.shared.trackCustomEvent(eventName: "community_share_attempt", parameters: [
+                            "community_id": community.id ?? "",
+                            "community_name": community.name,
+                            "member_count": actualMemberCount,
+                            "bet_count": actualBetCount,
+                            "is_admin": isAdmin
+                        ])
                         showingShareSheet = true
                     }) {
                         Label("Share Community", systemImage: "square.and.arrow.up")
@@ -8620,6 +8865,13 @@ struct CommunityCard: View {
                     
                     if isAdmin {
                     Button(action: {
+                        // Track community settings access
+                        AnalyticsService.shared.trackCustomEvent(eventName: "community_settings_access", parameters: [
+                            "community_id": community.id ?? "",
+                            "community_name": community.name,
+                            "member_count": actualMemberCount,
+                            "bet_count": actualBetCount
+                        ])
                         showingSettingsModal = true
                     }) {
                             Label("Settings", systemImage: "gearshape")
@@ -8696,6 +8948,25 @@ struct CommunityCard: View {
         }
         .onAppear {
             loadCommunityMetrics()
+            
+            // Track community card view
+            AnalyticsService.shared.trackCustomEvent(eventName: "community_card_view", parameters: [
+                "community_id": community.id ?? "",
+                "community_name": community.name,
+                "is_admin": isAdmin,
+                "member_count": actualMemberCount,
+                "bet_count": actualBetCount,
+                "created_date": community.created_date.timeIntervalSince1970,
+                "invite_code": community.invite_code
+            ])
+            
+            // Track content engagement
+            AnalyticsService.shared.trackContentEngagement(
+                contentType: "community_card",
+                contentId: community.id ?? "",
+                action: "view",
+                duration: nil
+            )
         }
     }
     
@@ -11536,6 +11807,19 @@ struct EditProfileView: View {
                 // Track profile edit page view
                 AnalyticsService.shared.trackProfileEditAction(action: .open)
                 AnalyticsService.shared.trackUserFlowStep(step: .profileEdit)
+                
+                // Enhanced analytics for profile edit view
+                AnalyticsService.shared.trackCustomEvent(eventName: "profile_edit_view", parameters: [
+                    "user_id": firestoreService.currentUser?.id ?? "unknown",
+                    "user_email": firestoreService.currentUser?.email ?? "unknown",
+                    "has_profile_image": firestoreService.currentUser?.profile_picture_url != nil,
+                    "display_name": firestoreService.currentUser?.display_name ?? "",
+                    "first_name": firestoreService.currentUser?.first_name ?? "",
+                    "last_name": firestoreService.currentUser?.last_name ?? "",
+                    "user_points": firestoreService.currentUser?.blitz_points ?? 0,
+                    "total_bets": firestoreService.currentUser?.total_bets ?? 0
+                ])
+                
                 timeTracker.startTracking(for: "profile_edit")
             }
             .onDisappear {
@@ -11678,10 +11962,32 @@ struct EditProfileView: View {
                 if success {
                     print("✅ Profile updated successfully")
                     AnalyticsService.shared.trackProfileSave(success: true, fieldsChanged: fieldsChanged)
+                    
+                    // Enhanced analytics for successful profile save
+                    AnalyticsService.shared.trackCustomEvent(eventName: "profile_save_success", parameters: [
+                        "user_id": firestoreService.currentUser?.id ?? "unknown",
+                        "fields_changed": fieldsChanged.joined(separator: ","),
+                        "fields_count": fieldsChanged.count,
+                        "new_display_name": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+                        "new_first_name": firstName.trimmingCharacters(in: .whitespacesAndNewlines),
+                        "new_last_name": lastName.trimmingCharacters(in: .whitespacesAndNewlines),
+                        "has_profile_image_upload": fieldsChanged.contains("profile_image")
+                    ])
                     self.showingSaveSuccess = true
                 } else {
                     print("❌ Failed to update profile")
                     AnalyticsService.shared.trackProfileSave(success: false, fieldsChanged: fieldsChanged, error: "Update failed")
+                    
+                    // Enhanced analytics for failed profile save
+                    AnalyticsService.shared.trackCustomEvent(eventName: "profile_save_failure", parameters: [
+                        "user_id": firestoreService.currentUser?.id ?? "unknown",
+                        "fields_changed": fieldsChanged.joined(separator: ","),
+                        "fields_count": fieldsChanged.count,
+                        "error": "Update failed",
+                        "new_display_name": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+                        "new_first_name": firstName.trimmingCharacters(in: .whitespacesAndNewlines),
+                        "new_last_name": lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    ])
                     // You could show an error alert here
                 }
             }
@@ -11738,8 +12044,24 @@ struct CreateBetView: View {
                     HStack {
                         Button(action: {
                             if currentStep > 1 {
+                                // Track step back navigation
+                                AnalyticsService.shared.trackCustomEvent(eventName: "create_bet_step_back", parameters: [
+                                    "from_step": currentStep,
+                                    "to_step": currentStep - 1,
+                                    "market_type": selectedMarketType,
+                                    "has_question": !marketQuestion.isEmpty,
+                                    "selected_community": selectedCommunity
+                                ])
                                 currentStep -= 1
                             } else {
+                                // Track create bet cancellation
+                                AnalyticsService.shared.trackCustomEvent(eventName: "create_bet_cancelled", parameters: [
+                                    "current_step": currentStep,
+                                    "market_type": selectedMarketType,
+                                    "has_question": !marketQuestion.isEmpty,
+                                    "selected_community": selectedCommunity,
+                                    "outcomes_count": outcomes.count
+                                ])
                                 dismiss()
                             }
                         }) {
@@ -11810,8 +12132,28 @@ struct CreateBetView: View {
                 VStack(spacing: 0) {
                     Button(action: {
                         if currentStep < 4 {
+                            // Track step forward navigation
+                            AnalyticsService.shared.trackCustomEvent(eventName: "create_bet_step_forward", parameters: [
+                                "from_step": currentStep,
+                                "to_step": currentStep + 1,
+                                "market_type": selectedMarketType,
+                                "has_question": !marketQuestion.isEmpty,
+                                "selected_community": selectedCommunity,
+                                "outcomes_count": outcomes.count
+                            ])
                             currentStep += 1
                         } else {
+                            // Track bet creation attempt
+                            AnalyticsService.shared.trackCustomEvent(eventName: "create_bet_attempt", parameters: [
+                                "market_type": selectedMarketType,
+                                "question": marketQuestion,
+                                "selected_community": selectedCommunity,
+                                "outcomes": outcomes.joined(separator: ","),
+                                "outcomes_count": outcomes.count,
+                                "deadline": bettingCloseDate.timeIntervalSince1970,
+                                "has_mentions": !mentionedUsers.isEmpty,
+                                "mentioned_users_count": mentionedUsers.count
+                            ])
                             createBet()
                         }
                     }) {
@@ -11857,9 +12199,20 @@ struct CreateBetView: View {
             .onAppear {
                 firestoreService.fetchCommunities()
                 
+                // Track create bet view appearance
+                AnalyticsService.shared.trackCustomEvent(eventName: "create_bet_view", parameters: [
+                    "pre_selected_community": preSelectedCommunity ?? "none",
+                    "user_communities_count": firestoreService.userCommunities.count,
+                    "user_points": firestoreService.currentUser?.blitz_points ?? 0,
+                    "total_bets_created": firestoreService.currentUser?.total_bets ?? 0
+                ])
+                
                 // Set pre-selected community if provided
                 if let preSelectedCommunity = preSelectedCommunity {
                     selectedCommunity = preSelectedCommunity
+                    AnalyticsService.shared.trackCustomEvent(eventName: "create_bet_pre_selected_community", parameters: [
+                        "community_name": preSelectedCommunity
+                    ])
                 }
                 
                 // Load community members for mention system
@@ -11890,6 +12243,12 @@ struct CreateBetView: View {
             ], spacing: 16) {
                 ForEach(marketTypes, id: \.0) { type, icon, subtitle, description in
                     Button(action: {
+                        // Track market type selection
+                        AnalyticsService.shared.trackCustomEvent(eventName: "create_bet_market_type_selected", parameters: [
+                            "selected_type": type,
+                            "previous_type": selectedMarketType,
+                            "step": currentStep
+                        ])
                         selectedMarketType = type
                         updateOutcomesForMarketType()
                     }) {
@@ -11977,7 +12336,7 @@ struct CreateBetView: View {
                 VStack(spacing: 0) {
                     ColoredTextView(
                         text: $marketQuestion,
-                        placeholder: "e.g., Who will win the championship?",
+                        placeholder: "Will the pizza arrive in under 30 minutes?",
                         onTextChange: { oldValue, newValue in
                             handleMentionInput(oldValue: oldValue, newValue: newValue)
                         }
@@ -12763,10 +13122,37 @@ struct CreateBetView: View {
         firestoreService.createBet(betData: betData) { success, betId in
             DispatchQueue.main.async {
                 if success, let betId = betId {
+                    // Track successful bet creation
+                    AnalyticsService.shared.trackBetInteraction(action: .create, betId: betId, betTitle: marketQuestion, communityName: selectedCommunity)
+                    AnalyticsService.shared.trackCustomEvent(eventName: "bet_created_success", parameters: [
+                        "bet_id": betId,
+                        "bet_title": marketQuestion,
+                        "market_type": selectedMarketType,
+                        "bet_type": betType,
+                        "community_name": selectedCommunity,
+                        "community_id": communityId,
+                        "outcomes_count": outcomes.count,
+                        "outcomes": outcomes.joined(separator: ","),
+                        "deadline": finalDeadline.timeIntervalSince1970,
+                        "has_mentions": !mentionedUsers.isEmpty,
+                        "mentioned_users_count": mentionedUsers.count,
+                        "creator_email": firestoreService.currentUser?.email ?? "unknown"
+                    ])
+                    
                     // After successful bet creation, fetch and update the image
                     self.fetchAndUpdateBetImage(betId: betId, betTitle: marketQuestion)
                     dismiss()
                 } else {
+                    // Track bet creation failure
+                    AnalyticsService.shared.trackCustomEvent(eventName: "bet_created_failure", parameters: [
+                        "bet_title": marketQuestion,
+                        "market_type": selectedMarketType,
+                        "bet_type": betType,
+                        "community_name": selectedCommunity,
+                        "community_id": communityId,
+                        "outcomes_count": outcomes.count,
+                        "error": "unknown_error"
+                    ])
                     print("Error creating bet: Unknown error")
                 }
             }
@@ -13195,19 +13581,21 @@ struct ColoredTextView: UIViewRepresentable {
         textView.textContainer.lineFragmentPadding = 0
         textView.isScrollEnabled = true
         textView.showsVerticalScrollIndicator = false
+        
+        // Set initial placeholder
+        if text.isEmpty {
+            textView.text = placeholder
+            textView.textColor = UIColor.placeholderText
+        }
+        
         return textView
     }
     
     func updateUIView(_ uiView: UITextView, context: Context) {
-        // Handle placeholder
-        if text.isEmpty {
-            uiView.text = placeholder
-            uiView.textColor = UIColor.placeholderText
-        } else {
-            if uiView.text != text {
+        // Only update the text if it's not the placeholder
+        if !text.isEmpty && uiView.text != text {
                 uiView.text = text
                 updateTextColor(uiView)
-            }
         }
     }
     
@@ -13275,6 +13663,7 @@ struct ColoredTextView: UIViewRepresentable {
             if textView.text.isEmpty {
                 textView.text = parent.placeholder
                 textView.textColor = UIColor.placeholderText
+                parent.text = ""
             }
         }
         
@@ -15516,8 +15905,17 @@ struct AdjustOddsView: View {
                 // In odds mode, currentInput is the odds value
                 // Only update if we have a valid odds value
                 if let oddsValue = Int(currentInput.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "-", with: "")), oddsValue > 0 {
+                    // Apply +/- 10,000 cap to odds
+                    let cappedOddsValue = max(100, min(10000, oddsValue))
+                    
+                    // If the value was capped, update the currentInput to reflect the cap
+                    if cappedOddsValue != oddsValue {
+                        let sign = currentInput.hasPrefix("-") ? "-" : "+"
+                        currentInput = sign + String(cappedOddsValue)
+                    }
+                    
                     odds[selectedOutcomeIndex] = currentInput
-                    let percentageValue = calculatePercentage(from: Double(oddsValue))
+                    let percentageValue = calculatePercentage(from: Double(cappedOddsValue))
                     percentages[selectedOutcomeIndex] = String(format: "%.0f%%", percentageValue)
                 }
             }
@@ -15548,19 +15946,19 @@ struct AdjustOddsView: View {
     }
     
     private func getOddsForAngle(_ angle: Double) -> String {
-        // Map angle to odds with 25-increment steps: +100, +125, +150, +175, +200, ..., +800, -800, -775, ..., -100
+        // Map angle to odds with 100-increment steps: +100, +200, +300, ..., +10000, -10000, -9900, ..., -100
         let normalizedAngle = (angle + 360).truncatingRemainder(dividingBy: 360)
         
-        // Create full odds range with 25-increment steps
+        // Create full odds range with 100-increment steps (capped at +/- 10,000)
         var oddsRange: [Int] = []
         
-        // Positive odds: +100 to +800 in increments of 25
-        for i in stride(from: 100, through: 800, by: 25) {
+        // Positive odds: +100 to +10000 in increments of 100
+        for i in stride(from: 100, through: 10000, by: 100) {
             oddsRange.append(i)
         }
         
-        // Negative odds: -800 to -100 in increments of 25
-        for i in stride(from: -800, through: -100, by: 25) {
+        // Negative odds: -10000 to -100 in increments of 100
+        for i in stride(from: -10000, through: -100, by: 100) {
             oddsRange.append(i)
         }
         
@@ -15590,13 +15988,13 @@ struct AdjustOddsView: View {
         // Create the same odds range as in getOddsForAngle
         var oddsRange: [Int] = []
         
-        // Positive odds: +100 to +800 in increments of 25
-        for i in stride(from: 100, through: 800, by: 25) {
+        // Positive odds: +100 to +10000 in increments of 100
+        for i in stride(from: 100, through: 10000, by: 100) {
             oddsRange.append(i)
         }
         
-        // Negative odds: -800 to -100 in increments of 25
-        for i in stride(from: -800, through: -100, by: 25) {
+        // Negative odds: -10000 to -100 in increments of 100
+        for i in stride(from: -10000, through: -100, by: 100) {
             oddsRange.append(i)
         }
         
@@ -15622,11 +16020,13 @@ struct AdjustOddsView: View {
         if percentage > 50 {
             // For percentages > 50%, calculate negative odds
             let odds = (percentage / (100 - percentage)) * 100
-            return "-\(Int(odds))"
+            let cappedOdds = max(100, min(10000, Int(odds)))
+            return "-\(cappedOdds)"
         } else {
             // For percentages <= 50%, calculate positive odds
             let odds = ((100 - percentage) / percentage) * 100
-            return "+\(Int(odds))"
+            let cappedOdds = max(100, min(10000, Int(odds)))
+            return "+\(cappedOdds)"
         }
     }
     
@@ -15634,6 +16034,85 @@ struct AdjustOddsView: View {
         let oddsValue = Double(oddsString.replacingOccurrences(of: "+", with: "")) ?? 0
         let percentage = calculatePercentage(from: oddsValue)
         return String(format: "%.0f%%", percentage)
+    }
+}
+
+// MARK: - Profile Picture View
+struct ProfilePictureView: View {
+    let imageURL: String?
+    let initials: String
+    let size: CGFloat
+    let isCurrentUser: Bool
+    @State private var showImageFullscreen = false
+    
+    var body: some View {
+        ZStack {
+            if let profilePictureUrl = imageURL, !profilePictureUrl.isEmpty {
+                AsyncImage(url: URL(string: profilePictureUrl)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: size, height: size)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 3)
+                            )
+                            .onTapGesture {
+                                showImageFullscreen = true
+                            }
+                    case .failure(_), .empty:
+                        // Fallback to initials
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: size, height: size)
+                            .overlay(
+                                Text(initials)
+                                    .font(.system(size: size * 0.3, weight: .semibold))
+                                    .foregroundColor(.slingBlue)
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 3)
+                            )
+                    @unknown default:
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: size, height: size)
+                            .overlay(
+                                Text(initials)
+                                    .font(.system(size: size * 0.3, weight: .semibold))
+                                    .foregroundColor(.slingBlue)
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 3)
+                            )
+                    }
+                }
+            } else {
+                // Fallback to initials
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: size, height: size)
+                    .overlay(
+                        Text(initials)
+                            .font(.system(size: size * 0.3, weight: .semibold))
+                            .foregroundColor(.slingBlue)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white, lineWidth: 3)
+                    )
+            }
+        }
+        .fullScreenCover(isPresented: $showImageFullscreen) {
+            if let imageUrl = imageURL {
+                FullscreenImageView(imageUrl: imageUrl, isPresented: $showImageFullscreen)
+            }
+        }
     }
 }
 
@@ -16266,10 +16745,9 @@ struct ShareCommunityModal: View {
     }
     
     private func shareCommunityLink() {
-        let communityLink = "sling://community/\(communityId)"
         let activityVC = UIActivityViewController(
             activityItems: [
-                "Join my community \"\(communityName)\" on Sling! \(communityLink)"
+                "We're betting on stuff in \"\(communityName)\"! Download the Sling App on the App Store to join the action!"
             ],
             applicationActivities: nil
         )
@@ -16591,20 +17069,18 @@ struct JoinBetView: View {
                                         .font(.caption)
                                         .foregroundColor(.slingBlue)
                                     
-                                    // Clickable community name
+                                    // Clickable community name and creator on one line
                                     Button(action: {
                                         onCommunityTap?() // Call the callback for community navigation
                                     }) {
-                                        Text(communityName)
+                                        Text("\(communityName) • by \(creatorName)")
                                             .font(.subheadline)
                                             .fontWeight(.medium)
                                             .foregroundColor(.slingBlue)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
                                     }
                                     .buttonStyle(.plain)
-                                    
-                                    Text("• by \(creatorName)")
-                                        .font(.subheadline)
-                                        .foregroundColor(.gray)
                                 }
                                 
                                 HStack(spacing: 4) {
@@ -16838,7 +17314,7 @@ struct JoinBetView: View {
                 if !selectedOption.isEmpty {
                     BettingInterfaceView(
                         bet: bet,
-                        selectedOption: selectedOption,
+                        selectedOption: .constant(selectedOption),
                         firestoreService: firestoreService,
                         onBetPlaced: nil
                     )
@@ -17263,7 +17739,7 @@ func convertToNotificationItem(_ firestoreNotification: FirestoreNotification) -
 struct BettingInterfaceView: View {
     @Environment(\.dismiss) private var dismiss
     let bet: FirestoreBet
-    @State private var selectedOption: String
+    @Binding var selectedOption: String
     @ObservedObject var firestoreService: FirestoreService
     let onBetPlaced: (() -> Void)? // Callback when bet is successfully placed
     @State private var betAmount = ""
@@ -17337,29 +17813,13 @@ struct BettingInterfaceView: View {
         return formatter
     }
     
-    // Initialize with selected option
-    init(bet: FirestoreBet, selectedOption: String, firestoreService: FirestoreService, onBetPlaced: (() -> Void)? = nil) {
+    // Initialize with binding
+    init(bet: FirestoreBet, selectedOption: Binding<String>, firestoreService: FirestoreService, onBetPlaced: (() -> Void)? = nil) {
         self.bet = bet
-        
-        // 🐛 DEBUG: BettingInterfaceView Initializer - COMPREHENSIVE
-        print("🎯 BETTING_INTERFACE_INIT: ===== INITIALIZER DEBUG START =====")
-        print("🎯 BETTING_INTERFACE_INIT: Received selectedOption: '\(selectedOption)'")
-        print("🎯 BETTING_INTERFACE_INIT: selectedOption.isEmpty: \(selectedOption.isEmpty)")
-        print("🎯 BETTING_INTERFACE_INIT: selectedOption.count: \(selectedOption.count)")
-        print("🎯 BETTING_INTERFACE_INIT: Bet ID: \(bet.id ?? "nil")")
-        print("🎯 BETTING_INTERFACE_INIT: Bet title: '\(bet.title)'")
-        print("🎯 BETTING_INTERFACE_INIT: Bet options: \(bet.options)")
-        print("🎯 BETTING_INTERFACE_INIT: bet.options.first: '\(bet.options.first ?? "nil")'")
-        
-        // Ensure we have a valid selectedOption, fallback to first option if empty
-        let validOption = selectedOption.isEmpty ? (bet.options.first ?? "Yes") : selectedOption
-        
-        print("🎯 BETTING_INTERFACE_INIT: validOption after fallback logic: '\(validOption)'")
-        print("🎯 BETTING_INTERFACE_INIT: ===== INITIALIZER DEBUG END =====")
-        
-        self._selectedOption = State(initialValue: validOption)
+        self._selectedOption = selectedOption
         self.firestoreService = firestoreService
         self.onBetPlaced = onBetPlaced
+        print("🎯 BETTING_INTERFACE_INIT: Bound selectedOption now = '\(selectedOption.wrappedValue)'")
     }
     
     var body: some View {
@@ -17496,17 +17956,7 @@ struct BettingInterfaceView: View {
             }
         }
         .onAppear {
-            // 🐛 DEBUG: BettingInterfaceView onAppear - COMPREHENSIVE
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: ===== ON_APPEAR DEBUG START =====")
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: BettingInterfaceView appeared")
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: Current selectedOption: '\(selectedOption)'")
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: selectedOption.isEmpty: \(selectedOption.isEmpty)")
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: selectedOption.count: \(selectedOption.count)")
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: Bet ID: \(bet.id ?? "nil")")
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: Bet title: '\(bet.title)'")
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: All bet options: \(bet.options)")
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: bet.options.first: '\(bet.options.first ?? "nil")'")
-            print("🎯 BETTING_INTERFACE_ONAPPEAR: ===== ON_APPEAR DEBUG END =====")
+            print("🎯 BETTING_INTERFACE_ONAPPEAR: selectedOption='\(selectedOption)'")
         }
     }
     
@@ -17676,6 +18126,9 @@ struct BettingInterfaceView: View {
                         Text("\(selectedOption)")
                             .font(.subheadline)
                             .fontWeight(.medium)
+                            .onAppear {
+                                print("🎯 YOUR_CHOICE_DISPLAY: selectedOption='\(selectedOption)'")
+                            }
                             .foregroundColor(Color(uiColor: UIColor(red: 0x26/255, green: 0x63/255, blue: 0xEB/255, alpha: 1.0)))
                         
                         Text(firestoreService.formatImpliedOdds(firestoreService.calculateImpliedOdds(for: bet)[selectedOption] ?? 0.5))
@@ -18282,6 +18735,8 @@ struct SwipeableBetCard: View {
                                 Text("\(communityName) • by \(isCreator ? "You" : (creatorName.isEmpty ? getUserFullName(from: bet.creator_email) : creatorName))")
                                     .font(.subheadline)
                                     .foregroundColor(.gray)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
                                 
                                 Spacer()
                             }
@@ -18417,7 +18872,7 @@ struct SwipeableBetCard: View {
             if !selectedBettingOption.isEmpty {
                 BettingInterfaceView(
                     bet: bet,
-                    selectedOption: selectedBettingOption,
+                    selectedOption: .constant(selectedBettingOption),
                     firestoreService: firestoreService,
                     onBetPlaced: nil
                 )
@@ -18808,6 +19263,8 @@ struct EnhancedBetCard: View {
                             Text("\(communityName) • by \(isCreator ? "You" : getUserFullName(from: bet.creator_email))")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
             }
             
@@ -20762,22 +21219,32 @@ struct TradingProfileView: View {
     @StateObject private var timeTracker = TimeTracker()
     @State private var previousTab = 0
     
-    // Fullscreen image state
-    @State private var showImageFullscreen = false
-    @State private var selectedImageUrl: String?
-    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                headerSection
-                quickStatsSection
-                tabSelectorSection
-                tabContentSection
+                if isLoadingUserData {
+                    // Show loading state instead of white screen
+                    VStack(spacing: 20) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                        Text("Loading profile...")
+                            .font(.headline)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.white)
+                } else {
+                    headerSection
+                    quickStatsSection
+                    tabSelectorSection
+                    tabContentSection
+                }
             }
         .background(Color.white)
             .navigationBarHidden(true)
             .animation(.easeInOut(duration: 0.3), value: selectedTab)
             .onAppear {
+                print("🔍 TradingProfileView: onAppear called for userId: \(userId)")
                 // Track profile view
                 AnalyticsService.shared.trackProfileInteraction(action: .view, profileId: userId, profileType: isCurrentUser ? "current_user" : "member_profile")
                 AnalyticsService.shared.trackUserFlowStep(step: .profile)
@@ -20803,11 +21270,6 @@ struct TradingProfileView: View {
                     userData: userData,
                     firestoreService: firestoreService
                 )
-            }
-            .fullScreenCover(isPresented: $showImageFullscreen) {
-                if let imageUrl = selectedImageUrl {
-                    FullscreenImageView(imageUrl: imageUrl, isPresented: $showImageFullscreen)
-                }
             }
         }
     }
@@ -20868,103 +21330,12 @@ struct TradingProfileView: View {
                 HStack(spacing: 16) {
                     // Avatar - User Profile Picture or Initials - Enhanced with click handlers
                     ZStack {
-                        if let profilePictureUrl = userData?.profile_picture_url {
-                            // Show user's profile picture
-                            AsyncImage(url: URL(string: profilePictureUrl)) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 80, height: 80)
-                                        .clipShape(Circle())
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 3)
-                                        )
-                                        .onTapGesture {
-                                            // Show fullscreen image
-                                            selectedImageUrl = profilePictureUrl
-                                            showImageFullscreen = true
-                                        }
-                                case .failure(_):
-                                    // Fallback to initials on error
-                                    Circle()
-                                        .fill(Color.white)
-                                        .frame(width: 80, height: 80)
-                                        .overlay(
-                                            Text(getUserInitialsFromName())
-                                                .font(.largeTitle)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.slingBlue)
-                                        )
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 3)
-                                        )
-                                        .onTapGesture {
-                                            // For member profiles, we can't change the picture
-                                            // Just show fullscreen if there's an image
-                                        }
-                                case .empty:
-                                    // Show initials while loading
-                                    Circle()
-                                        .fill(Color.white)
-                                        .frame(width: 80, height: 80)
-                                        .overlay(
-                                            Text(getUserInitialsFromName())
-                                                .font(.largeTitle)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.slingBlue)
-                                        )
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 3)
-                                        )
-                                        .onTapGesture {
-                                            // For member profiles, we can't change the picture
-                                            // Just show fullscreen if there's an image
-                                        }
-                                @unknown default:
-                                    Circle()
-                                        .fill(Color.white)
-                                        .frame(width: 80, height: 80)
-                                        .overlay(
-                                            Text(getUserInitialsFromName())
-                                                .font(.largeTitle)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.slingBlue)
-                                        )
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 3)
-                                        )
-                                        .onTapGesture {
-                                            // For member profiles, we can't change the picture
-                                            // Just show fullscreen if there's an image
-                                        }
-                                }
-                            }
-                        } else {
-                            // Fallback to initials
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 80, height: 80)
-                                .overlay(
-                                    Text(getUserInitialsFromName())
-                                        .font(.largeTitle)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.slingBlue)
-                                )
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.white, lineWidth: 3)
-                                )
-                                .onTapGesture {
-                                    // For member profiles, we can't change the picture
-                                    // Just show fullscreen if there's an image
-                                }
-                        }
+                        ProfilePictureView(
+                            imageURL: userData?.profile_picture_url,
+                            initials: getUserInitialsFromName(),
+                            size: 80,
+                            isCurrentUser: isCurrentUser
+                        )
                         
                         // For member profiles, we don't show a swap icon since users can't change other people's pictures
                         // Only show swap icon if this is the current user's profile
@@ -21210,8 +21581,23 @@ struct TradingProfileView: View {
             bet.creator_email == userEmail
         }
         
+        // Filter bets where user is a participant
+        let userParticipatedBets = firestoreService.bets.filter { bet in
+            firestoreService.userBetParticipations.contains { participation in
+                participation.bet_id == bet.id && participation.user_email == userEmail
+            }
+        }
+        
+        // Combine and remove duplicates by bet ID
+        var allUserBets = userCreatedBets
+        for participatedBet in userParticipatedBets {
+            if !allUserBets.contains(where: { $0.id == participatedBet.id }) {
+                allUserBets.append(participatedBet)
+            }
+        }
+        
         // Sort by creation date (newest first)
-        let sortedBets = userCreatedBets.sorted { $0.created_date > $1.created_date }
+        let sortedBets = allUserBets.sorted { $0.created_date > $1.created_date }
         
         DispatchQueue.main.async {
             self.userBets = sortedBets
@@ -21236,7 +21622,7 @@ struct TradingProfileView: View {
                 
                 // Create activity item for placing a bet
                 let activityItem = UserActivityItem(
-                    id: "\(participation.bet_id ?? "")_\(participation.user_email)_placed",
+                    id: "\(participation.bet_id ?? "")_\(participation.user_email)_placed_\(participation.created_date.timeIntervalSince1970)",
                     type: .betPlaced,
                     title: isCurrentUserInCommunity ? "Placed bet on '\(bet.title)'" : "Placed bet in a community",
                         subtitle: "Chose: \(participation.chosen_option) • Wager: ⚡ \(formatNumber(participation.stake_amount))",
@@ -21254,7 +21640,7 @@ struct TradingProfileView: View {
                         let payoutAmount = isWinner ? calculatePayoutAmount(bet: bet, participation: participation) : Double(participation.stake_amount)
                         
                     let resultActivityItem = UserActivityItem(
-                        id: "\(participation.bet_id ?? "")_\(participation.user_email)_result",
+                        id: "\(participation.bet_id ?? "")_\(participation.user_email)_result_\(bet.deadline.timeIntervalSince1970)_\(participation.created_date.timeIntervalSince1970)",
                         type: isWinner ? .betWon : .betLost,
                         title: isCurrentUserInCommunity ? 
                             (isWinner ? "Won bet on '\(bet.title)'" : "Lost bet on '\(bet.title)'") :
@@ -21270,7 +21656,7 @@ struct TradingProfileView: View {
                     // If bet is voided, create activity item for refund
                     let refundAmount = participation.final_payout ?? participation.stake_amount
                     let voidedActivityItem = UserActivityItem(
-                        id: "\(participation.bet_id ?? "")_\(participation.user_email)_voided",
+                        id: "\(participation.bet_id ?? "")_\(participation.user_email)_voided_\(bet.deadline.timeIntervalSince1970)_\(participation.created_date.timeIntervalSince1970)",
                         type: .betVoided,
                         title: isCurrentUserInCommunity ? "Bet voided on '\(bet.title)'" : "Bet voided in a community",
                         subtitle: "Chose: \(participation.chosen_option) • Refunded: ⚡ \(formatNumber(refundAmount))",
@@ -21382,9 +21768,36 @@ struct TradingProfileView: View {
                     print("   Computed Last Name: \(user.lastName ?? "nil")")
                 }
             } catch {
-                print("❌ Error loading user data: \(error)")
+                print("❌ TradingProfileView: Error loading user data: \(error)")
                 await MainActor.run {
                     self.isLoadingUserData = false
+                    // Create a fallback user object to prevent white screen
+                    self.userData = FirestoreUser(
+                        documentId: userId,
+                        blitz_points: 0,
+                        display_name: displayName,
+                        email: userId,
+                        first_name: userName.components(separatedBy: " ").first,
+                        full_name: userName,
+                        last_name: userName.components(separatedBy: " ").count > 1 ? userName.components(separatedBy: " ")[1] : nil,
+                        gender: nil,
+                        profile_picture_url: nil,
+                        total_bets: 0,
+                        total_winnings: 0,
+                        id: userId,
+                        uid: nil,
+                        sling_points: 0,
+                        push_notifications_enabled: nil,
+                        email_notifications_enabled: nil,
+                        weekly_summaries_enabled: nil,
+                        bet_results_enabled: nil,
+                        community_updates_enabled: nil,
+                        promotional_emails_enabled: nil,
+                        profile_visibility: nil,
+                        dark_mode_enabled: nil,
+                        language: nil,
+                        profile_visibility_settings: nil
+                    )
                 }
             }
         }
@@ -21885,8 +22298,8 @@ struct UserSettingsView: View {
     }
 }
 
-// MARK: - Profile Picture View
-struct ProfilePictureView: View {
+// MARK: - Profile Picture Edit View
+struct ProfilePictureEditView: View {
     let userData: FirestoreUser?
     let firestoreService: FirestoreService
     @Environment(\.dismiss) private var dismiss
@@ -22691,7 +23104,7 @@ struct ProfileVisibilityView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 HStack {
-                                    SettingsRow(icon: "flame.fill", title: "Blitz Points", subtitle: "Show your Blitz Points balance", isDestructive: false, showArrow: false, action: {})
+                                    SettingsRow(icon: "flame.fill", title: "Sling Points", subtitle: "Show your Sling Points balance", isDestructive: false, showArrow: false, action: {})
                                     Spacer()
                                     Toggle("", isOn: $showBlitzPoints)
                                         .labelsHidden()
@@ -23692,16 +24105,350 @@ struct PrivacyPolicyView: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
+                        // Introduction
                         VStack(spacing: 16) {
                             HStack {
-                                Text("Privacy Information")
+                                Text("Introduction")
                                     .font(.headline)
                                     .fontWeight(.semibold)
                                     .foregroundColor(.black)
                                 Spacer()
                             }
                             
-                            Text("SlingApp is committed to protecting your privacy...")
+                            Text("Sling (\"we,\" \"our,\" or \"us\") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our peer-to-peer betting platform and mobile application (the \"Service\"). Please read this Privacy Policy carefully. If you do not agree with the terms of this Privacy Policy, please do not access the Service.")
+                                .font(.body)
+                                .foregroundColor(.black)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                        }
+                        
+                        // Age Restrictions
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Age Restrictions")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            Text("Sling is intended only for individuals who are at least 18 years old, or the legal age of majority in their jurisdiction if higher. By using Sling, you represent and warrant that you meet this requirement. We do not knowingly collect or allow use by individuals under 18. If you are under 18, you must not use this Service.")
+                                .font(.body)
+                                .foregroundColor(.black)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                        }
+                        
+                        // Information We Collect
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Information We Collect")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("We collect information you provide directly to us, such as when you create an account, place bets, or communicate with us:")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                
+                                Text("• Personal Information: Name, email address, phone number, profile information")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Financial Information: Payment methods, transaction history, betting activity")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Usage Data: App interactions, bets placed, community activity, chat messages")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Device Information: IP address, device identifiers, operating system, app version")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                            }
+                            .padding(20)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                        
+                        // How We Use Information
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("How We Use Your Information")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("We use the information we collect to:")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                
+                                Text("• Operate and improve the Service (bet matching, communities, notifications)")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Process payments and settlements between users")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Enforce community rules and prevent fraud")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Provide customer support and respond to inquiries")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Comply with legal obligations and protect our rights")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                            }
+                            .padding(20)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                        
+                        // Data Sharing
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Information Sharing")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("We may share your information with:")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                
+                                Text("• Other users in your communities (usernames, bets, chat messages)")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Payment processors (Venmo, Stripe, Apple Pay) for transaction processing")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Service providers (Firebase, hosting, analytics) who assist in app operation")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Legal authorities when required by law or to protect our rights")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("We do not sell your personal information to third parties.")
+                                    .font(.body)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                    .padding(.top, 8)
+                            }
+                            .padding(20)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                        
+                        // Liability Disclaimer
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Liability Disclaimer")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("IMPORTANT: Sling acts solely as a platform connecting users for peer-to-peer betting. We are not responsible for:")
+                                    .font(.body)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.red)
+                                
+                                Text("• Any bets, wagers, or financial transactions between users")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Disputes, disagreements, or conflicts between users")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• User actions, decisions, or behavior on the platform")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Financial losses, gains, or outcomes of any betting activity")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Data breaches, security incidents, or unauthorized access")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Technical issues, app downtime, or service interruptions")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("Users participate at their own risk and are solely responsible for their actions and decisions.")
+                                    .font(.body)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.red)
+                                    .padding(.top, 8)
+                            }
+                            .padding(20)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                        
+                        // Data Security
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Data Security")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            Text("We implement reasonable security measures to protect your information, including encryption of data in transit and at rest. However, no method of transmission over the internet or electronic storage is 100% secure. While we strive to protect your information, we cannot guarantee absolute security.")
+                                .font(.body)
+                                .foregroundColor(.black)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                        }
+                        
+                        // User Rights
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Your Rights")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("You have the right to:")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                
+                                Text("• Access and review your personal information")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Correct inaccurate or incomplete information")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Delete your account and associated data")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Opt-out of marketing communications")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                                
+                                Text("• Withdraw consent for data processing")
+                                    .font(.body)
+                                    .foregroundColor(.black)
+                                    .padding(.leading, 16)
+                            }
+                            .padding(20)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white)
+                            .cornerRadius(12)
+                        }
+                        
+                        // Changes to Policy
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Changes to This Policy")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            Text("We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy in the app and updating the \"Last Updated\" date. Your continued use of the Service after any modifications constitutes acceptance of the updated Privacy Policy.")
+                                .font(.body)
+                                .foregroundColor(.black)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                        }
+                        
+                        // Contact Information
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Contact Us")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            Text("If you have any questions about this Privacy Policy or our data practices, please contact us at privacy@slingapp.com or through the app's support system.")
+                                .font(.body)
+                                .foregroundColor(.black)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                        }
+                        
+                        // Last Updated
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Last Updated")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            
+                            Text("This Privacy Policy was last updated on January 26, 2025.")
                                 .font(.body)
                                 .foregroundColor(.black)
                                 .padding(20)

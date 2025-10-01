@@ -17,6 +17,7 @@ struct SlingAppApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .preferredColorScheme(.light) // Force light mode - ignore system dark mode
         }
     }
 }
